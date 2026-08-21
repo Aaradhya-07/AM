@@ -1,0 +1,59 @@
+# Braintrust eval action — WORKFLOW TEMPLATE
+#
+# NOT INSTALLED IN THIS REPOSITORY. Deliberately stored under
+# experiments/braintrust-validation/ rather than .github/workflows/, so it
+# cannot run here.
+#
+# Copy to .github/workflows/braintrust-eval.yml in the THROWAWAY repository.
+#
+# Purpose: capture the exact PR comment Braintrust posts, and check whether it
+# contains any cost or token field. The documented fields as of 2026-08-13 are
+# Score, Average, Improvements, Regressions, Duration — with no cost metric.
+# Tests T2 in docs/validation/braintrust-hands-on-test-plan.md.
+
+name: braintrust-eval
+
+on:
+  pull_request:
+
+# Required by the action to post its summary comment.
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate synthetic datasets
+        # Deterministic and offline. Keeps the run reproducible.
+        run: node generate-datasets.mjs
+
+      - name: Run Braintrust eval
+        uses: braintrustdata/eval-action@v1
+        with:
+          api_key: ${{ secrets.BRAINTRUST_API_KEY }}
+          runtime: node
+          # Verify the input names against the action's current README before
+          # the first run — they may have changed since 2026-08-13.
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SCENARIO_ARM: new
+          RUN_TAG: pr-${{ github.event.number }}
+# EVIDENCE TO CAPTURE FROM THIS WORKFLOW
+#
+#   1. Screenshot the full PR comment.
+#   2. Record every field it contains, verbatim.
+#   3. Answer explicitly: does ANY cost or token figure appear? (test T2)
+#   4. Answer explicitly: is any figure projected to a time period or scaled by
+#      production volume? (test T3)
+#   5. Save the workflow run log alongside the screenshot.

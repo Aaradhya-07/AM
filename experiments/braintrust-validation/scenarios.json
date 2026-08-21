@@ -1,0 +1,61 @@
+{
+  "$comment": "Old/new configuration pairs for the Braintrust validation experiment. Model identifiers are placeholders: fill them in at run time with two models whose prices differ materially. Not ANVILMARK product code.",
+  "seed": 20260813,
+  "scenarios": [
+    {
+      "id": "s1-model-swap",
+      "name": "Model swap on a classification call site",
+      "dataset": "data/s1-tickets.jsonl",
+      "controlDataset": "data/s1-repeat.jsonl",
+      "qualityTier": 1,
+      "qualityMethod": "deterministic exact-label match against ground truth",
+      "tests": ["T1", "T2", "T4", "T7"],
+      "old": {
+        "label": "flagship",
+        "model": "REPLACE_WITH_FLAGSHIP_MODEL_ID",
+        "temperature": 0,
+        "maxTokens": 16
+      },
+      "new": {
+        "label": "small",
+        "model": "REPLACE_WITH_CHEAPER_SMALL_MODEL_ID",
+        "temperature": 0,
+        "maxTokens": 16
+      },
+      "expectedDirection": {
+        "cost": "down",
+        "quality": "down or unchanged",
+        "note": "A cheaper model should reduce cost. Whether quality falls is the empirical question. If quality is unchanged, that is itself the finding a real customer would want."
+      }
+    },
+    {
+      "id": "s2-prompt-expansion",
+      "name": "Prompt expansion on a summarization call site",
+      "dataset": "data/s2-docs.jsonl",
+      "controlDataset": "data/s2-docs.jsonl",
+      "qualityTier": 5,
+      "qualityMethod": "LLM judge, pairwise, order randomized — no deterministic signal exists for this task",
+      "tests": ["T1", "T2", "T7"],
+      "old": {
+        "label": "short-prompt",
+        "model": "REPLACE_WITH_SUMMARIZATION_MODEL_ID",
+        "temperature": 0.3,
+        "maxTokens": 300,
+        "systemPrompt": "Summarize the incident report in three sentences."
+      },
+      "new": {
+        "label": "long-prompt-with-examples",
+        "model": "REPLACE_WITH_SUMMARIZATION_MODEL_ID",
+        "temperature": 0.3,
+        "maxTokens": 300,
+        "systemPromptFile": "prompts/s2-new-system-prompt.txt",
+        "note": "Long stable prefix with four few-shot examples. Interacts with prompt caching: cache reads are priced well below standard input, cache writes often above it. A naive token count gets this wrong in both directions."
+      },
+      "expectedDirection": {
+        "cost": "unclear — depends entirely on cache behaviour",
+        "quality": "unknown",
+        "note": "This scenario exists because the answer is not obvious. If a tool reports a confident cost delta here without modelling cache reads and writes separately, that is a finding."
+      }
+    }
+  ]
+}

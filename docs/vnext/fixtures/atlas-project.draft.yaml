@@ -1,0 +1,369 @@
+schema: https://anvilmark.dev/schemas/project/0.1.0-draft.1
+schema_version: 0.1.0-draft.1
+
+project:
+  id: atlas-support-desk
+  name: Atlas Support Desk
+  created_at: 2026-08-17T00:00:00Z
+  updated_at: 2026-08-17T00:00:00Z
+  contract_revision: 1
+  state: draft
+  repository_roots: []
+  priority_order:
+    - privacy
+    - quality
+    - availability
+    - cost
+    - latency
+
+intent:
+  summary: >-
+    Help human support agents process multilingual customer tickets using
+    private redaction, structured routing, cited response drafting, and human
+    approval.
+  users:
+    - support_agent
+    - support_manager
+  outcomes:
+    - id: faster_resolution
+      measure: median_handle_time
+      target: "<= 8 minutes"
+  non_goals:
+    - autonomous_response_sending
+  unresolved_questions:
+    - Exact permitted regions and providers for redacted remote processing.
+
+constraints:
+  - id: privacy.raw_ticket_remote
+    domain: privacy
+    severity: hard
+    subject: data.raw_customer_ticket
+    operator: must_not_leave
+    value: local_trust_boundary
+    source: user
+    rationale: Raw tickets may contain personal and contractual data.
+
+  - id: availability.classification_provider
+    domain: availability
+    severity: hard
+    subject: workload.classification
+    operator: must_remain_available_without
+    value: any_single_remote_provider
+    source: user
+
+  - id: budget.ai_monthly
+    domain: cost
+    severity: soft
+    direction: minimize
+    subject: project.ai_effective_cost_monthly_usd
+    operator: lte
+    value: 750
+    source: user
+
+  - id: latency.classification_p95
+    domain: latency
+    severity: soft
+    direction: minimize
+    subject: workload.classification.latency_p95_ms
+    operator: lte
+    value: 1000
+    source: user
+
+  - id: latency.drafting_p95
+    domain: latency
+    severity: soft
+    direction: minimize
+    subject: workload.response_drafting.latency_p95_ms
+    operator: lte
+    value: 5000
+    source: user
+
+  - id: quality.pii_recall
+    domain: quality
+    severity: hard
+    subject: workload.pii_redaction.metric.recall
+    operator: gte
+    value: 0.98
+    source: user
+
+  - id: quality.classification_f1
+    domain: quality
+    severity: hard
+    subject: workload.classification.metric.macro_f1
+    operator: gte
+    value: 0.9
+    source: user
+
+  - id: quality.schema_validity
+    domain: quality
+    severity: hard
+    subject: workload.classification.metric.schema_validity
+    operator: gte
+    value: 0.99
+    source: user
+
+workloads:
+  - id: pii_redaction
+    name: Personal-data detection and redaction
+    input_classification: raw_customer_ticket
+    output_contract:
+      kind: json_schema
+      ref: ./schemas/redaction-output.json
+    expected_usage:
+      basis: user_assumption
+      calls_per_month: 40000
+      input_tokens_per_call: 900
+      output_tokens_per_call: 120
+    quality_gates:
+      - metric: recall
+        minimum: 0.98
+        evaluation_ref: eval.pii_redaction.v1
+    current_decision_ref: null
+
+  - id: classification
+    name: Ticket classification and routing
+    input_classification: redacted_customer_ticket
+    output_contract:
+      kind: json_schema
+      ref: ./schemas/classification-output.json
+    expected_usage:
+      basis: user_assumption
+      calls_per_month: 40000
+      input_tokens_per_call: 900
+      output_tokens_per_call: 60
+    latency:
+      percentile: p95
+      maximum_ms: 1000
+    quality_gates:
+      - metric: macro_f1
+        minimum: 0.9
+        evaluation_ref: eval.classification.v1
+      - metric: schema_validity
+        minimum: 0.99
+        evaluation_ref: eval.classification.v1
+    current_decision_ref: null
+
+  - id: extraction
+    name: Structured product, account, and incident extraction
+    input_classification: redacted_customer_ticket
+    output_contract:
+      kind: json_schema
+      ref: ./schemas/extraction-output.json
+    expected_usage:
+      basis: user_assumption
+      calls_per_month: 40000
+      input_tokens_per_call: 900
+      output_tokens_per_call: 180
+    quality_gates:
+      - metric: macro_f1
+        minimum: 0.92
+        evaluation_ref: eval.extraction.v1
+    current_decision_ref: null
+
+  - id: retrieval
+    name: Internal-document retrieval
+    input_classification: redacted_customer_ticket
+    output_contract:
+      kind: ranked_document_refs
+    expected_usage:
+      basis: user_assumption
+      calls_per_month: 40000
+    quality_gates: []
+    current_decision_ref: null
+
+  - id: response_drafting
+    name: Cited multilingual response drafting
+    input_classification: redacted_customer_ticket_with_internal_context
+    output_contract:
+      kind: cited_text
+    expected_usage:
+      basis: user_assumption
+      calls_per_month: 40000
+      input_tokens_per_call: 4400
+      output_tokens_per_call: 450
+    latency:
+      percentile: p95
+      maximum_ms: 5000
+    quality_gates:
+      - metric: citation_validity
+        minimum: 0.95
+        evaluation_ref: eval.response_drafting.v1
+    current_decision_ref: null
+
+resources:
+  hardware:
+    - id: hardware.local_gpu_1
+      evidence_kind: user_declared
+      cpu:
+        cores: 16
+      ram_gb: 64
+      accelerators:
+        - vendor: nvidia
+          model: RTX 4090
+          vram_gb: 24
+      operating_system: linux
+      evidence_refs: []
+  budgets:
+    - currency: USD
+      period: month
+      amount: 750
+      scope: ai_inference_and_ai_specific_infrastructure
+
+evidence_policy:
+  tiers:
+    T3: directly_observed_or_measured
+    T2: attributable_authoritative_evidence
+    T1: user_declared_or_vendor_claim
+    T0: inference_or_unknown
+  floors:
+    workload_quality_hard_gate: T3
+    privacy_data_flow_hard_gate: T3
+    latency_throughput_hard_gate: T3
+    token_hard_gate: T3
+    projected_cost_comparison: T2
+    realized_cost_hard_gate: T3
+    license: T2
+    target_hardware_inventory: T1
+    hardware_compatibility_estimate: T2
+    hardware_performance_gate: T3
+    availability_portability_structure: T3
+    repository_policy: T3
+
+candidates:
+  - id: candidate.classification.local_unselected
+    workload_ref: classification
+    component_kind: model_runtime
+    model: null
+    deployment:
+      mode: local
+      runtime: ollama
+      hardware_ref: hardware.local_gpu_1
+    measurements: {}
+    estimates: {}
+    constraint_results: []
+    status: unevaluated
+
+  - id: candidate.classification.remote_unselected
+    workload_ref: classification
+    component_kind: model_runtime
+    model: null
+    deployment:
+      mode: managed_api
+      provider: null
+      region: null
+    measurements: {}
+    estimates: {}
+    constraint_results: []
+    status: unevaluated
+
+evidence_refs: []
+decisions: []
+
+architecture:
+  authority: anvilmark
+  nodes:
+    - id: ticket-intake
+      kind: service
+      name: Ticket Intake
+      trust_boundary: local
+    - id: pii-redactor
+      kind: service
+      name: PII Redactor
+      trust_boundary: local
+    - id: ticket-classifier
+      kind: service
+      name: Ticket Classifier
+      trust_boundary: local
+    - id: remote-model-provider
+      kind: external_system
+      name: Remote Model Provider
+      trust_boundary: remote_provider
+  relationships:
+    - id: ticket-intake-to-pii-redactor
+      kind: connects
+      source: ticket-intake
+      destination: pii-redactor
+      workload_ref: pii_redaction
+      data_classification: raw_customer_ticket
+    - id: pii-redactor-to-ticket-classifier
+      kind: connects
+      source: pii-redactor
+      destination: ticket-classifier
+      workload_ref: classification
+      data_classification: redacted_customer_ticket
+    - id: ticket-classifier-to-remote-model-provider
+      kind: connects
+      source: ticket-classifier
+      destination: remote-model-provider
+      workload_ref: classification
+      data_classification: redacted_customer_ticket
+  generated:
+    calm_1_2: ./architecture/calm.json
+    mermaid: ./architecture/view.mmd
+  decision_bindings: []
+
+repository_bindings: []
+
+conformance_rules:
+  - id: rule.raw_ticket_never_remote
+    kind: forbid_dataflow
+    severity: error
+    constraint_ref: privacy.raw_ticket_remote
+    from:
+      data_classification: raw_customer_ticket
+    to:
+      trust_boundary: remote_provider
+    unless:
+      passes_through:
+        - component_ref: pii-redactor
+
+  - id: rule.classification_approved_candidate
+    kind: approved_candidate_only
+    severity: error
+    workload_ref: classification
+    approved_decision_ref: null
+
+integrations:
+  - id: intelligence.user_agent
+    kind: intelligence
+    adapter: user_selected
+    credential_ref: existing_session_or_environment
+    default_data_projection: public_decision_layer
+    additional_data_requires_consent:
+      - explicitly_selected_repository_files
+
+  - id: evaluation.promptfoo
+    kind: evaluation
+    adapter: promptfoo_cli
+    data_directory: .anvilmark/runtime/promptfoo
+    network_policy: explicit_provider_only
+
+  - id: hardware.llmfit
+    kind: hardware_fit
+    adapter: llmfit_cli
+    mode: local
+
+remote_intelligence_policy:
+  default_allow:
+    - intent
+    - constraints
+    - workloads
+    - non_identifying_hardware_capabilities
+    - candidates
+    - evidence_metadata_without_local_locators
+    - decisions
+    - conformance_rule_definitions
+  default_deny:
+    - repository_roots
+    - repository_bindings
+    - file_contents
+    - owners
+    - local_machine_identifiers
+    - integration_credential_references
+    - local_command_lines
+    - evaluation_rows
+    - source_quoting_conformance_explanations
+  show_payload_before_remote_send: true
+  scan_outbound_payload_for_secrets: true
+
+approvals: []

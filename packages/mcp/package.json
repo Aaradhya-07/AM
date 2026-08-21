@@ -1,0 +1,25 @@
+{
+  "name": "@anvilmark/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "anvilmark-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "verify:tools-list": "node scripts/verify-tools-list.mjs"
+  },
+  "dependencies": {
+    "@anvilmark/contract": "workspace:*",
+    "@anvilmark/engine": "workspace:*",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "zod": "^4.2.0"
+  }
+}

@@ -1,0 +1,103 @@
+{
+  "$schema": "https://calm.finos.org/release/1.2/meta/calm.json",
+  "unique-id": "atlas-support-desk",
+  "name": "Atlas Support Desk",
+  "description": "Generated architecture view for the ANVILMARK Atlas benchmark",
+  "metadata": {
+    "generated-by": "anvilmark",
+    "contract-revision": 1,
+    "authority": "generated-view"
+  },
+  "nodes": [
+    {
+      "unique-id": "ticket-intake",
+      "node-type": "service",
+      "name": "Ticket Intake",
+      "description": "Receives raw customer support tickets"
+    },
+    {
+      "unique-id": "pii-redactor",
+      "node-type": "service",
+      "name": "PII Redactor",
+      "description": "Detects and removes personal data locally"
+    },
+    {
+      "unique-id": "ticket-classifier",
+      "node-type": "service",
+      "name": "Ticket Classifier",
+      "description": "Classifies redacted tickets and selects a routing team"
+    },
+    {
+      "unique-id": "remote-model-provider",
+      "node-type": "system",
+      "name": "Remote Model Provider",
+      "description": "Optional user-selected managed model provider"
+    }
+  ],
+  "relationships": [
+    {
+      "unique-id": "ticket-intake-to-pii-redactor",
+      "description": "Raw ticket enters the mandatory local redaction step",
+      "relationship-type": {
+        "connects": {
+          "source": {
+            "node": "ticket-intake"
+          },
+          "destination": {
+            "node": "pii-redactor"
+          }
+        }
+      },
+      "metadata": {
+        "anvilmark": {
+          "workload-ref": "pii_redaction",
+          "data-classification": "raw_customer_ticket",
+          "trust-boundary": "local"
+        }
+      }
+    },
+    {
+      "unique-id": "pii-redactor-to-ticket-classifier",
+      "description": "Redacted ticket is sent to the classification workload",
+      "relationship-type": {
+        "connects": {
+          "source": {
+            "node": "pii-redactor"
+          },
+          "destination": {
+            "node": "ticket-classifier"
+          }
+        }
+      },
+      "metadata": {
+        "anvilmark": {
+          "workload-ref": "classification",
+          "data-classification": "redacted_customer_ticket",
+          "trust-boundary": "local"
+        }
+      }
+    },
+    {
+      "unique-id": "ticket-classifier-to-remote-model-provider",
+      "description": "Optional remote execution path for an approved redacted workload",
+      "relationship-type": {
+        "connects": {
+          "source": {
+            "node": "ticket-classifier"
+          },
+          "destination": {
+            "node": "remote-model-provider"
+          }
+        }
+      },
+      "metadata": {
+        "anvilmark": {
+          "workload-ref": "classification",
+          "data-classification": "redacted_customer_ticket",
+          "trust-boundary-crossing": "remote-provider",
+          "decision-ref": "decision.classification.runtime.v1"
+        }
+      }
+    }
+  ]
+}

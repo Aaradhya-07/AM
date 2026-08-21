@@ -1,0 +1,200 @@
+{"id":"ticket-0001","input":"Order A-16815 still shows processing after 8 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0002","input":"Order A-14786 still shows processing after 9 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0003","input":"Product from A-45635 stopped working after 6 days.","expected":"product_defect","metadata":{"category":"product_defect","frequency_weight":0.04,"synthetic":true}}
+{"id":"ticket-0004","input":"Can you tell me when A-61405 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0005","input":"I was charged twice for order A-68018.","expected":"billing","metadata":{"category":"billing","frequency_weight":0.09,"synthetic":true}}
+{"id":"ticket-0006","input":"Where is my order A-52740? It was due Thursday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0007","input":"Where is my order A-24369? It was due Wednesday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0008","input":"Can you tell me when A-84373 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0009","input":"The tracking for A-82199 has not updated in 6 days.","expected":"shipping","metadata":{"category":"shipping","frequency_weight":0.12,"synthetic":true}}
+{"id":"ticket-0010","input":"Where is my order A-50191? It was due Wednesday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0011","input":"Can you tell me when A-70877 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0012","input":"Can you tell me when A-35879 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0013","input":"Where is my order A-95773? It was due Tuesday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0014","input":"Can you tell me when A-99455 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0015","input":"Can you tell me when A-59822 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0016","input":"Can you tell me when A-25650 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0017","input":"Order A-49460 still shows processing after 9 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0018","input":"Order A-99362 still shows processing after 9 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0019","input":"Where is my order A-46094? It was due Tuesday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0020","input":"Order A-28568 still shows processing after 4 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0021","input":"Order A-12703 still shows processing after 4 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0022","input":"What are your opening hours?","expected":"other","metadata":{"category":"other","frequency_weight":0.01,"synthetic":true}}
+{"id":"ticket-0023","input":"Can you tell me when A-46855 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0024","input":"I was charged twice for order A-24595.","expected":"billing","metadata":{"category":"billing","frequency_weight":0.09,"synthetic":true}}
+{"id":"ticket-0025","input":"My account is locked after 13 attempts.","expected":"account_access","metadata":{"category":"account_access","frequency_weight":0.05,"synthetic":true}}
+{"id":"ticket-0026","input":"Product from A-36671 stopped working after 4 days.","expected":"product_defect","metadata":{"category":"product_defect","frequency_weight":0.04,"synthetic":true}}
+{"id":"ticket-0027","input":"Can you tell me when A-17692 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0028","input":"Product from A-79892 stopped working after 4 days.","expected":"product_defect","metadata":{"category":"product_defect","frequency_weight":0.04,"synthetic":true}}
+{"id":"ticket-0029","input":"I was charged twice for order A-78109.","expected":"billing","metadata":{"category":"billing","frequency_weight":0.09,"synthetic":true}}
+{"id":"ticket-0030","input":"Do you ship to other countries?","expected":"other","metadata":{"category":"other","frequency_weight":0.01,"synthetic":true}}
+{"id":"ticket-0031","input":"Where is my order A-18499? It was due Monday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0032","input":"Where is my order A-73510? It was due Friday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0033","input":"Where is my order A-64977? It was due Tuesday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0034","input":"Can you tell me when A-32287 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0035","input":"I want to cancel A-10563 before it ships.","expected":"cancellation","metadata":{"category":"cancellation","frequency_weight":0.02,"synthetic":true}}
+{"id":"ticket-0036","input":"Can you tell me when A-84440 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0037","input":"Order A-30085 still shows processing after 9 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0038","input":"Can you tell me when A-28625 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0039","input":"My package for order A-66186 went to the wrong address.","expected":"shipping","metadata":{"category":"shipping","frequency_weight":0.12,"synthetic":true}}
+{"id":"ticket-0040","input":"Order A-20488 still shows processing after 11 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0041","input":"My package for order A-10275 went to the wrong address.","expected":"shipping","metadata":{"category":"shipping","frequency_weight":0.12,"synthetic":true}}
+{"id":"ticket-0042","input":"Can I change the delivery address on A-51905?","expected":"shipping","metadata":{"category":"shipping","frequency_weight":0.12,"synthetic":true}}
+{"id":"ticket-0043","input":"Please explain the 10 dollar fee on order A-25762.","expected":"billing","metadata":{"category":"billing","frequency_weight":0.09,"synthetic":true}}
+{"id":"ticket-0044","input":"Can I change the delivery address on A-75496?","expected":"shipping","metadata":{"category":"shipping","frequency_weight":0.12,"synthetic":true}}
+{"id":"ticket-0045","input":"I want to return the item from order A-80836.","expected":"returns","metadata":{"category":"returns","frequency_weight":0.07,"synthetic":true}}
+{"id":"ticket-0046","input":"Product from A-22768 stopped working after 9 days.","expected":"product_defect","metadata":{"category":"product_defect","frequency_weight":0.04,"synthetic":true}}
+{"id":"ticket-0047","input":"Can you tell me when A-27513 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0048","input":"Can you tell me when A-75199 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0049","input":"Where is my order A-28173? It was due Friday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0050","input":"Please explain the 9 dollar fee on order A-13379.","expected":"billing","metadata":{"category":"billing","frequency_weight":0.09,"synthetic":true}}
+{"id":"ticket-0051","input":"Where is my order A-19884? It was due Thursday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0052","input":"Where is my order A-82843? It was due Tuesday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0053","input":"My package for order A-56661 went to the wrong address.","expected":"shipping","metadata":{"category":"shipping","frequency_weight":0.12,"synthetic":true}}
+{"id":"ticket-0054","input":"Can you tell me when A-67354 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0055","input":"Order A-23259 still shows processing after 6 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0056","input":"Where is my order A-33253? It was due Wednesday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0057","input":"Can you tell me when A-40785 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0058","input":"Cancel my subscription, reference A-97057.","expected":"cancellation","metadata":{"category":"cancellation","frequency_weight":0.02,"synthetic":true}}
+{"id":"ticket-0059","input":"Can you tell me when A-98342 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0060","input":"Return label for A-68575 never arrived.","expected":"returns","metadata":{"category":"returns","frequency_weight":0.07,"synthetic":true}}
+{"id":"ticket-0061","input":"Can you tell me when A-93233 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0062","input":"Can you tell me when A-20454 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0063","input":"Can you tell me when A-26631 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0064","input":"Invoice for A-34348 shows an amount I did not expect.","expected":"billing","metadata":{"category":"billing","frequency_weight":0.09,"synthetic":true}}
+{"id":"ticket-0065","input":"My package for order A-37666 went to the wrong address.","expected":"shipping","metadata":{"category":"shipping","frequency_weight":0.12,"synthetic":true}}
+{"id":"ticket-0066","input":"Can you tell me when A-61167 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0067","input":"Can you tell me when A-54110 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0068","input":"I was charged twice for order A-84563.","expected":"billing","metadata":{"category":"billing","frequency_weight":0.09,"synthetic":true}}
+{"id":"ticket-0069","input":"How long do I have to return A-75390?","expected":"returns","metadata":{"category":"returns","frequency_weight":0.07,"synthetic":true}}
+{"id":"ticket-0070","input":"Can you tell me when A-48524 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0071","input":"Order A-93752 still shows processing after 4 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0072","input":"Invoice for A-94401 shows an amount I did not expect.","expected":"billing","metadata":{"category":"billing","frequency_weight":0.09,"synthetic":true}}
+{"id":"ticket-0073","input":"Order A-16951 still shows processing after 8 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0074","input":"Where is my order A-39396? It was due Tuesday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0075","input":"Password reset email never arrived.","expected":"account_access","metadata":{"category":"account_access","frequency_weight":0.05,"synthetic":true}}
+{"id":"ticket-0076","input":"The tracking for A-99323 has not updated in 10 days.","expected":"shipping","metadata":{"category":"shipping","frequency_weight":0.12,"synthetic":true}}
+{"id":"ticket-0077","input":"Can you tell me when A-81040 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0078","input":"Can you tell me when A-75042 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0079","input":"Where is my order A-64527? It was due Wednesday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0080","input":"Can I change the delivery address on A-32984?","expected":"shipping","metadata":{"category":"shipping","frequency_weight":0.12,"synthetic":true}}
+{"id":"ticket-0081","input":"The item in order A-89213 arrived damaged.","expected":"product_defect","metadata":{"category":"product_defect","frequency_weight":0.04,"synthetic":true}}
+{"id":"ticket-0082","input":"Order A-55303 still shows processing after 10 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0083","input":"I was charged twice for order A-39290.","expected":"billing","metadata":{"category":"billing","frequency_weight":0.09,"synthetic":true}}
+{"id":"ticket-0084","input":"I was charged twice for order A-91340.","expected":"billing","metadata":{"category":"billing","frequency_weight":0.09,"synthetic":true}}
+{"id":"ticket-0085","input":"Where is my order A-83563? It was due Wednesday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0086","input":"I want to cancel A-16285 before it ships.","expected":"cancellation","metadata":{"category":"cancellation","frequency_weight":0.02,"synthetic":true}}
+{"id":"ticket-0087","input":"Item A-28097 is missing parts.","expected":"product_defect","metadata":{"category":"product_defect","frequency_weight":0.04,"synthetic":true}}
+{"id":"ticket-0088","input":"Can you tell me when A-64853 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0089","input":"Can I change the delivery address on A-89515?","expected":"shipping","metadata":{"category":"shipping","frequency_weight":0.12,"synthetic":true}}
+{"id":"ticket-0090","input":"Where is my order A-19663? It was due Wednesday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0091","input":"I want to return the item from order A-80425.","expected":"returns","metadata":{"category":"returns","frequency_weight":0.07,"synthetic":true}}
+{"id":"ticket-0092","input":"Order A-65159 still shows processing after 9 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0093","input":"I want to return the item from order A-40948.","expected":"returns","metadata":{"category":"returns","frequency_weight":0.07,"synthetic":true}}
+{"id":"ticket-0094","input":"Can you tell me when A-98847 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0095","input":"Can you tell me when A-65113 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0096","input":"Order A-80621 still shows processing after 11 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0097","input":"Order A-31473 still shows processing after 13 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0098","input":"Can you tell me when A-91891 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0099","input":"Please cancel order A-96960.","expected":"cancellation","metadata":{"category":"cancellation","frequency_weight":0.02,"synthetic":true}}
+{"id":"ticket-0100","input":"Where is my order A-35563? It was due Friday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0101","input":"My account is locked after 12 attempts.","expected":"account_access","metadata":{"category":"account_access","frequency_weight":0.05,"synthetic":true}}
+{"id":"ticket-0102","input":"Can you tell me when A-68535 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0103","input":"Return label for A-66286 never arrived.","expected":"returns","metadata":{"category":"returns","frequency_weight":0.07,"synthetic":true}}
+{"id":"ticket-0104","input":"Item A-15934 is missing parts.","expected":"product_defect","metadata":{"category":"product_defect","frequency_weight":0.04,"synthetic":true}}
+{"id":"ticket-0105","input":"Can you tell me when A-93820 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0106","input":"Can you tell me when A-12504 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0107","input":"Where is my order A-96605? It was due Thursday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0108","input":"Where is my order A-67987? It was due Wednesday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0109","input":"Where is my order A-53335? It was due Tuesday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0110","input":"Invoice for A-74353 shows an amount I did not expect.","expected":"billing","metadata":{"category":"billing","frequency_weight":0.09,"synthetic":true}}
+{"id":"ticket-0111","input":"Where is my order A-52003? It was due Wednesday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0112","input":"I was charged twice for order A-61588.","expected":"billing","metadata":{"category":"billing","frequency_weight":0.09,"synthetic":true}}
+{"id":"ticket-0113","input":"The tracking for A-76798 has not updated in 4 days.","expected":"shipping","metadata":{"category":"shipping","frequency_weight":0.12,"synthetic":true}}
+{"id":"ticket-0114","input":"Can you tell me when A-32868 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0115","input":"Please explain the 3 dollar fee on order A-39325.","expected":"billing","metadata":{"category":"billing","frequency_weight":0.09,"synthetic":true}}
+{"id":"ticket-0116","input":"Where is my order A-26459? It was due Friday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0117","input":"Order A-73705 still shows processing after 6 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0118","input":"Order A-54041 still shows processing after 9 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0119","input":"Item A-37374 is missing parts.","expected":"product_defect","metadata":{"category":"product_defect","frequency_weight":0.04,"synthetic":true}}
+{"id":"ticket-0120","input":"Password reset email never arrived.","expected":"account_access","metadata":{"category":"account_access","frequency_weight":0.05,"synthetic":true}}
+{"id":"ticket-0121","input":"Can you tell me when A-90161 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0122","input":"Order A-55347 still shows processing after 2 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0123","input":"How long do I have to return A-99298?","expected":"returns","metadata":{"category":"returns","frequency_weight":0.07,"synthetic":true}}
+{"id":"ticket-0124","input":"Can you tell me when A-77290 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0125","input":"Where is my order A-46434? It was due Thursday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0126","input":"Where is my order A-67408? It was due Tuesday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0127","input":"Where is my order A-16192? It was due Friday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0128","input":"Where is my order A-54562? It was due Thursday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0129","input":"Password reset email never arrived.","expected":"account_access","metadata":{"category":"account_access","frequency_weight":0.05,"synthetic":true}}
+{"id":"ticket-0130","input":"Please explain the 13 dollar fee on order A-57948.","expected":"billing","metadata":{"category":"billing","frequency_weight":0.09,"synthetic":true}}
+{"id":"ticket-0131","input":"I cannot log in to my account.","expected":"account_access","metadata":{"category":"account_access","frequency_weight":0.05,"synthetic":true}}
+{"id":"ticket-0132","input":"Item A-88252 is missing parts.","expected":"product_defect","metadata":{"category":"product_defect","frequency_weight":0.04,"synthetic":true}}
+{"id":"ticket-0133","input":"Return label for A-97092 never arrived.","expected":"returns","metadata":{"category":"returns","frequency_weight":0.07,"synthetic":true}}
+{"id":"ticket-0134","input":"Return label for A-63022 never arrived.","expected":"returns","metadata":{"category":"returns","frequency_weight":0.07,"synthetic":true}}
+{"id":"ticket-0135","input":"Can you tell me when A-10563 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0136","input":"Can you tell me when A-92487 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0137","input":"My package for order A-61332 went to the wrong address.","expected":"shipping","metadata":{"category":"shipping","frequency_weight":0.12,"synthetic":true}}
+{"id":"ticket-0138","input":"Where is my order A-87869? It was due Monday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0139","input":"Can you tell me when A-51254 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0140","input":"Where is my order A-49685? It was due Thursday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0141","input":"Order A-46349 still shows processing after 6 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0142","input":"Invoice for A-59496 shows an amount I did not expect.","expected":"billing","metadata":{"category":"billing","frequency_weight":0.09,"synthetic":true}}
+{"id":"ticket-0143","input":"Can I change the delivery address on A-44437?","expected":"shipping","metadata":{"category":"shipping","frequency_weight":0.12,"synthetic":true}}
+{"id":"ticket-0144","input":"Order A-28821 still shows processing after 11 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0145","input":"Where is my order A-40098? It was due Thursday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0146","input":"Order A-16200 still shows processing after 12 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0147","input":"Where is my order A-25599? It was due Thursday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0148","input":"Order A-39049 still shows processing after 5 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0149","input":"Order A-63114 still shows processing after 3 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0150","input":"Where is my order A-35030? It was due Thursday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0151","input":"Where is my order A-48246? It was due Thursday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0152","input":"Can you tell me when A-33637 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0153","input":"Can you tell me when A-67954 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0154","input":"How long do I have to return A-90243?","expected":"returns","metadata":{"category":"returns","frequency_weight":0.07,"synthetic":true}}
+{"id":"ticket-0155","input":"Order A-62940 still shows processing after 2 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0156","input":"Where is my order A-20802? It was due Monday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0157","input":"Order A-99269 still shows processing after 13 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0158","input":"Can you tell me when A-41555 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0159","input":"Can I change the delivery address on A-57070?","expected":"shipping","metadata":{"category":"shipping","frequency_weight":0.12,"synthetic":true}}
+{"id":"ticket-0160","input":"Can you tell me when A-70314 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0161","input":"Invoice for A-35070 shows an amount I did not expect.","expected":"billing","metadata":{"category":"billing","frequency_weight":0.09,"synthetic":true}}
+{"id":"ticket-0162","input":"How long do I have to return A-15591?","expected":"returns","metadata":{"category":"returns","frequency_weight":0.07,"synthetic":true}}
+{"id":"ticket-0163","input":"Please explain the 7 dollar fee on order A-25387.","expected":"billing","metadata":{"category":"billing","frequency_weight":0.09,"synthetic":true}}
+{"id":"ticket-0164","input":"Order A-48224 still shows processing after 9 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0165","input":"Where is my order A-58484? It was due Thursday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0166","input":"Order A-12304 still shows processing after 11 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0167","input":"Can I change the delivery address on A-74028?","expected":"shipping","metadata":{"category":"shipping","frequency_weight":0.12,"synthetic":true}}
+{"id":"ticket-0168","input":"Can you tell me when A-47021 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0169","input":"Can you tell me when A-90076 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0170","input":"Can you tell me when A-81456 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0171","input":"Order A-91761 still shows processing after 8 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0172","input":"I was charged twice for order A-56808.","expected":"billing","metadata":{"category":"billing","frequency_weight":0.09,"synthetic":true}}
+{"id":"ticket-0173","input":"How long do I have to return A-21096?","expected":"returns","metadata":{"category":"returns","frequency_weight":0.07,"synthetic":true}}
+{"id":"ticket-0174","input":"Where is my order A-34821? It was due Monday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0175","input":"Order A-97274 still shows processing after 4 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0176","input":"How long do I have to return A-44890?","expected":"returns","metadata":{"category":"returns","frequency_weight":0.07,"synthetic":true}}
+{"id":"ticket-0177","input":"I want to cancel A-10241 before it ships.","expected":"cancellation","metadata":{"category":"cancellation","frequency_weight":0.02,"synthetic":true}}
+{"id":"ticket-0178","input":"I cannot log in to my account.","expected":"account_access","metadata":{"category":"account_access","frequency_weight":0.05,"synthetic":true}}
+{"id":"ticket-0179","input":"Password reset email never arrived.","expected":"account_access","metadata":{"category":"account_access","frequency_weight":0.05,"synthetic":true}}
+{"id":"ticket-0180","input":"Where is my order A-16922? It was due Wednesday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0181","input":"Where is my order A-66282? It was due Tuesday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0182","input":"Order A-97352 still shows processing after 6 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0183","input":"I want to cancel A-42317 before it ships.","expected":"cancellation","metadata":{"category":"cancellation","frequency_weight":0.02,"synthetic":true}}
+{"id":"ticket-0184","input":"Can you tell me when A-19044 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0185","input":"Can you tell me when A-71936 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0186","input":"Invoice for A-57886 shows an amount I did not expect.","expected":"billing","metadata":{"category":"billing","frequency_weight":0.09,"synthetic":true}}
+{"id":"ticket-0187","input":"Can you tell me when A-17026 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0188","input":"Order A-79520 still shows processing after 11 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0189","input":"Order A-42443 still shows processing after 9 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0190","input":"Where is my order A-83101? It was due Monday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0191","input":"I want to return the item from order A-20855.","expected":"returns","metadata":{"category":"returns","frequency_weight":0.07,"synthetic":true}}
+{"id":"ticket-0192","input":"Can you tell me when A-69602 will arrive?","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0193","input":"Order A-79113 still shows processing after 9 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0194","input":"Cancel my subscription, reference A-91466.","expected":"cancellation","metadata":{"category":"cancellation","frequency_weight":0.02,"synthetic":true}}
+{"id":"ticket-0195","input":"Where is my order A-80883? It was due Friday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0196","input":"I was charged twice for order A-35297.","expected":"billing","metadata":{"category":"billing","frequency_weight":0.09,"synthetic":true}}
+{"id":"ticket-0197","input":"Order A-74706 still shows processing after 10 days.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0198","input":"The item in order A-70384 arrived damaged.","expected":"product_defect","metadata":{"category":"product_defect","frequency_weight":0.04,"synthetic":true}}
+{"id":"ticket-0199","input":"Where is my order A-38442? It was due Wednesday.","expected":"order_status","metadata":{"category":"order_status","frequency_weight":0.6,"synthetic":true}}
+{"id":"ticket-0200","input":"Please explain the 2 dollar fee on order A-44093.","expected":"billing","metadata":{"category":"billing","frequency_weight":0.09,"synthetic":true}}
