@@ -39,6 +39,13 @@ export const HardwareSchema = z.strictObject({
   cpu: CpuSchema,
   ram_gb: z.number().positive(),
   accelerators: z.array(AcceleratorSchema).default([]),
+  /**
+   * The inference backend this machine offers, e.g. `cuda`, `metal`, `rocm`,
+   * `cpu`. Decision 06 section 8 makes a backend mismatch produce `unknown`,
+   * so the backend has to be recordable on both the declared target and the
+   * detected machine for that rule to mean anything.
+   */
+  backend: NonEmptyStringSchema.nullable().default(null),
   operating_system: z.enum(["linux", "macos", "windows", "other"]),
   evidence_refs: z.array(RefSchema).default([]),
 });

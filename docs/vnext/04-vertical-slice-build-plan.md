@@ -31,7 +31,7 @@ Detailed execution guides, diagrams, tests, exclusions, and exit checklists for 
 
 - local CLI;
 - local project files under `.anvilmark/`;
-- project contract `0.1.0-draft.1` in `packages/project-contract`;
+- project contract in `packages/project-contract`, implemented at `0.1.0-draft.5`: amendments 1–4 ratified under the scoped acknowledgement exception in [document 07](07-schema-amendment-proposal.md), amendments 6–7 accepted under the separate scoped exception in [document 08](08-milestone-3-scope-proposal.md), and amendments 8–9 accepted under the M4-specific exception in [document 09](09-milestone-4-architecture-amendment-proposal.md);
 - TypeScript/JavaScript repository analysis;
 - generated Mermaid architecture;
 - MCP read/context/check tools;

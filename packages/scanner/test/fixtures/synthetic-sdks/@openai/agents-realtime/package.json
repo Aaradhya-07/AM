@@ -1,0 +1,5 @@
+{
+  "name": "@openai/agents-realtime",
+  "version": "0.1.0-synthetic",
+  "types": "index.d.ts"
+}

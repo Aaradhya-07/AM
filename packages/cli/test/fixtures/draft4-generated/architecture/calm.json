@@ -1,0 +1,432 @@
+{
+  "$schema": "https://calm.finos.org/release/1.2/meta/calm.json",
+  "description": "Generated CALM 1.2 export of the ANVILMARK architecture for Atlas Support Desk. ANVILMARK's contract is authoritative; this export is never read back.",
+  "metadata": {
+    "anvilmark": {
+      "approval-standing": "approved_current 1",
+      "architecture-knowledge": "declared: architecture nodes and relationships are not covered by any approval hash",
+      "as-of": "2026-09-14T00:00:00Z",
+      "authority": "generated-export",
+      "conformance-rules": [
+        {
+          "evaluated": false,
+          "id": "rule.classification_approved_candidate",
+          "kind": "approved_candidate_only",
+          "severity": "error",
+          "statement": "only the approved candidate may implement workload classification (no approved decision is recorded on the rule)"
+        },
+        {
+          "evaluated": false,
+          "id": "rule.raw_ticket_never_remote",
+          "kind": "forbid_dataflow",
+          "severity": "error",
+          "statement": "data classified raw_customer_ticket must not reach the remote_provider trust boundary unless it passes through pii-redactor (constraint privacy.raw_ticket_remote)"
+        }
+      ],
+      "disclosure": "Remote-default projection: decision-layer facts and non-identifying hardware capabilities only. Repository roots, repository bindings and source locations, owners and approver identities, integration credential references and data directories, evidence locators and evidence values (including evaluation rows), command lines and source-quoting explanations are not included.",
+      "generator": "anvilmark-context/0.1.0-draft.1",
+      "projection": "remote-default",
+      "source": {
+        "contract-hash": "sha256:2e805ad31b0736afa3a163c69de3aa70851ca41715b9eb0ef8514c997fd2b967",
+        "contract-revision": 1,
+        "project-id": "atlas-support-desk",
+        "schema-version": "0.1.0-draft.4",
+        "state-revision": 3
+      },
+      "source-of-truth": ".anvilmark/project.yaml",
+      "trust-boundaries": [
+        {
+          "boundary": "local",
+          "nodes": [
+            "pii-redactor",
+            "ticket-classifier",
+            "ticket-intake"
+          ]
+        },
+        {
+          "boundary": "remote_provider",
+          "nodes": [
+            "remote-model-provider"
+          ]
+        }
+      ]
+    }
+  },
+  "name": "Atlas Support Desk",
+  "nodes": [
+    {
+      "description": "Not declared in the ANVILMARK contract (description unknown).",
+      "metadata": {
+        "anvilmark": {
+          "constraints": [
+            {
+              "constraint-ref": "availability.classification_provider",
+              "link": "constraint subject names workload classification"
+            },
+            {
+              "constraint-ref": "availability.classification_provider",
+              "link": "declared unresolved by decision decision.classification"
+            },
+            {
+              "constraint-ref": "latency.classification_p95",
+              "link": "constraint subject names workload classification"
+            },
+            {
+              "constraint-ref": "privacy.raw_ticket_remote",
+              "link": "declared unresolved by decision decision.classification"
+            },
+            {
+              "constraint-ref": "privacy.raw_ticket_remote",
+              "link": "sanitizer named by conformance rule rule.raw_ticket_never_remote"
+            },
+            {
+              "constraint-ref": "quality.classification_f1",
+              "link": "constraint subject names workload classification"
+            },
+            {
+              "constraint-ref": "quality.classification_f1",
+              "link": "declared unresolved by decision decision.classification"
+            },
+            {
+              "constraint-ref": "quality.pii_recall",
+              "link": "constraint subject names workload pii_redaction"
+            },
+            {
+              "constraint-ref": "quality.schema_validity",
+              "link": "constraint subject names workload classification"
+            },
+            {
+              "constraint-ref": "quality.schema_validity",
+              "link": "declared unresolved by decision decision.classification"
+            }
+          ],
+          "decisions": [
+            {
+              "decision-ref": "decision.classification",
+              "instruction-eligible": true,
+              "link": "workload_placement",
+              "standing": "approved_current"
+            }
+          ],
+          "description-declared": false,
+          "evidence": [
+            "evidence.pricing.remote"
+          ],
+          "kind": "service",
+          "knowledge": "declared",
+          "trust-boundary": "local",
+          "unresolved": [],
+          "workloads": [
+            "classification",
+            "pii_redaction"
+          ]
+        }
+      },
+      "name": "PII Redactor",
+      "node-type": "service",
+      "unique-id": "pii-redactor"
+    },
+    {
+      "description": "Not declared in the ANVILMARK contract (description unknown).",
+      "metadata": {
+        "anvilmark": {
+          "constraints": [
+            {
+              "constraint-ref": "availability.classification_provider",
+              "link": "constraint subject names workload classification"
+            },
+            {
+              "constraint-ref": "availability.classification_provider",
+              "link": "declared unresolved by decision decision.classification"
+            },
+            {
+              "constraint-ref": "latency.classification_p95",
+              "link": "constraint subject names workload classification"
+            },
+            {
+              "constraint-ref": "privacy.raw_ticket_remote",
+              "link": "declared unresolved by decision decision.classification"
+            },
+            {
+              "constraint-ref": "quality.classification_f1",
+              "link": "constraint subject names workload classification"
+            },
+            {
+              "constraint-ref": "quality.classification_f1",
+              "link": "declared unresolved by decision decision.classification"
+            },
+            {
+              "constraint-ref": "quality.schema_validity",
+              "link": "constraint subject names workload classification"
+            },
+            {
+              "constraint-ref": "quality.schema_validity",
+              "link": "declared unresolved by decision decision.classification"
+            }
+          ],
+          "decisions": [
+            {
+              "decision-ref": "decision.classification",
+              "instruction-eligible": true,
+              "link": "binding",
+              "standing": "approved_current"
+            }
+          ],
+          "description-declared": false,
+          "evidence": [
+            "evidence.pricing.remote"
+          ],
+          "kind": "external_system",
+          "knowledge": "declared",
+          "trust-boundary": "remote_provider",
+          "unresolved": [],
+          "workloads": [
+            "classification"
+          ]
+        }
+      },
+      "name": "Remote Model Provider",
+      "node-type": "system",
+      "unique-id": "remote-model-provider"
+    },
+    {
+      "description": "Classifies redacted tickets",
+      "metadata": {
+        "anvilmark": {
+          "constraints": [
+            {
+              "constraint-ref": "availability.classification_provider",
+              "link": "constraint subject names workload classification"
+            },
+            {
+              "constraint-ref": "availability.classification_provider",
+              "link": "declared unresolved by decision decision.classification"
+            },
+            {
+              "constraint-ref": "latency.classification_p95",
+              "link": "constraint subject names workload classification"
+            },
+            {
+              "constraint-ref": "privacy.raw_ticket_remote",
+              "link": "declared unresolved by decision decision.classification"
+            },
+            {
+              "constraint-ref": "quality.classification_f1",
+              "link": "constraint subject names workload classification"
+            },
+            {
+              "constraint-ref": "quality.classification_f1",
+              "link": "declared unresolved by decision decision.classification"
+            },
+            {
+              "constraint-ref": "quality.schema_validity",
+              "link": "constraint subject names workload classification"
+            },
+            {
+              "constraint-ref": "quality.schema_validity",
+              "link": "declared unresolved by decision decision.classification"
+            }
+          ],
+          "decisions": [
+            {
+              "decision-ref": "decision.classification",
+              "instruction-eligible": true,
+              "link": "binding",
+              "standing": "approved_current"
+            }
+          ],
+          "description-declared": true,
+          "evidence": [
+            "evidence.pricing.remote"
+          ],
+          "kind": "service",
+          "knowledge": "declared",
+          "trust-boundary": "local",
+          "unresolved": [],
+          "workloads": [
+            "classification"
+          ]
+        }
+      },
+      "name": "Ticket Classifier",
+      "node-type": "service",
+      "unique-id": "ticket-classifier"
+    },
+    {
+      "description": "Not declared in the ANVILMARK contract (description unknown).",
+      "metadata": {
+        "anvilmark": {
+          "constraints": [
+            {
+              "constraint-ref": "quality.pii_recall",
+              "link": "constraint subject names workload pii_redaction"
+            }
+          ],
+          "decisions": [],
+          "description-declared": false,
+          "evidence": [],
+          "kind": "service",
+          "knowledge": "declared",
+          "trust-boundary": "local",
+          "unresolved": [
+            "no decision is linked to this component"
+          ],
+          "workloads": [
+            "pii_redaction"
+          ]
+        }
+      },
+      "name": "Ticket Intake",
+      "node-type": "service",
+      "unique-id": "ticket-intake"
+    }
+  ],
+  "relationships": [
+    {
+      "metadata": {
+        "anvilmark": {
+          "constraints": [
+            {
+              "constraint-ref": "availability.classification_provider",
+              "link": "constraint subject names workload classification"
+            },
+            {
+              "constraint-ref": "latency.classification_p95",
+              "link": "constraint subject names workload classification"
+            },
+            {
+              "constraint-ref": "quality.classification_f1",
+              "link": "constraint subject names workload classification"
+            },
+            {
+              "constraint-ref": "quality.schema_validity",
+              "link": "constraint subject names workload classification"
+            }
+          ],
+          "data-classification": "redacted_customer_ticket",
+          "data-classification-declared": true,
+          "decisions": [
+            {
+              "decision-ref": "decision.classification",
+              "instruction-eligible": true,
+              "standing": "approved_current"
+            }
+          ],
+          "evidence": [
+            "evidence.pricing.remote"
+          ],
+          "kind": "connects",
+          "knowledge": "declared",
+          "trust-boundary-crossing": null,
+          "unresolved": [],
+          "workload-ref": "classification"
+        }
+      },
+      "relationship-type": {
+        "connects": {
+          "destination": {
+            "node": "ticket-classifier"
+          },
+          "source": {
+            "node": "pii-redactor"
+          }
+        }
+      },
+      "unique-id": "pii-redactor-to-ticket-classifier"
+    },
+    {
+      "metadata": {
+        "anvilmark": {
+          "constraints": [
+            {
+              "constraint-ref": "availability.classification_provider",
+              "link": "constraint subject names workload classification"
+            },
+            {
+              "constraint-ref": "latency.classification_p95",
+              "link": "constraint subject names workload classification"
+            },
+            {
+              "constraint-ref": "quality.classification_f1",
+              "link": "constraint subject names workload classification"
+            },
+            {
+              "constraint-ref": "quality.schema_validity",
+              "link": "constraint subject names workload classification"
+            }
+          ],
+          "data-classification": "redacted_customer_ticket",
+          "data-classification-declared": true,
+          "decisions": [
+            {
+              "decision-ref": "decision.classification",
+              "instruction-eligible": true,
+              "standing": "approved_current"
+            }
+          ],
+          "evidence": [
+            "evidence.pricing.remote"
+          ],
+          "kind": "connects",
+          "knowledge": "declared",
+          "trust-boundary-crossing": {
+            "from": "local",
+            "to": "remote_provider"
+          },
+          "unresolved": [],
+          "workload-ref": "classification"
+        }
+      },
+      "relationship-type": {
+        "connects": {
+          "destination": {
+            "node": "remote-model-provider"
+          },
+          "source": {
+            "node": "ticket-classifier"
+          }
+        }
+      },
+      "unique-id": "ticket-classifier-to-remote-model-provider"
+    },
+    {
+      "metadata": {
+        "anvilmark": {
+          "constraints": [
+            {
+              "constraint-ref": "privacy.raw_ticket_remote",
+              "link": "constraint subject names data classification raw_customer_ticket"
+            },
+            {
+              "constraint-ref": "quality.pii_recall",
+              "link": "constraint subject names workload pii_redaction"
+            }
+          ],
+          "data-classification": "raw_customer_ticket",
+          "data-classification-declared": true,
+          "decisions": [],
+          "evidence": [],
+          "kind": "connects",
+          "knowledge": "declared",
+          "trust-boundary-crossing": null,
+          "unresolved": [
+            "workload pii_redaction has no approved, current decision"
+          ],
+          "workload-ref": "pii_redaction"
+        }
+      },
+      "relationship-type": {
+        "connects": {
+          "destination": {
+            "node": "pii-redactor"
+          },
+          "source": {
+            "node": "ticket-intake"
+          }
+        }
+      },
+      "unique-id": "ticket-intake-to-pii-redactor"
+    }
+  ],
+  "unique-id": "atlas-support-desk"
+}

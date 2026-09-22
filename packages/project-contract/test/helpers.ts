@@ -108,6 +108,20 @@ export function baseDocument(): Record<string, unknown> {
           cpu: { cores: 16 },
           ram_gb: 64,
           accelerators: [{ vendor: "nvidia", model: "RTX 4090", vram_gb: 24 }],
+          backend: "cuda",
+          operating_system: "linux",
+          evidence_refs: [],
+        },
+        {
+          // A deterministic observation of a machine that genuinely has the
+          // declared target's capabilities. Separate id, separate evidence
+          // kind: the two subjects are never collapsed.
+          id: "hardware.detected_matching",
+          evidence_kind: "deterministic_observation",
+          cpu: { cores: 16 },
+          ram_gb: 64,
+          accelerators: [{ vendor: "nvidia", model: "RTX 4090", vram_gb: 24 }],
+          backend: "cuda",
           operating_system: "linux",
           evidence_refs: [],
         },
@@ -142,7 +156,13 @@ export function baseDocument(): Record<string, unknown> {
           runtime: "example-runtime",
           hardware_ref: "hardware.declared_target",
         },
-        measurements: { quality_result_ref: "evidence.eval.classification" },
+        measurements: {
+          quality_result_ref: "evidence.eval.classification",
+          expected_evaluation: {
+            provider_id: "example-provider",
+            configuration_hash: "cfg-1",
+          },
+        },
         estimates: {},
         constraint_results: [
           {
@@ -203,6 +223,15 @@ export function baseDocument(): Record<string, unknown> {
           dataset_version: "v1",
           candidate_ref: "candidate.classification.local",
           configuration_hash: "cfg-1",
+          identity: {
+            workload_ref: null,
+            dataset_hash: `sha256:${"a".repeat(64)}`,
+            prompt_hash: `sha256:${"b".repeat(64)}`,
+            evaluator_hash: `sha256:${"c".repeat(64)}`,
+            model_configuration_hash: `sha256:${"d".repeat(64)}`,
+            config_digest: `sha256:${"e".repeat(64)}`,
+            provider_id: "example-provider",
+          },
           metrics: { macro_f1: 0.93 },
           result_artifact_hash: "artifact-1",
         },

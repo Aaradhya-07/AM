@@ -1,4 +1,9 @@
 packages:
   - packages/*
 
+# esbuild's install script only re-fetches a binary its platform package
+# already provides, so it is declined rather than run.
+allowBuilds:
+  esbuild: false
+
 onlyBuiltDependencies: []

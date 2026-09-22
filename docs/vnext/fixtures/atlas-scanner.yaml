@@ -1,0 +1,38 @@
+# Scan declarations for the Atlas Support Desk walkthrough (Milestone 5).
+#
+# Written by hand for docs/vnext/milestones/05-atlas-walkthrough.md. These are
+# the user's statements about their own code, bound by the scanner to the
+# exported functions named here. A declared sanitizer is an assumption about
+# that function, not proof that it redacts effectively. Copy this file to
+# .anvilmark/scanner.yaml in a project whose repository is ../app.
+format: anvilmark-scan-config/0.1.0-draft.1
+repository_root: ../app
+sources:
+  - id: source.raw_ticket
+    data_classification: raw_customer_ticket
+    function: { path: src/intake.ts, export: readTicket }
+    architecture_node_ref: ticket-intake
+sanitizers:
+  - id: sanitizer.pii
+    function: { path: src/redactor.ts, export: redactTicket }
+    clears: [raw_customer_ticket]
+    produces: redacted_customer_ticket
+    architecture_node_ref: pii-redactor
+sinks:
+  - id: sink.remote_provider
+    recognizer: openai
+    architecture_node_ref: remote-model-provider
+    candidate_ref: candidate.classification.remote_unselected
+  - id: sink.local_runtime
+    recognizer: ollama
+    architecture_node_ref: ticket-classifier
+    candidate_ref: candidate.classification.local_unselected
+components:
+  - id: component.classifier
+    path: src/classifier.ts
+    architecture_node_ref: ticket-classifier
+    workload_ref: classification
+  - id: component.escalation
+    path: src/escalation.ts
+    architecture_node_ref: ticket-classifier
+    workload_ref: classification

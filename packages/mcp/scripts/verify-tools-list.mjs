@@ -3,10 +3,14 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const child = spawn(process.execPath, [resolve(packageRoot, "dist/index.js")], {
-  cwd: packageRoot,
-  stdio: ["pipe", "pipe", "pipe"],
-});
+const child = spawn(
+  process.execPath,
+  [resolve(packageRoot, "bin/anvilmark-mcp.mjs")],
+  {
+    cwd: packageRoot,
+    stdio: ["pipe", "pipe", "pipe"],
+  },
+);
 
 let stdout = "";
 let stderr = "";

@@ -1,7 +1,8 @@
 {
   "name": "@anvilmark/project-contract",
-  "version": "0.1.0-draft.1",
+  "version": "0.1.0-draft.4",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -19,6 +20,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@anvilmark/hardware-sizing": "workspace:*",
     "js-yaml": "^4.3.1",
     "zod": "^4.2.0"
   },

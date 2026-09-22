@@ -1,0 +1,222 @@
+{
+  "evalId": "eval-ChN-2026-09-12T22:02:44",
+  "results": {
+    "version": 3,
+    "timestamp": "2026-09-12T22:02:44.882Z",
+    "prompts": [
+      {
+        "id": "b0453fe54c63b5f4e9cccc483d6e2ee51ffbb4a40f648e98b2e5c0dbd2324ab6",
+        "raw": "{{text}}",
+        "label": "{{text}}",
+        "provider": "http://127.0.0.1:9/",
+        "metrics": {
+          "score": 0,
+          "testPassCount": 0,
+          "testFailCount": 0,
+          "testErrorCount": 1,
+          "assertPassCount": 0,
+          "assertFailCount": 0,
+          "totalLatencyMs": 0,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "namedScoreWeights": {},
+          "cost": 0
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 0,
+        "error": "Error: Request failed after 4 retries: TypeError: fetch failed (Cause: Error: bad port)\n    at fetchWithRetries (<local-path>:1304:8)\n    at async fetchAndReadBody (<local-path>:408:16)\n    at async prepareFetchResponse (<local-path>:437:17)\n    at async <local-path>:539:29\n    at async fetchWithCache (<local-path>:547:34)\n    at async HttpProvider.callApiInternal (<local-path>:12575:79)\n    at async spanCallback (<local-path>:170:18)\n    at async ProviderRateLimitState.executeWithRetry (<local-path>:630:20)\n    at async RateLimitRegistry.execute (<local-path>:859:19)\n    at async callActiveProvider (<local-path>:7065:39)",
+        "gradingResult": null,
+        "id": "e48e8199-3135-4432-9d53-4c2e6f45e20d",
+        "latencyMs": 0,
+        "namedScores": {},
+        "prompt": {
+          "raw": "hello",
+          "label": "{{text}}",
+          "config": {}
+        },
+        "promptId": "b0453fe54c63b5f4e9cccc483d6e2ee51ffbb4a40f648e98b2e5c0dbd2324ab6",
+        "promptIdx": 0,
+        "provider": {
+          "id": "http://127.0.0.1:9/",
+          "label": ""
+        },
+        "score": 0,
+        "success": false,
+        "testCase": {
+          "description": "unreachable",
+          "vars": {
+            "text": "hello"
+          },
+          "assert": [
+            {
+              "type": "contains",
+              "value": "hello"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "text": "hello"
+        },
+        "metadata": {
+          "errorContext": {
+            "providerId": "http://127.0.0.1:9/",
+            "providerLabel": ""
+          }
+        },
+        "failureReason": 2
+      }
+    ],
+    "stats": {
+      "successes": 0,
+      "failures": 0,
+      "errors": 1,
+      "tokenUsage": {
+        "prompt": 0,
+        "completion": 0,
+        "cached": 0,
+        "total": 0,
+        "numRequests": 0,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0,
+          "cacheReadInputTokens": 0,
+          "cacheCreationInputTokens": 0
+        },
+        "assertions": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          }
+        }
+      },
+      "durationMs": 12101,
+      "evaluationDurationMs": 12101
+    }
+  },
+  "config": {
+    "tags": {},
+    "description": "error row probe",
+    "prompts": ["{{text}}"],
+    "providers": [
+      {
+        "id": "http",
+        "config": {
+          "url": "http://127.0.0.1:9/",
+          "method": "POST",
+          "body": {
+            "p": "{{prompt}}"
+          },
+          "transformResponse": "json"
+        }
+      }
+    ],
+    "tests": [
+      {
+        "description": "unreachable",
+        "vars": {
+          "text": "hello"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "hello"
+          }
+        ]
+      }
+    ],
+    "env": {},
+    "sharing": false,
+    "outputPath": ["o.json"],
+    "extensions": [],
+    "metadata": {},
+    "evaluateOptions": {}
+  },
+  "shareableUrl": null,
+  "metadata": {
+    "promptfooVersion": "0.122.0",
+    "nodeVersion": "v24.15.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "exportedAt": "2026-09-12T22:02:57.001Z",
+    "evaluationCreatedAt": "2026-09-12T22:02:44.882Z"
+  },
+  "vars": ["text"],
+  "runtimeOptions": {
+    "eventSource": "cli",
+    "showProgressBar": false,
+    "repeat": 1,
+    "maxConcurrency": 4,
+    "cache": true
+  }
+}

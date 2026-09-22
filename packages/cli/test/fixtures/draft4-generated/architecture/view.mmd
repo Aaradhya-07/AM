@@ -1,0 +1,37 @@
+%% ANVILMARK generated Mermaid architecture view. This file is an output of .anvilmark/project.yaml: edits here are never read back, and it is not an authoritative input.
+%% source.project_id: atlas-support-desk
+%% source.contract_revision: 1
+%% source.state_revision: r3
+%% source.contract_hash: sha256:2e805ad31b0736afa3a163c69de3aa70851ca41715b9eb0ef8514c997fd2b967
+%% schema_version: 0.1.0-draft.4
+%% generator: anvilmark-context/0.1.0-draft.1
+%% projection: remote-default
+%% as_of: 2026-09-14T00:00:00Z (the instant evidence freshness and exception expiry were evaluated; not a generation clock)
+%% approval standing: approved_current 1
+%% disclosure: Remote-default projection: decision-layer facts and non-identifying hardware capabilities only. Repository roots, repository bindings and source locations, owners and approver identities, integration credential references and data directories, evidence locators and evidence values (including evaluation rows), command lines and source-quoting explanations are not included.
+%% Legend: solid outline = linked to an approved, current decision; dashed = UNRESOLVED; dotted outline = partly supported (a linked approval is not current, or something else is unresolved).
+%% Legend: thick arrow = data flow crossing a trust boundary; dotted arrow = deployed_in or composed_of.
+flowchart LR
+  subgraph tb_local["Trust boundary: local"]
+    n_pii_redactor_7df3dabf["PII Redactor (service) · decision: decision.classification approved_current · constraints: 6"]
+    n_ticket_classifier_c5244dca["Ticket Classifier (service) · decision: decision.classification approved_current · constraints: 5"]
+    n_ticket_intake_5a977495["Ticket Intake (service) · decision: UNRESOLVED · constraints: 1 · UNRESOLVED"]
+  end
+  subgraph tb_remote_provider["Trust boundary: remote_provider"]
+    n_remote_model_provider_da7759bc["Remote Model Provider (external_system) · decision: decision.classification approved_current · constraints: 5"]
+  end
+  n_pii_redactor_7df3dabf -->|"pii-redactor-to-ticket-classifier · connects · data: redacted_customer_ticket · workload: classification"| n_ticket_classifier_c5244dca
+  n_ticket_classifier_c5244dca ==>|"ticket-classifier-to-remote-model-provider · connects · data: redacted_customer_ticket · workload: classification · crosses local to remote_provider"| n_remote_model_provider_da7759bc
+  n_ticket_intake_5a977495 -->|"ticket-intake-to-pii-redactor · connects · data: raw_customer_ticket · workload: pii_redaction · UNRESOLVED"| n_pii_redactor_7df3dabf
+  classDef approved stroke-width:2px
+  classDef partial stroke-dasharray:2 2
+  classDef unresolved stroke-dasharray:6 4
+  class n_pii_redactor_7df3dabf,n_remote_model_provider_da7759bc,n_ticket_classifier_c5244dca approved
+  class n_ticket_intake_5a977495 unresolved
+%% node pii-redactor as n_pii_redactor_7df3dabf · support approved · decisions decision.classification (workload_placement, approved_current) · constraints availability.classification_provider, latency.classification_p95, privacy.raw_ticket_remote, quality.classification_f1, quality.pii_recall, quality.schema_validity · evidence evidence.pricing.remote · unresolved none
+%% node remote-model-provider as n_remote_model_provider_da7759bc · support approved · decisions decision.classification (binding, approved_current) · constraints availability.classification_provider, latency.classification_p95, privacy.raw_ticket_remote, quality.classification_f1, quality.schema_validity · evidence evidence.pricing.remote · unresolved none
+%% node ticket-classifier as n_ticket_classifier_c5244dca · support approved · decisions decision.classification (binding, approved_current) · constraints availability.classification_provider, latency.classification_p95, privacy.raw_ticket_remote, quality.classification_f1, quality.schema_validity · evidence evidence.pricing.remote · unresolved none
+%% node ticket-intake as n_ticket_intake_5a977495 · support unresolved · decisions none · constraints quality.pii_recall · evidence none · unresolved no decision is linked to this component
+%% relationship pii-redactor-to-ticket-classifier · support approved · decisions decision.classification (approved_current) · constraints availability.classification_provider, latency.classification_p95, quality.classification_f1, quality.schema_validity · evidence evidence.pricing.remote · unresolved none
+%% relationship ticket-classifier-to-remote-model-provider · support approved · decisions decision.classification (approved_current) · constraints availability.classification_provider, latency.classification_p95, quality.classification_f1, quality.schema_validity · evidence evidence.pricing.remote · unresolved none
+%% relationship ticket-intake-to-pii-redactor · support unresolved · decisions none · constraints privacy.raw_ticket_remote, quality.pii_recall · evidence none · unresolved workload pii_redaction has no approved, current decision

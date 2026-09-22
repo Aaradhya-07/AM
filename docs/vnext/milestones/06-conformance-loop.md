@@ -4,6 +4,10 @@ Target: **Weeks 7–8**
 Depends on: **Milestone 5 source-linked repository bindings**  
 Primary owner: **Developer B — repository and conformance**
 
+Correction status: **Post-merge fixes verified locally**, September 15, 2026.
+See the [correction record](06-correction-record.md) for the defects, regression
+evidence and limits that supersede the original completion checklist.
+
 ## Outcome
 
 ANVILMARK compares the observed repository with the approved contract and produces deterministic, evidence-linked pass/fail/unknown/not-applicable results for the two Atlas rules.
@@ -86,8 +90,8 @@ The direct violation must fail both rules. Provider failure alone does not prove
 
 Every conformance result includes:
 
-- result ID and time;
-- contract revision/hash and repository revision/hash;
+- result ID, with observation/evaluation time in the containing report;
+- contract revision/hash, state revision and repository snapshot identity in the containing report;
 - rule, constraint, workload, decision, candidate, and architecture references;
 - pass/fail/unknown/not-applicable;
 - evidence tier and deterministic/inferred standing;
@@ -95,7 +99,7 @@ Every conformance result includes:
 - source/sink/sanitizer trace for the flow rule;
 - supported analysis scope and caveats;
 - approved alternative when one exists;
-- detector/rule-engine versions;
+- detector/rule-engine versions in the containing report;
 - stable result hash.
 
 An explanation may be generated for readability but cannot change the deterministic result.
@@ -115,8 +119,8 @@ Do not generate and present an unvalidated replacement as approved remediation.
 Add read/check tools:
 
 - `run_conformance` for the declared repository/revision;
-- `check_proposed_change` for a local proposed diff or selected files;
-- retrieval of detailed result/evidence by ID as needed.
+- `check_proposed_change` for selected existing source files, analyzed with full repository context, or an explicitly labeled candidate-policy comparison; arbitrary diff application is not implemented;
+- retrieval of current result/evidence by ID as needed; detailed source evidence requires the `local-disclosed` projection.
 
 These tools may run checks and return results. They cannot approve decisions, create exceptions, weaken constraints, or modify source.
 
@@ -166,17 +170,17 @@ The same contract, source tree, detector versions, rule-engine version, and conf
 
 ## Exit checklist
 
-- [ ] Results use pass/fail/unknown/not-applicable correctly.
-- [ ] Provider allowlist and raw-data-flow are separate rules.
-- [ ] Direct violation fails both rules with exact constraint, decision, file, and call site.
-- [ ] Compliant variant passes within the declared analysis scope.
-- [ ] Ambiguous variant returns unknown rather than pass.
-- [ ] Every result carries source and contract/repository revision evidence.
-- [ ] Explanations cannot override deterministic results.
-- [ ] Suggested remediation refers only to approved/proposed alternatives honestly.
-- [ ] MCP check tools cannot mutate or approve.
-- [ ] Repeated unchanged checks are deterministic.
-- [ ] Formatting, lint, tests, and build pass.
+- [x] Results use pass/fail/unknown/not-applicable correctly.
+- [x] Provider allowlist and raw-data-flow are separate rules.
+- [x] Direct violation fails both rules with exact constraint, decision, file, and call site.
+- [x] Compliant variant passes within the declared analysis scope.
+- [x] Ambiguous variant returns unknown rather than pass.
+- [x] Every result carries source and contract/repository revision evidence.
+- [x] Explanations cannot override deterministic results.
+- [x] Suggested remediation refers only to approved/proposed alternatives honestly.
+- [x] MCP check tools cannot mutate or approve.
+- [x] Repeated unchanged checks are deterministic.
+- [x] Formatting, lint, tests, and build pass.
 
 ## Handoff to Milestone 7
 

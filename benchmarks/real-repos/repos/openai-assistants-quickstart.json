@@ -1,0 +1,206 @@
+{
+  "name": "openai-assistants-quickstart",
+  "url": "https://github.com/openai/openai-assistants-quickstart.git",
+  "commit": "06fc2d444a5d41b574082080f4c7b2e48156b84f",
+  "install": ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"],
+  "ai_calls": [
+    {
+      "path": "app/api/assistants/files/route.tsx",
+      "line": 11,
+      "sdk": "openai",
+      "operation": "files.create",
+      "provider": "openai",
+      "model": "none",
+      "egress": "file_upload"
+    },
+    {
+      "path": "app/api/assistants/files/route.tsx",
+      "line": 17,
+      "sdk": "openai",
+      "operation": "beta.vectorStores.files.create",
+      "provider": "openai",
+      "model": "none",
+      "egress": "management"
+    },
+    {
+      "path": "app/api/assistants/files/route.tsx",
+      "line": 26,
+      "sdk": "openai",
+      "operation": "beta.vectorStores.files.list",
+      "provider": "openai",
+      "model": "none",
+      "egress": "management"
+    },
+    {
+      "path": "app/api/assistants/files/route.tsx",
+      "line": 30,
+      "sdk": "openai",
+      "operation": "files.retrieve",
+      "provider": "openai",
+      "model": "none",
+      "egress": "management"
+    },
+    {
+      "path": "app/api/assistants/files/route.tsx",
+      "line": 31,
+      "sdk": "openai",
+      "operation": "beta.vectorStores.files.retrieve",
+      "provider": "openai",
+      "model": "none",
+      "egress": "management"
+    },
+    {
+      "path": "app/api/assistants/files/route.tsx",
+      "line": 51,
+      "sdk": "openai",
+      "operation": "beta.vectorStores.files.del",
+      "provider": "openai",
+      "model": "none",
+      "egress": "management"
+    },
+    {
+      "path": "app/api/assistants/files/route.tsx",
+      "line": 59,
+      "sdk": "openai",
+      "operation": "beta.assistants.retrieve",
+      "provider": "openai",
+      "model": "none",
+      "egress": "management"
+    },
+    {
+      "path": "app/api/assistants/files/route.tsx",
+      "line": 66,
+      "sdk": "openai",
+      "operation": "beta.vectorStores.create",
+      "provider": "openai",
+      "model": "none",
+      "egress": "management"
+    },
+    {
+      "path": "app/api/assistants/files/route.tsx",
+      "line": 69,
+      "sdk": "openai",
+      "operation": "beta.assistants.update",
+      "provider": "openai",
+      "model": "none",
+      "egress": "management"
+    },
+    {
+      "path": "app/api/assistants/route.ts",
+      "line": 7,
+      "sdk": "openai",
+      "operation": "beta.assistants.create",
+      "provider": "openai",
+      "model": "literal:gpt-4o",
+      "egress": "management"
+    },
+    {
+      "path": "app/api/assistants/threads/[threadId]/actions/route.ts",
+      "line": 7,
+      "sdk": "openai",
+      "operation": "beta.threads.runs.submitToolOutputsStream",
+      "provider": "openai",
+      "model": "none",
+      "egress": "inference"
+    },
+    {
+      "path": "app/api/assistants/threads/[threadId]/messages/route.ts",
+      "line": 10,
+      "sdk": "openai",
+      "operation": "beta.threads.messages.create",
+      "provider": "openai",
+      "model": "none",
+      "egress": "inference",
+      "note": "sends the user's message content"
+    },
+    {
+      "path": "app/api/assistants/threads/[threadId]/messages/route.ts",
+      "line": 15,
+      "sdk": "openai",
+      "operation": "beta.threads.runs.stream",
+      "provider": "openai",
+      "model": "none",
+      "egress": "inference"
+    },
+    {
+      "path": "app/api/assistants/threads/route.ts",
+      "line": 7,
+      "sdk": "openai",
+      "operation": "beta.threads.create",
+      "provider": "openai",
+      "model": "none",
+      "egress": "management"
+    },
+    {
+      "path": "app/api/files/[fileId]/route.ts",
+      "line": 6,
+      "sdk": "openai",
+      "operation": "files.retrieve",
+      "provider": "openai",
+      "model": "none",
+      "egress": "management"
+    },
+    {
+      "path": "app/api/files/[fileId]/route.ts",
+      "line": 7,
+      "sdk": "openai",
+      "operation": "files.content",
+      "provider": "openai",
+      "model": "none",
+      "egress": "management"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "aq-messages-stay-local",
+      "description": "Chat messages a user sends must not reach a remote provider.",
+      "workload": {
+        "id": "assistant_chat",
+        "input": "user_message"
+      },
+      "candidate": {
+        "component_kind": "model_runtime",
+        "mode": "managed_api",
+        "provider": "openai",
+        "model": "gpt-4o",
+        "version": "gpt-4o",
+        "mutability": "pinned"
+      },
+      "rule": {
+        "kind": "forbid_dataflow",
+        "classification": "user_message"
+      },
+      "scanner": {
+        "sources": [
+          {
+            "id": "source.message_request",
+            "data_classification": "user_message",
+            "function": {
+              "path": "app/api/assistants/threads/[threadId]/messages/route.ts",
+              "export": "POST"
+            },
+            "from": "parameter",
+            "parameter": 0
+          }
+        ],
+        "sinks": [
+          {
+            "id": "sink.openai",
+            "recognizer": "openai"
+          }
+        ],
+        "components": [
+          {
+            "path": "app/api/assistants/threads/[threadId]/messages/route.ts"
+          }
+        ]
+      },
+      "expected": {
+        "verdict": "fail",
+        "acceptable": ["fail"],
+        "evidence_path": "app/api/assistants/threads/[threadId]/messages/route.ts",
+        "why": "request.json().content -> openai.beta.threads.messages.create"
+      }
+    }
+  ]
+}

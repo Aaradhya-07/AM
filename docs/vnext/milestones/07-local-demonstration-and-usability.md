@@ -4,6 +4,19 @@ Target: **Weeks 8–10**
 Depends on: **Milestone 6 integrated conformance loop**  
 Primary owner: **Developer C — CLI, packaging, and agent experience**
 
+Status: **Acceptance reopened during M6 correction review, September 15, 2026.**
+The previous completion checklist exceeded its evidence: fixture loading did
+not establish human approval, and two stdio harness clients did not establish
+actual agent application consumption. The corrected offline replay supports M6
+regression testing. The broader requirements below still require acceptance.
+No team acknowledgements are inferred from the replay.
+
+Implementation follow-up, September 16: installation and guided workflow tools
+are implemented, verified and merged from `codex/m7-onboarding` into `main`.
+See the [onboarding record](07-onboarding-record.md)
+and [guided workshop](07-guided-workshop.md). Real-project approval and actual
+agent consumption are still separate acceptance steps.
+
 ## Outcome
 
 A new developer can install ANVILMARK from a clean checkout and reproduce one coherent Atlas journey from idea through approved decision, agent context, repository violation, correction, and passing conformance—without an ANVILMARK-hosted model or manual transfer among unrelated tools/files.
@@ -181,17 +194,23 @@ All three developers run the clean-checkout acceptance rather than reviewing onl
 
 ## Exit checklist
 
-- [ ] Clean checkout reproduces the documented installation.
-- [ ] No ANVILMARK model, key, account, or hosted service is required.
-- [ ] Optional adapters may be missing without breaking the core demonstration.
+Checked items describe the documented macOS installation and automated
+synthetic workflow. They do not establish a real user's decision, actual agent
+application consumption, team acknowledgement or other OS support. The
+[onboarding record](07-onboarding-record.md) identifies the exact evidence and
+remaining acceptance work.
+
+- [x] Clean checkout reproduces the documented installation.
+- [x] No ANVILMARK model, key, account, or hosted service is required.
+- [x] Optional adapters may be missing without breaking the core demonstration.
 - [ ] The same approved facts reach Claude Code and Codex.
 - [ ] Every factual recommendation shows provenance, freshness, and uncertainty.
-- [ ] The deliberate violation fails with exact evidence.
-- [ ] The ambiguous case returns unknown.
-- [ ] Correction produces a passing recheck.
-- [ ] No manual transfer among unrelated files/tools is required.
-- [ ] Security limitations and analysis boundaries are documented and demonstrated.
-- [ ] Formatting, lint, tests, build, and clean-install acceptance pass.
+- [x] The deliberate violation fails with exact evidence.
+- [x] The ambiguous case returns unknown.
+- [x] Correction produces a passing recheck.
+- [x] No manual transfer among unrelated files/tools is required.
+- [x] Security limitations and analysis boundaries are documented and demonstrated.
+- [x] Formatting, lint, tests, build, and clean-install acceptance pass.
 
 ## Reassessment after Milestone 7
 

@@ -1,0 +1,192 @@
+{
+  "name": "make-real",
+  "url": "https://github.com/tldraw/make-real.git",
+  "commit": "928c4c4176fbe84fef4e4c3573e325d12cddbe4d",
+  "install": ["npm", "install", "--ignore-scripts", "--no-audit", "--no-fund"],
+  "install_note": "package-lock.json is out of sync with package.json at this commit, so npm ci refuses",
+  "ai_calls": [
+    {
+      "path": "app/makereal.tldraw.com/api/anthropic/route.ts",
+      "line": 12,
+      "sdk": "ai-sdk",
+      "operation": "streamText",
+      "provider": "anthropic",
+      "model": "literal:claude-3-7-sonnet-20250219",
+      "egress": "inference"
+    },
+    {
+      "path": "app/makereal.tldraw.com/api/anthropic/route.ts",
+      "line": 29,
+      "sdk": "ai-sdk",
+      "operation": "streamText",
+      "provider": "anthropic",
+      "model": "runtime",
+      "egress": "inference"
+    },
+    {
+      "path": "app/makereal.tldraw.com/api/anthropic/route.ts",
+      "line": 40,
+      "sdk": "ai-sdk",
+      "operation": "streamText",
+      "provider": "anthropic",
+      "model": "runtime",
+      "egress": "inference"
+    },
+    {
+      "path": "app/makereal.tldraw.com/api/google/route.ts",
+      "line": 11,
+      "sdk": "ai-sdk",
+      "operation": "streamText",
+      "provider": "google",
+      "model": "runtime",
+      "egress": "inference"
+    },
+    {
+      "path": "app/makereal.tldraw.com/api/openai/route.ts",
+      "line": 12,
+      "sdk": "ai-sdk",
+      "operation": "streamText",
+      "provider": "openai",
+      "model": "literal:gpt-5",
+      "egress": "inference"
+    },
+    {
+      "path": "app/makereal.tldraw.com/api/openai/route.ts",
+      "line": 22,
+      "sdk": "ai-sdk",
+      "operation": "streamText",
+      "provider": "openai",
+      "model": "runtime",
+      "egress": "inference"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "mr-anthropic-route-not-approved",
+      "description": "The drawing-to-code workload may only use OpenAI gpt-5; this scenario scopes it to the Anthropic route.",
+      "workload": {
+        "id": "make_real",
+        "input": "user_drawing"
+      },
+      "candidate": {
+        "component_kind": "model_runtime",
+        "mode": "managed_api",
+        "provider": "openai",
+        "model": "gpt-5",
+        "version": "gpt-5",
+        "mutability": "pinned"
+      },
+      "rule": {
+        "kind": "approved_candidate_only"
+      },
+      "scanner": {
+        "sinks": [
+          {
+            "id": "sink.ai_sdk",
+            "recognizer": "ai-sdk"
+          }
+        ],
+        "components": [
+          {
+            "path": "app/makereal.tldraw.com/api/anthropic/route.ts"
+          }
+        ]
+      },
+      "expected": {
+        "verdict": "fail",
+        "acceptable": ["fail"],
+        "evidence_path": "app/makereal.tldraw.com/api/anthropic/route.ts",
+        "why": "streamText with a model from createAnthropic: provider anthropic is not the approved openai candidate"
+      }
+    },
+    {
+      "id": "mr-openai-route-model",
+      "description": "The OpenAI route may only use gpt-5.",
+      "workload": {
+        "id": "make_real",
+        "input": "user_drawing"
+      },
+      "candidate": {
+        "component_kind": "model_runtime",
+        "mode": "managed_api",
+        "provider": "openai",
+        "model": "gpt-5",
+        "version": "gpt-5",
+        "mutability": "pinned"
+      },
+      "rule": {
+        "kind": "approved_candidate_only"
+      },
+      "scanner": {
+        "sinks": [
+          {
+            "id": "sink.ai_sdk",
+            "recognizer": "ai-sdk"
+          }
+        ],
+        "components": [
+          {
+            "path": "app/makereal.tldraw.com/api/openai/route.ts"
+          }
+        ]
+      },
+      "expected": {
+        "verdict": "unknown",
+        "acceptable": ["unknown"],
+        "why": "line 22 passes the model named in the request body"
+      }
+    },
+    {
+      "id": "mr-google-drawing-stays-local",
+      "description": "The user's drawing and messages must not reach a remote provider.",
+      "workload": {
+        "id": "make_real",
+        "input": "user_drawing"
+      },
+      "candidate": {
+        "component_kind": "model_runtime",
+        "mode": "managed_api",
+        "provider": "google",
+        "model": "gemini-2.0-flash",
+        "version": "gemini-2.0-flash",
+        "mutability": "pinned"
+      },
+      "rule": {
+        "kind": "forbid_dataflow",
+        "classification": "user_drawing"
+      },
+      "scanner": {
+        "sources": [
+          {
+            "id": "source.request",
+            "data_classification": "user_drawing",
+            "function": {
+              "path": "app/makereal.tldraw.com/api/google/route.ts",
+              "export": "POST"
+            },
+            "from": "parameter",
+            "parameter": 0
+          }
+        ],
+        "sinks": [
+          {
+            "id": "sink.ai_sdk",
+            "recognizer": "ai-sdk"
+          }
+        ],
+        "components": [
+          {
+            "path": "app/makereal.tldraw.com/api/google/route.ts"
+          }
+        ]
+      },
+      "expected": {
+        "verdict": "fail",
+        "acceptable": ["fail"],
+        "evidence_path": "app/makereal.tldraw.com/api/google/route.ts",
+        "why": "req.json().messages reach streamText with a Google model at the default endpoint"
+      },
+      "held_out": "added 2026-09-17 after the scanner changes; expectation written from the code before its first run"
+    }
+  ]
+}

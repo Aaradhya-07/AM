@@ -1,5 +1,4 @@
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 
 import type { AuditResult } from "./schemas.js";
 import { AuditResultSchema } from "./schemas.js";
@@ -17,8 +16,7 @@ function fixtureUrl(name: FixtureName): URL {
 }
 
 export async function loadFixture(name: FixtureName): Promise<AuditResult> {
-  const filePath = fileURLToPath(fixtureUrl(name).href);
-  const source = await readFile(filePath, "utf8");
+  const source = await readFile(fixtureUrl(name), "utf8");
   return AuditResultSchema.parse(JSON.parse(source));
 }
 

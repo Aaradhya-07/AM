@@ -4,7 +4,7 @@ Date: **August 19, 2026**
 
 Acknowledged: **August 20, 2026**
 
-Status: **Ratified by all three developers; Milestone 1 is authorized**
+Status: **Original decision ratified by all three developers; Milestone 1 authorized. The current schema is amended to `0.1.0-draft.3` by the separately ratified amendments 1–4 in [document 07](07-schema-amendment-proposal.md), and to `0.1.0-draft.4` by amendments 6–7 in [document 08](08-milestone-3-scope-proposal.md), accepted September 14, 2026 under a separate scoped exception.**
 
 Reviews: [`05-contract-ratification-answers.md`](05-contract-ratification-answers.md) and the current FINOS CALM 1.2 specification
 
@@ -57,6 +57,18 @@ Document 05 correctly identifies the project contract as a separate schema line,
 PROJECT_SCHEMA_VERSION = 0.1.0-draft.1
 https://anvilmark.dev/schemas/project/0.1.0-draft.1
 ```
+
+> **Historical decision and current amendment.** `0.1.0-draft.1` is the
+> initial version the three developers accepted on August 20, 2026. Amendments
+> 1–4 in [`07-schema-amendment-proposal.md`](07-schema-amendment-proposal.md)
+> were ratified on September 13, 2026 through Anurag's acceptance and his scoped
+> exception to the three-acknowledgement requirement for this decision.
+> Amendments 6–7 in [`08-milestone-3-scope-proposal.md`](08-milestone-3-scope-proposal.md)
+> were accepted on September 14, 2026 by Anurag under a separate exception scoped
+> to those Milestone 3 decisions, giving the current implemented version
+> **`0.1.0-draft.4`**. No acceptance of any of these amendments is attributed to
+> Navaneeth or Aaradhya. Amendment 5 remains proposed and deferred; the other
+> decisions in this document remain in force.
 
 The identical numeric prefix in two differently named packages is not a collision. Package/schema identity supplies the namespace.
 

@@ -97,6 +97,53 @@ export const RefreshSchema = z.strictObject({
 const metricsSchema = z.record(z.string(), z.number());
 
 /**
+ * The individual identities an evaluation result depends on.
+ *
+ * `configuration_hash` alone can say THAT something changed but never WHICH
+ * thing, and "the dataset was revised" and "the prompt was reworded" have very
+ * different consequences for whether an old result still applies. Each
+ * identity is therefore recorded separately, in the contract rather than in an
+ * adapter annotation that would vanish the moment the evidence is attached.
+ */
+/**
+ * A content digest, carrying its algorithm.
+ *
+ * `sha256:` plus lower-case hex. An opaque string cannot serve as proof of
+ * what was executed: without a stated algorithm and a fixed representation,
+ * "not-a-digest" and a real hash are indistinguishable to a reader and to a
+ * later comparison.
+ */
+export const DigestSchema = z
+  .string()
+  .regex(
+    /^sha256:[0-9a-f]{64}$/,
+    "a digest must be `sha256:` followed by 64 lower-case hex characters",
+  );
+
+export type Digest = z.infer<typeof DigestSchema>;
+
+export const EvaluationIdentitySchema = z.strictObject({
+  workload_ref: RefSchema.nullable().default(null),
+  dataset_hash: DigestSchema,
+  prompt_hash: DigestSchema,
+  evaluator_hash: DigestSchema,
+  model_configuration_hash: DigestSchema,
+  /** Digest of the exact configuration bytes handed to the tool. */
+  config_digest: DigestSchema,
+  /**
+   * The single provider the run actually used, as reported by the tool.
+   *
+   * REQUIRED and non-null. A result aggregated over several providers, or one
+   * whose provider could not be established, is not a measurement of one
+   * candidate — and a nullable field made "we never found out" look like a
+   * legitimate recorded value.
+   */
+  provider_id: NonEmptyStringSchema,
+});
+
+export type EvaluationIdentity = z.infer<typeof EvaluationIdentitySchema>;
+
+/**
  * Evaluation evidence must identify the dataset, the exact candidate
  * configuration, the metrics, and a result artifact hash. Without these a
  * result is not reproducible and cannot be treated as a measurement.
@@ -105,7 +152,9 @@ const MeasuredEvaluationValueSchema = z.strictObject({
   dataset_ref: NonEmptyStringSchema,
   dataset_version: NonEmptyStringSchema,
   candidate_ref: RefSchema,
+  /** Combined digest over every member of `identity`. */
   configuration_hash: NonEmptyStringSchema,
+  identity: EvaluationIdentitySchema,
   metrics: metricsSchema,
   result_artifact_hash: NonEmptyStringSchema,
 });

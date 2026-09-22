@@ -1,0 +1,56 @@
+{
+  "protocol_version": "0.1.0-draft.2",
+  "proposed_constraints": [],
+  "proposed_candidates": [],
+  "questions": [
+    "Should drafted responses ever be sent to the remote model provider, or only redacted tickets?"
+  ],
+  "inferences": [],
+  "proposed_architecture_nodes": [
+    {
+      "id": "response-drafter",
+      "kind": "service",
+      "name": "Response Drafter",
+      "trust_boundary": "local",
+      "description": "Drafts cited replies for human review"
+    },
+    {
+      "id": "knowledge-index",
+      "kind": "datastore",
+      "name": "Internal Knowledge Index",
+      "trust_boundary": "local",
+      "description": null
+    }
+  ],
+  "proposed_relationships": [
+    {
+      "id": "classifier-to-drafter",
+      "kind": "connects",
+      "source": "ticket-classifier",
+      "destination": "response-drafter",
+      "workload_ref": "response_drafting",
+      "data_classification": "redacted_customer_ticket_with_internal_context"
+    },
+    {
+      "id": "drafter-reads-index",
+      "kind": "uses",
+      "source": "response-drafter",
+      "destination": "knowledge-index",
+      "workload_ref": "retrieval",
+      "data_classification": "redacted_customer_ticket"
+    },
+    {
+      "id": "drafter-to-remote-model",
+      "kind": "connects",
+      "source": "response-drafter",
+      "destination": "remote-model-provider",
+      "workload_ref": "response_drafting",
+      "data_classification": null
+    }
+  ],
+  "proposed_decision_bindings": [],
+  "rationale": {
+    "summary": "Synthetic fixture: a drafting service and index the declared workloads appear to need. Written for the Milestone 4 walkthrough and tests; not produced by a model.",
+    "generated_by": "synthetic-fixture"
+  }
+}

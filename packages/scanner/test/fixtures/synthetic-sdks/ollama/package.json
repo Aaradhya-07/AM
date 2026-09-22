@@ -1,0 +1,6 @@
+{
+  "name": "ollama",
+  "version": "0.5.0-synthetic",
+  "types": "index.d.ts",
+  "main": "index.js"
+}

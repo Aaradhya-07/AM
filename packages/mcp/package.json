@@ -2,23 +2,34 @@
   "name": "@anvilmark/mcp",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "bin": {
-    "anvilmark-mcp": "./dist/index.js"
+    "anvilmark-mcp": "./bin/anvilmark-mcp.mjs",
+    "anvilmark-project-mcp": "./bin/anvilmark-project-mcp.mjs"
   },
   "files": [
+    "bin",
     "dist",
     "README.md"
   ],
   "scripts": {
     "build": "tsc -b",
     "start": "node dist/index.js",
-    "test": "vitest run",
-    "verify:tools-list": "node scripts/verify-tools-list.mjs"
+    "start:project": "node dist/project-server.js",
+    "test": "tsc -b && vitest run",
+    "verify:tools-list": "node scripts/verify-tools-list.mjs",
+    "verify:project-tools": "node scripts/verify-project-tools.mjs"
   },
   "dependencies": {
+    "@anvilmark/adapters": "workspace:*",
+    "@anvilmark/cli": "workspace:*",
+    "@anvilmark/conformance": "workspace:*",
+    "@anvilmark/context": "workspace:*",
     "@anvilmark/contract": "workspace:*",
     "@anvilmark/engine": "workspace:*",
+    "@anvilmark/hardware-sizing": "workspace:*",
+    "@anvilmark/project-contract": "workspace:*",
     "@modelcontextprotocol/server": "^2.0.0",
     "zod": "^4.2.0"
   }

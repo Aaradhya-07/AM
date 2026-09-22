@@ -3,13 +3,73 @@
 The durable, versioned **decision contract** ANVILMARK owns.
 
 ```text
-PROJECT_SCHEMA_VERSION = 0.1.0-draft.1
-https://anvilmark.dev/schemas/project/0.1.0-draft.1
+PROJECT_SCHEMA_VERSION = 0.1.0-draft.5
+https://anvilmark.dev/schemas/project/0.1.0-draft.5
 ```
 
 This package parses, validates, resolves, hashes, and deterministically
 serializes a project contract. It is the trustworthy object every later
 milestone reads.
+
+`draft.5` adds amendments 8 and 9 from
+[document 09](../../docs/vnext/09-milestone-4-architecture-amendment-proposal.md),
+accepted with modifications on September 14, 2026:
+
+- every `architecture.nodes[]`, `architecture.relationships[]` and
+  `architecture.decision_bindings[]` entry has an `origin`:
+  `{ kind: user | agent_proposed, proposal_ref, confirmed_at,
+confirmed_content_hash }`, defaulting to a user origin with nulls. A user
+  origin has no proposal or confirmation fields; an agent-proposed one names
+  its proposal; the confirmation timestamp and hash are present together or not
+  at all;
+- nodes declare `interfaces: [{ id, protocol (HTTP|HTTPS|gRPC|AMQP|TCP|other|null),
+description }]`, and `connects` relationships may set
+  `source_interface_ref`/`destination_interface_ref` to an interface on their own
+  endpoint. Interface ids are unique across the contract;
+- after normalization, a decision has at most one binding, and a binding names
+  each node once. Repeated user-declared bindings are combined without losing
+  associations; groups carrying agent provenance are never combined.
+
+`architectureContentHash` is SHA-256 over the canonical JSON of
+`{ format: "anvilmark-architecture-content/1", element, content }`, where the
+content is the element without its origin (interfaces sorted by id, binding node
+refs sorted and de-duplicated). `confirmationStanding` recomputes it:
+`user_declared`, `unconfirmed`, `confirmed` or `confirmation_stale`. This is
+portable content-match standing. It does not check `proposal_ref` against the
+CLI's history (only local confirmation does), it does not identify a person, and
+it does not resist a rewrite of the whole contract including the hash.
+
+A `draft.4` document migrates by rewriting only `schema` and `schema_version`.
+Approval hashes are unchanged, because architecture is not approval content;
+this is verified against an approved fixture written by the draft.4 build
+(`test/fixtures/approved-atlas.draft4.yaml`), whose stored hash was computed by
+draft.3 code. Repeated user-declared bindings for one decision and duplicate node
+refs are normalized to their union before integrity validation. Duplicate sets
+use sorted node refs; the first binding's position and already unique bindings
+are preserved. This happens in memory and does not rewrite the source file.
+Groups containing agent origin remain subject to strict duplicate rejection,
+as do new intelligence proposals. Three legacy cases in
+`test/fixtures/draft4-binding-cases.json` were independently accepted by the
+unmodified draft.4 validator and retain their approval hash after migration.
+
+`draft.4` added amendments 6 and 7 from
+[document 08](../../docs/vnext/08-milestone-3-scope-proposal.md):
+
+- `workloads[].expected_usage.calls_per_month` may be `null`, allowed exactly
+  when `basis` is the new value `unknown` (and `unknown` requires `null`). The key
+  is still required, so unknown is written explicitly, never implied or read as
+  zero. `unknown` is not accepted as a usage input, so a projected cost
+  comparison cannot pass.
+- `workloads[].output_classification` is a data-classification label or `null`
+  (default, meaning not declared). Declared output labels join input labels in
+  the vocabulary that constraint subjects, relationships and `forbid_dataflow`
+  rules may reference.
+
+A `draft.3` document migrates by rewriting only `schema` and `schema_version`;
+normalized serialization then writes `output_classification: null` for each
+workload. Approval hashes are unaffected, because workloads are not approval
+content; this is verified against an approved contract hashed by the draft.3
+code (`test/fixtures/approved-atlas.draft3.yaml`).
 
 ## Relationship to `@anvilmark/contract`
 
@@ -226,6 +286,17 @@ itself be a user-declared target. Being _a_ declared machine somewhere in the
 contract is not enough, and a `tool_observation` must name both
 `target_hardware_ref` and `detected_hardware_ref`.
 
+### Evaluation identity
+
+A `measured_evaluation` carries `value.identity` naming the workload, dataset,
+prompt, evaluator, model configuration, config digest, and — required and
+non-null — the `provider_id` the run used. A candidate that cites one must
+declare `measurements.expected_evaluation`, and admission refuses the evidence
+when that expectation is absent, when the provider differs, or when the
+configuration hash differs. The check lives in `admitEvidence`, not in a helper
+a caller must remember to call, because that is how a stale result keeps
+clearing a gate.
+
 ### Approval verification
 
 `parseProjectContract` recomputes every stored approval hash for a decision's
@@ -266,9 +337,10 @@ content, so they are stable across machines, key orderings, and repeated runs.
 
 ## Scope
 
-This package is Milestone 1 only. It deliberately does **not** contain
-candidate selection, evaluation or hardware adapters, an approval CLI, Mermaid
-or CALM generation, MCP tools, repository parsing, or conformance execution.
+This package holds the contract and its pure checks. It deliberately does
+**not** contain candidate selection, evaluation or hardware adapters, an
+approval or confirmation CLI, history verification, Mermaid or CALM generation,
+MCP tools, repository parsing, or conformance execution.
 
 ## Tests
 

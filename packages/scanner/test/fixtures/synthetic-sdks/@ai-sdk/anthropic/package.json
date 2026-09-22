@@ -1,0 +1,5 @@
+{
+  "name": "@ai-sdk/anthropic",
+  "version": "1.0.0-synthetic",
+  "types": "index.d.ts"
+}

@@ -62,7 +62,9 @@ export {
   effectiveFloor,
   evaluateConstraint,
   floorSubjectForConstraint,
-  isHardwareIdentityMismatch,
+  acceleratorModelsMatch,
+  hardwareCapabilitiesMatch,
+  hardwareObservationProblem,
   tierForEvidence,
   tierForEvidenceKind,
   tierMeets,
@@ -96,9 +98,26 @@ export {
 } from "./approval.js";
 export type { ApprovalState, AppendApprovalInput } from "./approval.js";
 
+// Architecture content hashing and confirmation standing (draft.5).
+export {
+  ARCHITECTURE_CONTENT_FORMAT,
+  architectureContent,
+  architectureContentHash,
+  confirmationStanding,
+  isArchitectureElementTrusted,
+  originOf,
+} from "./architecture-content.js";
+export type {
+  ArchitectureElement,
+  ArchitectureElementType,
+  ConfirmationStanding,
+} from "./architecture-content.js";
+
 // Fixtures.
 export {
   ATLAS_FIXTURE_PATH,
   loadAtlasFixture,
   readAtlasFixtureText,
 } from "./fixtures.js";
+
+export * from "./hardware-sizing-evidence.js";

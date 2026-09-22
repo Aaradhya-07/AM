@@ -1,0 +1,202 @@
+{
+  "name": "openai-responses-starter-app",
+  "url": "https://github.com/openai/openai-responses-starter-app.git",
+  "commit": "0fae283f12ca3f71015cd9fa3f9b28df97e9ae21",
+  "install": ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"],
+  "ai_calls": [
+    {
+      "path": "app/api/turn_response/route.ts",
+      "line": 17,
+      "sdk": "openai",
+      "operation": "responses.create",
+      "provider": "openai",
+      "model": "literal:gpt-5.2",
+      "egress": "inference"
+    },
+    {
+      "path": "app/api/vector_stores/upload_file/route.ts",
+      "line": 13,
+      "sdk": "openai",
+      "operation": "files.create",
+      "provider": "openai",
+      "model": "none",
+      "egress": "file_upload",
+      "note": "sends the user's uploaded file"
+    },
+    {
+      "path": "app/api/vector_stores/add_file/route.ts",
+      "line": 8,
+      "sdk": "openai",
+      "operation": "vectorStores.files.create",
+      "provider": "openai",
+      "model": "none",
+      "egress": "management"
+    },
+    {
+      "path": "app/api/vector_stores/create_store/route.ts",
+      "line": 8,
+      "sdk": "openai",
+      "operation": "vectorStores.create",
+      "provider": "openai",
+      "model": "none",
+      "egress": "management"
+    },
+    {
+      "path": "app/api/vector_stores/list_files/route.ts",
+      "line": 10,
+      "sdk": "openai",
+      "operation": "vectorStores.files.list",
+      "provider": "openai",
+      "model": "none",
+      "egress": "management"
+    },
+    {
+      "path": "app/api/vector_stores/retrieve_store/route.ts",
+      "line": 9,
+      "sdk": "openai",
+      "operation": "vectorStores.retrieve",
+      "provider": "openai",
+      "model": "none",
+      "egress": "management"
+    },
+    {
+      "path": "app/api/container_files/content/route.ts",
+      "line": 15,
+      "sdk": "http",
+      "operation": "GET containers/files/content",
+      "provider": "openai",
+      "model": "none",
+      "egress": "management",
+      "note": "fetch to a template URL with the literal host api.openai.com"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "rs-chat-approved-model",
+      "description": "The chat route may only use the approved OpenAI model gpt-5.2.",
+      "workload": {
+        "id": "chat",
+        "input": "user_message"
+      },
+      "candidate": {
+        "component_kind": "model_runtime",
+        "mode": "managed_api",
+        "provider": "openai",
+        "model": "gpt-5.2",
+        "version": "gpt-5.2",
+        "mutability": "pinned"
+      },
+      "rule": {
+        "kind": "approved_candidate_only"
+      },
+      "scanner": {
+        "sinks": [
+          {
+            "id": "sink.openai",
+            "recognizer": "openai"
+          }
+        ],
+        "components": [
+          {
+            "path": "app/api/turn_response/route.ts"
+          }
+        ]
+      },
+      "expected": {
+        "verdict": "pass",
+        "acceptable": ["pass"],
+        "why": "the only chat call uses the literal model gpt-5.2 through the default OpenAI endpoint"
+      }
+    },
+    {
+      "id": "rs-uploads-stay-local",
+      "description": "Files a user uploads must not reach a remote provider.",
+      "workload": {
+        "id": "file_search",
+        "input": "user_uploaded_file"
+      },
+      "candidate": {
+        "component_kind": "model_runtime",
+        "mode": "managed_api",
+        "provider": "openai",
+        "model": "gpt-5.2",
+        "version": "gpt-5.2",
+        "mutability": "pinned"
+      },
+      "rule": {
+        "kind": "forbid_dataflow",
+        "classification": "user_uploaded_file"
+      },
+      "scanner": {
+        "sources": [
+          {
+            "id": "source.upload_request",
+            "data_classification": "user_uploaded_file",
+            "function": {
+              "path": "app/api/vector_stores/upload_file/route.ts",
+              "export": "POST"
+            },
+            "from": "parameter",
+            "parameter": 0
+          }
+        ],
+        "sinks": [
+          {
+            "id": "sink.openai",
+            "recognizer": "openai"
+          }
+        ],
+        "components": [
+          {
+            "path": "app/api/vector_stores/upload_file/route.ts"
+          }
+        ]
+      },
+      "expected": {
+        "verdict": "fail",
+        "acceptable": ["fail"],
+        "evidence_path": "app/api/vector_stores/upload_file/route.ts",
+        "why": "request.json() -> fileObject.content -> openai.files.create uploads the file"
+      }
+    },
+    {
+      "id": "rs-uploads-anthropic-only",
+      "description": "Document uploads may only go to the approved provider, Anthropic.",
+      "workload": {
+        "id": "file_search",
+        "input": "user_uploaded_file"
+      },
+      "candidate": {
+        "component_kind": "model_runtime",
+        "mode": "managed_api",
+        "provider": "anthropic",
+        "model": "claude-3-5-sonnet",
+        "version": "claude-3-5-sonnet-20241022",
+        "mutability": "pinned"
+      },
+      "rule": {
+        "kind": "approved_candidate_only"
+      },
+      "scanner": {
+        "sinks": [
+          {
+            "id": "sink.openai",
+            "recognizer": "openai"
+          }
+        ],
+        "components": [
+          {
+            "path": "app/api/vector_stores/upload_file/route.ts"
+          }
+        ]
+      },
+      "expected": {
+        "verdict": "fail",
+        "acceptable": ["fail"],
+        "evidence_path": "app/api/vector_stores/upload_file/route.ts",
+        "why": "openai.files.create uploads the document to OpenAI"
+      },
+      "held_out": "added 2026-09-17 after the scanner changes; expectation written from the code before its first run"
+    }
+  ]
+}

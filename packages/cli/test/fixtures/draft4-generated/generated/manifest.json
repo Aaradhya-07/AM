@@ -1,0 +1,31 @@
+{
+  "artifacts": [
+    {
+      "digest": "sha256:d355a82d4e9af22436733c7edefe13cabfca1e39ee056ba0acee70bff7ffbb9c",
+      "kind": "agent_context",
+      "path": ".anvilmark/generated/agent-context.md"
+    },
+    {
+      "digest": "sha256:6864f0ee7a3b72ad7020c478416c464c36baeccd63e64d5018b51e1f4b9b8e1b",
+      "kind": "calm_1_2",
+      "path": ".anvilmark/architecture/calm.json"
+    },
+    {
+      "digest": "sha256:5e650c97065bc367cd494e1ee0ddee31568e0a00970ef7f3eca4cdeafc03d396",
+      "kind": "mermaid",
+      "path": ".anvilmark/architecture/view.mmd"
+    }
+  ],
+  "as_of": "2026-09-14T00:00:00Z",
+  "authority": "generated-output",
+  "format": "anvilmark-generated-manifest/0.1",
+  "generator": "anvilmark-context/0.1.0-draft.1",
+  "projection": "remote-default",
+  "source": {
+    "contract_hash": "sha256:2e805ad31b0736afa3a163c69de3aa70851ca41715b9eb0ef8514c997fd2b967",
+    "contract_revision": 1,
+    "project_id": "atlas-support-desk",
+    "schema_version": "0.1.0-draft.4",
+    "state_revision": 3
+  }
+}

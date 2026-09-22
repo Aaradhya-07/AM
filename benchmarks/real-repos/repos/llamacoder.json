@@ -1,0 +1,190 @@
+{
+  "name": "llamacoder",
+  "url": "https://github.com/Nutlope/llamacoder.git",
+  "commit": "75a3a78e1fa080657b696b95e6d7e393dfa999a5",
+  "install": ["pnpm", "install", "--ignore-scripts", "--frozen-lockfile"],
+  "install_note": "pnpm workspace with a committed pnpm-lock.yaml",
+  "ai_calls": [
+    {
+      "path": "app/api/create-chat/route.ts",
+      "line": 38,
+      "sdk": "together",
+      "operation": "chat.completions.create",
+      "provider": "together",
+      "model": "literal:zai-org/GLM-5.3-Flash",
+      "egress": "inference"
+    },
+    {
+      "path": "app/api/generate-chat-title/route.ts",
+      "line": 103,
+      "sdk": "together",
+      "operation": "chat.completions.create",
+      "provider": "together",
+      "model": "literal:Qwen/Qwen3.5-9B",
+      "egress": "inference"
+    },
+    {
+      "path": "app/api/get-next-completion-stream-promise/route.ts",
+      "line": 204,
+      "sdk": "together",
+      "operation": "chat.completions.stream",
+      "provider": "together",
+      "model": "runtime",
+      "egress": "inference"
+    },
+    {
+      "path": "lib/generation.ts",
+      "line": 123,
+      "sdk": "together",
+      "operation": "chat.completions.create",
+      "provider": "together",
+      "model": "literal:Qwen/Qwen3-235B-A22B-Instruct-2507-FP8",
+      "egress": "inference"
+    },
+    {
+      "path": "lib/generation.ts",
+      "line": 222,
+      "sdk": "together",
+      "operation": "chat.completions.stream",
+      "provider": "together",
+      "model": "runtime",
+      "egress": "inference"
+    },
+    {
+      "path": "scripts/benchmark/judge.ts",
+      "line": 139,
+      "sdk": "together",
+      "operation": "chat.completions.create",
+      "provider": "together",
+      "model": "runtime",
+      "egress": "inference"
+    },
+    {
+      "path": "scripts/benchmark/title-models.ts",
+      "line": 163,
+      "sdk": "http",
+      "operation": "GET https://api.together.xyz/v1/models",
+      "provider": "together",
+      "model": "none",
+      "egress": "management"
+    },
+    {
+      "path": "scripts/benchmark/title-models.ts",
+      "line": 182,
+      "sdk": "http",
+      "operation": "POST https://api.together.xyz/v1/chat/completions",
+      "provider": "together",
+      "model": "runtime",
+      "egress": "inference"
+    },
+    {
+      "path": "scripts/check-candidates.ts",
+      "line": 115,
+      "sdk": "http",
+      "operation": "POST https://api.together.xyz/v1/chat/completions",
+      "provider": "together",
+      "model": "runtime",
+      "egress": "inference"
+    },
+    {
+      "path": "scripts/check-models.ts",
+      "line": 97,
+      "sdk": "http",
+      "operation": "GET https://api.together.xyz/v1/models",
+      "provider": "together",
+      "model": "none",
+      "egress": "management"
+    },
+    {
+      "path": "scripts/check-models.ts",
+      "line": 136,
+      "sdk": "http",
+      "operation": "POST https://api.together.xyz/v1/chat/completions",
+      "provider": "together",
+      "model": "runtime",
+      "egress": "inference"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "lc-title-approved-model",
+      "description": "Chat titles are approved on Together's Qwen3.5-9B; this scenario scopes the workload to that route. preview-kits/ holds template sources for generated previews, excluded from the scan as a user would.",
+      "workload": {
+        "id": "chat_titles",
+        "input": "user_prompt"
+      },
+      "candidate": {
+        "component_kind": "model_runtime",
+        "mode": "managed_api",
+        "provider": "together",
+        "model": "Qwen/Qwen3.5-9B",
+        "version": "Qwen/Qwen3.5-9B",
+        "mutability": "pinned"
+      },
+      "rule": {
+        "kind": "approved_candidate_only"
+      },
+      "scanner": {
+        "sinks": [
+          {
+            "id": "sink.together",
+            "recognizer": "together"
+          }
+        ],
+        "components": [
+          {
+            "path": "app/api/generate-chat-title/route.ts"
+          }
+        ],
+        "exclude": ["preview-kits"]
+      },
+      "expected": {
+        "verdict": "pass",
+        "acceptable": ["pass"],
+        "evidence_path": "app/api/generate-chat-title/route.ts",
+        "why": "the route's only provider call is chat.completions.create on the Together client with the approved literal model"
+      }
+    },
+    {
+      "id": "lc-generation-wrong-model",
+      "description": "The code-generation workload is approved on the title model only; the planning call uses a different Together model.",
+      "workload": {
+        "id": "code_generation",
+        "input": "user_prompt"
+      },
+      "candidate": {
+        "component_kind": "model_runtime",
+        "mode": "managed_api",
+        "provider": "together",
+        "model": "Qwen/Qwen3.5-9B",
+        "version": "Qwen/Qwen3.5-9B",
+        "mutability": "pinned"
+      },
+      "rule": {
+        "kind": "approved_candidate_only"
+      },
+      "scanner": {
+        "sinks": [
+          {
+            "id": "sink.together",
+            "recognizer": "together"
+          }
+        ],
+        "components": [
+          {
+            "path": "lib/generation.ts"
+          }
+        ],
+        "exclude": ["preview-kits"]
+      },
+      "expected": {
+        "verdict": "fail",
+        "acceptable": ["fail"],
+        "evidence_path": "lib/generation.ts",
+        "why": "the planning call names Qwen3-235B, which is not the approved model, whatever the run-time streaming call resolves to"
+      },
+      "held_out": "expectation written from the source; no conformance run was made against this repository before it was recorded"
+    }
+  ],
+  "labels_note": "ai_calls were read from the source at this commit (call sites and model constants verified by hand); the scanner had already been run over this repository when they were written, so they are not a blind labelling."
+}

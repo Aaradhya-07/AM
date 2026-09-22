@@ -78,12 +78,32 @@ export type Deployment = z.infer<typeof DeploymentSchema>;
  * here must resolve to a real evidence record: claiming a measurement whose
  * record does not exist is exactly the failure mode the contract must catch.
  */
+/**
+ * The evaluation identity a candidate expects its measurements to carry.
+ *
+ * Without this the contract can check that an evaluation is internally
+ * complete but not that it describes THIS candidate's current configuration:
+ * a measurement of a superseded prompt or a different provider would still
+ * look like a valid T3 record.
+ */
+export const ExpectedEvaluationSchema = z.strictObject({
+  provider_id: NonEmptyStringSchema,
+  configuration_hash: NonEmptyStringSchema,
+});
+
+export type ExpectedEvaluation = z.infer<typeof ExpectedEvaluationSchema>;
+
 export const MeasurementsSchema = z.strictObject({
   quality_result_ref: RefSchema.nullable().default(null),
   hardware_fit_evidence_ref: RefSchema.nullable().default(null),
   latency_measurement_ref: RefSchema.nullable().default(null),
   token_measurement_ref: RefSchema.nullable().default(null),
   cost_measurement_ref: RefSchema.nullable().default(null),
+  /**
+   * What a cited measured evaluation must match. Required for a measured
+   * evaluation to be admitted; its absence fails closed.
+   */
+  expected_evaluation: ExpectedEvaluationSchema.nullable().default(null),
 });
 
 export type Measurements = z.infer<typeof MeasurementsSchema>;

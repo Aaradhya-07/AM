@@ -1,0 +1,9 @@
+{
+  "name": "queue-handoff",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "dependencies": {
+    "openai": "^4.0.0",
+    "bullmq": "^5.0.0"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "protocol_version": "0.1.0-draft.1",
+  "proposed_constraints": [
+    {
+      "id": "privacy.redacted_ticket_via_redactor",
+      "domain": "privacy",
+      "severity": "informational",
+      "direction": null,
+      "subject": "data.redacted_customer_ticket",
+      "operator": "must_pass_through",
+      "value": "pii-redactor",
+      "source": "agent_proposed",
+      "rationale": "Suggested for the user to confirm: record that ticket text reaches any remote provider only after the local redactor. Informational, so it is recorded and not scored."
+    }
+  ],
+  "proposed_candidates": [
+    {
+      "id": "candidate.response_drafting.local_first",
+      "workload_ref": "response_drafting",
+      "component_kind": "model_runtime",
+      "model_family": null,
+      "model_version": null,
+      "deployment_mode": "local",
+      "provider": null,
+      "rationale": "Local-first: drafting stays inside the local trust boundary and depends on no remote provider. A model, a runtime, a hardware-fit observation and a citation-validity evaluation are all still needed."
+    },
+    {
+      "id": "candidate.response_drafting.hybrid_managed",
+      "workload_ref": "response_drafting",
+      "component_kind": "model_runtime",
+      "model_family": null,
+      "model_version": null,
+      "deployment_mode": "managed_api",
+      "provider": null,
+      "rationale": "Hybrid managed: redaction stays local and drafting uses a managed API. A provider, a region, pricing, residency documentation and a citation-validity evaluation are all still needed."
+    }
+  ],
+  "questions": [
+    "Which managed providers and regions, if any, may process redacted tickets with internal context?",
+    "Must response drafting keep working when every remote provider is unavailable?"
+  ],
+  "inferences": [
+    {
+      "subject": "candidate.response_drafting.local_first.latency",
+      "claim": "Local drafting latency depends on the model chosen and on the declared RTX 4090; nothing has been measured, so the 5000 ms p95 preference cannot be judged yet.",
+      "kind": "agent_inference",
+      "confidence": "low",
+      "caveats": ["No model has been chosen", "Not a measurement"]
+    }
+  ],
+  "rationale": {
+    "summary": "Two meaningfully different alternatives for response drafting: local-first and hybrid managed. Neither has been evaluated, and neither is claimed to be viable.",
+    "generated_by": "pre-authored Atlas walkthrough fixture (docs/vnext/fixtures/atlas-intelligence-proposal.json)"
+  }
+}

@@ -563,7 +563,7 @@ The old `packages/contract` contract `0.1.0` remains unchanged as a historical i
 - The first implementation must be a narrow end-to-end vertical slice.
 - Commercial defensibility is not a prerequisite for building the free tool.
 - Competitor duplication is still a reason to integrate or narrow scope.
-- The new project contract lives in `packages/project-contract` at `0.1.0-draft.1`; the historical contract remains frozen.
+- The new project contract lives in `packages/project-contract`, ratified at `0.1.0-draft.1`; the implementation is at `0.1.0-draft.4` through amendments 1–4 (document 07) and 6–7 (document 08). The historical contract remains frozen.
 - TypeScript and JavaScript share the first repository detector through the TypeScript compiler API; Python follows as a plugin.
 - ANVILMARK architecture is authoritative; FINOS CALM 1.2 and Mermaid are generated exports.
 - promptfoo and llmfit are optional subprocess adapters, not core libraries or reimplemented capabilities.
@@ -625,7 +625,7 @@ When working on ANVILMARK:
 6. attach provenance and freshness to external evidence;
 7. preserve user control over final architecture decisions;
 8. do not expand into routing, observability, deployment, or model hosting without an explicit team decision;
-9. preserve historical `packages/contract` at `0.1.0` and implement the separately named `packages/project-contract` at `0.1.0-draft.1`;
+9. preserve historical `packages/contract` at `0.1.0` and implement the separately named `packages/project-contract`, ratified at `0.1.0-draft.1` and implemented at `0.1.0-draft.4` through amendments 1–4 and 6–7;
 10. verify changes with tests and document assumptions and unresolved decisions.
 
 Before implementing a feature, answer:

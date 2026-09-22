@@ -29,7 +29,7 @@ Coding agents may summarize or challenge the decision. They may not record accep
 
 ## Decisions frozen for the first slice
 
-- `packages/project-contract` is an independent schema line beginning at `0.1.0-draft.1`.
+- `packages/project-contract` is an independent schema line beginning at `0.1.0-draft.1`. (The implementation has since advanced to `0.1.0-draft.4` through amendments 1–4 in document 07 and 6–7 in document 08; `draft.1` is what this milestone froze.)
 - Workload is the primary decision unit; component and project scopes are also valid.
 - Constraint severity is hard, soft, or informational; soft constraints include direction.
 - User priority order is explicit and does not become an opaque global score.

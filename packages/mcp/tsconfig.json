@@ -9,5 +9,27 @@
     "types": ["node"]
   },
   "include": ["src/**/*.ts"],
-  "references": [{ "path": "../contract" }, { "path": "../engine" }]
+  "references": [
+    {
+      "path": "../hardware-sizing"
+    },
+    {
+      "path": "../contract"
+    },
+    {
+      "path": "../engine"
+    },
+    {
+      "path": "../adapters"
+    },
+    {
+      "path": "../context"
+    },
+    {
+      "path": "../cli"
+    },
+    {
+      "path": "../conformance"
+    }
+  ]
 }

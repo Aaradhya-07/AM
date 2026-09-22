@@ -2,14 +2,806 @@
 @tailwind components;
 @tailwind utilities;
 
+/* --------------------------------------------------------------------------
+   ANVILMARK brand tokens
+   -------------------------------------------------------------------------- */
+
 :root {
-  color: #22282c;
-  background: #faf7f2;
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    monospace;
+  --am-black: #000000;
+  --am-surface: #111519;
+  --am-graphite: #22282c;
+  --am-steel: #5f6b72;
+  --am-gold: #d08d2e;
+  --am-sand: #dcc6ac;
+  --am-canvas: #faf7f2;
+  --am-line: rgba(220, 198, 172, 0.72);
+  --am-line-muted: rgba(95, 107, 114, 0.24);
+
+  /* Derived text tones. Steel is reserved for linework and decorative strokes;
+     small copy uses sand at reduced alpha so it clears WCAG AA on near-black. */
+  --am-text: var(--am-canvas);
+  --am-body: rgba(220, 198, 172, 0.84);
+  --am-muted: rgba(220, 198, 172, 0.62);
+
+  --am-header-h: 5rem;
+
+  color-scheme: dark;
 }
 
-body {
-  margin: 0;
+@layer base {
+  * {
+    border-color: var(--am-line-muted);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    background-color: var(--am-black);
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--am-black);
+    color: var(--am-body);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: clip;
+  }
+
+  /* Display headings run light. At hero scale a 300 weight reads as precise
+     rather than loud, and it finally agrees with the wordmark, which is the
+     lightest thing in the identity. */
+  h1,
+  h2 {
+    font-family: theme("fontFamily.brand");
+    color: var(--am-text);
+    font-weight: 300;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  /* Sub-heads hold at 500: 300 goes fragile below roughly 28px on near-black. */
+  h3,
+  h4 {
+    font-family: theme("fontFamily.brand");
+    color: var(--am-text);
+    font-weight: 500;
+    letter-spacing: -0.018em;
+    text-wrap: balance;
+  }
+
+  /* Anchor targets clear the fixed header. */
+  section[id] {
+    scroll-margin-top: calc(var(--am-header-h) + 1.5rem);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--am-gold);
+    outline-offset: 3px;
+    border-radius: 1px;
+  }
+
+  ::selection {
+    background: rgba(208, 141, 46, 0.28);
+    color: var(--am-canvas);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Circuit linework primitives
+   -------------------------------------------------------------------------- */
+
+@layer components {
+  /* Uppercase technical label. */
+  .am-label {
+    font-family: theme("fontFamily.mono");
+    font-size: 0.6875rem;
+    font-weight: 500;
+    line-height: 1.1;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--am-muted);
+  }
+
+  /* Wordmark echo. The wide tracking carries the custom logo's geometric voice
+     into section openings, while the Oxanium heading face supplies the same
+     angular construction without trying to recreate the protected wordmark. */
+  .am-eyebrow {
+    font-family: theme("fontFamily.brand");
+    font-size: 0.8125rem;
+    font-weight: 400;
+    line-height: 1.2;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    text-indent: 0.28em;
+    color: rgba(220, 198, 172, 0.78);
+  }
+
+  /* Literal technical strings — filenames, versions, URLs. Same mono voice as
+     .am-label but never transformed, because casing is part of the value. */
+  .am-mono {
+    font-family: theme("fontFamily.mono");
+    font-size: 0.75rem;
+    font-weight: 400;
+    line-height: 1.4;
+    letter-spacing: 0.02em;
+    color: var(--am-muted);
+  }
+
+  /* Interactive chrome — nav links, menu toggles, inline actions. Shares the
+     display face, weight, and tracking with .am-btn so a header action and a
+     hero action are typographically the same object. */
+  .am-ui {
+    font-family: theme("fontFamily.brand");
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: 0.01em;
+    color: var(--am-body);
+  }
+
+  /* 1px trace that fades at both ends, like a board edge. */
+  .am-trace-x {
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      var(--am-line-muted) 10%,
+      var(--am-line-muted) 90%,
+      transparent 100%
+    );
+  }
+
+  .am-trace-y {
+    width: 1px;
+    background: linear-gradient(
+      180deg,
+      transparent 0%,
+      var(--am-line-muted) 14%,
+      var(--am-line-muted) 86%,
+      transparent 100%
+    );
+  }
+
+  /* Trace segments that fade out at the outer edges of a stage bus. */
+  .am-trace-fade-r {
+    background: linear-gradient(
+      90deg,
+      rgba(220, 198, 172, 0.2) 30%,
+      transparent 100%
+    );
+  }
+
+  /* Framed module: hairline box with gold corner ticks. */
+  .am-module {
+    position: relative;
+    border: 1px solid var(--am-line-muted);
+    border-radius: 3px;
+    background-color: rgba(17, 21, 25, 0.6);
+    transition:
+      border-color 180ms ease,
+      background-color 180ms ease;
+  }
+
+  .am-module::before,
+  .am-module::after {
+    content: "";
+    position: absolute;
+    width: 11px;
+    height: 11px;
+    border-color: var(--am-sand);
+    opacity: 0.34;
+    transition:
+      opacity 180ms ease,
+      border-color 180ms ease;
+    pointer-events: none;
+  }
+
+  .am-module::before {
+    top: -1px;
+    left: -1px;
+    border-top: 1px solid;
+    border-left: 1px solid;
+  }
+
+  .am-module::after {
+    bottom: -1px;
+    right: -1px;
+    border-bottom: 1px solid;
+    border-right: 1px solid;
+  }
+
+  .am-module:hover {
+    border-color: rgba(220, 198, 172, 0.26);
+    background-color: rgba(17, 21, 25, 0.9);
+  }
+
+  .am-module:hover::before,
+  .am-module:hover::after {
+    border-color: var(--am-gold);
+    opacity: 1;
+  }
+
+  /* Buttons: crisp rectangles, never capsules. */
+  .am-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.625rem;
+    min-height: 3rem;
+    padding: 0 1.5rem;
+    border-radius: 2px;
+    font-family: theme("fontFamily.brand");
+    font-size: 0.875rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    transition:
+      background-color 180ms ease,
+      border-color 180ms ease,
+      color 180ms ease,
+      filter 180ms ease;
+  }
+
+  .am-btn-primary {
+    background-color: var(--am-gold);
+    color: var(--am-black);
+    border: 1px solid var(--am-gold);
+  }
+
+  .am-btn-primary:hover {
+    filter: brightness(1.09);
+  }
+
+  .am-btn-secondary {
+    border: 1px solid rgba(220, 198, 172, 0.34);
+    color: var(--am-canvas);
+    background-color: transparent;
+  }
+
+  .am-btn-secondary:hover {
+    border-color: var(--am-gold);
+    color: var(--am-gold);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Hero media
+   -------------------------------------------------------------------------- */
+
+/* The wrapper is locked to the video's own 16:9 frame and pinned right, so the
+   smith, hammer, anvil, and impact point are never cropped. On viewports
+   narrower than 16:9 it overflows to the left, where the clip is pure black.
+   On ultrawide it leaves a black rail that the scrim below blends away. */
+.am-hero-media {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+}
+
+.am-hero-media > * {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: right center;
+}
+
+/* Seals the seam between the pillarboxed clip and the page black on ultrawide. */
+/* Viewport-anchored readability scrim behind the hero copy. */
+.am-hero-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.97) 0%,
+      rgba(0, 0, 0, 0.93) 30%,
+      rgba(0, 0, 0, 0.52) 44%,
+      rgba(0, 0, 0, 0) 62%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.72) 0%,
+      rgba(0, 0, 0, 0) 22%,
+      rgba(0, 0, 0, 0) 68%,
+      rgba(0, 0, 0, 0.86) 100%
+    );
+}
+
+/* Stacked composition below the lg breakpoint: copy first, media framed. */
+@media (max-width: 1023.98px) {
+  .am-hero-media {
+    position: relative;
+    height: auto;
+    width: 100%;
+    /* Same 16:9 frame as the desktop full-bleed, so the clip is never cropped
+       and the figure sits identically at every width. */
+    aspect-ratio: 16 / 9;
+  }
+
+  .am-hero-scrim {
+    display: none;
+  }
+}
+
+/* Once the copy stacks above the artwork, the clip's large desktop copy zone
+   is no longer useful. A taller frame crops only that empty left rail (the
+   media remains right-anchored) so the smith, hands, hammer, and anvil read at
+   a meaningful size on phones. */
+@media (max-width: 639.98px) {
+  .am-hero-media {
+    aspect-ratio: 4 / 3;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Scroll-controlled system flow
+   -------------------------------------------------------------------------- */
+
+.am-system-flow {
+  background-image:
+    radial-gradient(
+      ellipse 52rem 34rem at 82% 23%,
+      rgba(208, 141, 46, 0.055),
+      transparent 66%
+    ),
+    radial-gradient(
+      ellipse 46rem 32rem at 16% 73%,
+      rgba(220, 198, 172, 0.035),
+      transparent 68%
+    );
+}
+
+.am-flow-anchor {
+  scroll-margin-top: calc(var(--am-header-h) + 1.5rem);
+}
+
+.am-flow-chapter {
+  position: relative;
+  isolation: isolate;
+  /* Sticky travel = this height minus the inner height minus the top offset.
+     At 142svh the film had only ~360px of scroll to play across and the
+     sticky inner bottomed out almost immediately, so most of the clip was
+     never seen. 240svh gives the scrub a full screen and a half to run. */
+  min-height: 240svh;
+}
+
+.am-flow-chapter-inner {
+  position: sticky;
+  z-index: 1;
+  top: var(--am-header-h);
+  min-height: calc(100svh - var(--am-header-h));
+}
+
+.am-scroll-media {
+  position: relative;
+  width: min(100%, 39rem);
+  justify-self: center;
+  isolation: isolate;
+  background: transparent;
+}
+
+.am-scroll-media::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 8% 5%;
+  pointer-events: none;
+  border-radius: 50%;
+  background: rgba(208, 141, 46, 0.08);
+  filter: blur(5rem);
+}
+
+.am-scroll-media video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  -webkit-mask-image: radial-gradient(
+    ellipse 82% 82% at center,
+    black 48%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 82% 82% at center,
+    black 48%,
+    transparent 100%
+  );
+}
+
+.am-flow-contract {
+  display: grid;
+  gap: 2.5rem;
+  margin-block: 3rem 5rem;
+  padding: clamp(2rem, 4vw, 3.5rem);
+  border: 1px solid var(--am-line-muted);
+  background: rgba(17, 21, 25, 0.48);
+}
+
+@media (min-width: 1024px) {
+  .am-flow-contract {
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+    align-items: center;
+  }
+}
+
+@media (max-width: 1199.98px) {
+  .am-flow-chapter {
+    min-height: auto;
+  }
+
+  .am-flow-chapter-inner {
+    position: relative;
+    top: auto;
+    min-height: auto;
+    padding-block: 5rem;
+  }
+
+  .am-scroll-media {
+    width: min(100%, 34rem);
+  }
+}
+
+@media (max-width: 639.98px) {
+  .am-flow-chapter-inner {
+    padding-block: 4.5rem;
+  }
+
+  .am-flow-contract {
+    margin-block: 1rem 2rem;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Motion: entry reveals and the DECLARE → DECIDE → VERIFY signal
+   -------------------------------------------------------------------------- */
+
+/* `js-reveal` is only set by the inline head script when JavaScript runs and
+   reduced motion is not requested, so no-JS and reduced-motion both fall back
+   to fully visible, unanimated content. */
+.js-reveal [data-reveal] {
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+.js-reveal [data-reveal][data-revealed="true"] {
+  opacity: 1;
+  transform: none;
+  /* Expo-out over ~700ms. The long, hard deceleration is most of what makes a
+     reveal read as deliberate instead of merely animated. */
+  transition:
+    opacity 700ms cubic-bezier(0.19, 1, 0.22, 1),
+    transform 700ms cubic-bezier(0.19, 1, 0.22, 1),
+    clip-path 700ms cubic-bezier(0.19, 1, 0.22, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+/*
+ * Wipe variant: content is uncovered by a moving edge rather than faded in.
+ *
+ * The clip is applied to the children, never to the observed element itself.
+ * `clip-path: inset(0 100% 0 0)` collapses a box to zero width, and
+ * IntersectionObserver measures the clipped box - so clipping the observed
+ * element makes it report as permanently non-intersecting, the reveal never
+ * fires, and it stays hidden because it is hidden. Opacity has no such effect,
+ * which is why the fade variant was unaffected.
+ */
+.js-reveal [data-reveal="wipe"] {
+  opacity: 1;
+  transform: none;
+}
+
+.js-reveal [data-reveal="wipe"] > * {
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 700ms cubic-bezier(0.19, 1, 0.22, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+.js-reveal [data-reveal="wipe"][data-revealed="true"] > * {
+  clip-path: inset(0 0 0 0);
+}
+
+/* Travelling signal along a board trace. Normalised by pathLength=1000, so one
+   dash pair works on every trace regardless of its real length. */
+.am-flow {
+  stroke-dasharray: 22 978;
+  animation-name: am-flow;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes am-flow {
+  from {
+    stroke-dashoffset: 1000;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* One gold pulse travelling DECLARE -> DECIDE -> VERIFY, on entry only. */
+.am-signal {
+  opacity: 0;
+  background-image: linear-gradient(
+    90deg,
+    rgba(208, 141, 46, 0) 0%,
+    rgba(208, 141, 46, 0.95) 50%,
+    rgba(208, 141, 46, 0) 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 26% 100%;
+  background-position: -30% 0;
+}
+
+.js-reveal [data-revealed="true"] .am-signal {
+  animation: am-signal-pass 1600ms cubic-bezier(0.35, 0, 0.2, 1) 260ms 1
+    forwards;
+}
+
+@keyframes am-signal-pass {
+  0% {
+    opacity: 0;
+    background-position: -30% 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  86% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    background-position: 130% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .js-reveal [data-reveal],
+  [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+    clip-path: none !important;
+  }
+
+  .js-reveal [data-reveal="wipe"] > * {
+    clip-path: none !important;
+    transition: none !important;
+  }
+
+  .am-signal {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+
+  /* The board stays; the signals travelling along it stop. */
+  .am-flow {
+    animation: none !important;
+    stroke-dasharray: none;
+    opacity: 0.2;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Orientation: skip link, read progress, current-section state
+   -------------------------------------------------------------------------- */
+
+.am-skip {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  padding: 0.75rem 1.125rem;
+  border-radius: 2px;
+  background: var(--am-gold);
+  color: var(--am-black);
+  font-weight: 500;
+  transform: translateY(-160%);
+  transition: transform 180ms ease;
+}
+
+.am-skip:focus-visible {
+  transform: translateY(0);
+}
+
+/* 1px rail along the header's lower edge. scaleX is composited, so this
+   stays off the layout and paint path while scrolling. */
+.am-progress {
+  position: absolute;
+  inset-inline: 0;
+  bottom: -1px;
+  height: 1px;
+  transform: scaleX(var(--am-progress, 0));
+  transform-origin: left center;
+  background: linear-gradient(90deg, rgba(208, 141, 46, 0.25), var(--am-gold));
+  pointer-events: none;
+}
+
+/* Current section. The underline is a child element rather than a border so
+   it can sit flush under the label without shifting the nav baseline. */
+.am-nav-link {
+  position: relative;
+}
+
+.am-nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0.35rem;
+  height: 1px;
+  background: var(--am-gold);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.am-nav-link[aria-current="true"] {
+  color: var(--am-canvas);
+}
+
+.am-nav-link[aria-current="true"]::after {
+  transform: scaleX(1);
+}
+
+/* --------------------------------------------------------------------------
+   Expressive motion
+   -------------------------------------------------------------------------- */
+
+/* Hero headline resolves word by word on load. */
+.am-word {
+  display: inline-block;
+}
+
+/* The headline is the LCP element, so it cannot sit at opacity 0 for long.
+   The first word starts immediately and the last lands near 500ms, which keeps
+   the entrance without pushing largest-contentful-paint out behind it. */
+.js-reveal .am-word {
+  opacity: 0;
+  transform: translateY(0.35em);
+  animation: am-word-in 380ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: calc(var(--am-word-index, 0) * 26ms);
+}
+
+@keyframes am-word-in {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Buttons lean toward the pointer. Offsets are set by the interaction layer
+   and capped well below the control's own padding, so the hit area never
+   drifts out from under the cursor. */
+.am-magnetic {
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.am-magnetic[data-magnetic-active="true"] {
+  transition-duration: 90ms;
+}
+
+/* Board layers drift against the scroll to separate foreground from field. */
+.am-parallax {
+  will-change: transform;
+}
+
+/* --------------------------------------------------------------------------
+   Input and viewport ergonomics
+   -------------------------------------------------------------------------- */
+
+/* Hover effects only where a real pointer exists, so they do not latch on
+   touch after a tap. */
+@media (hover: none) {
+  .am-module:hover {
+    border-color: var(--am-line-muted);
+    background-color: rgba(17, 21, 25, 0.6);
+  }
+
+  .am-module:hover::before,
+  .am-module:hover::after {
+    border-color: var(--am-sand);
+    opacity: 0.34;
+  }
+
+  .am-btn-primary:hover {
+    filter: none;
+  }
+
+  .am-btn-secondary:hover {
+    border-color: rgba(220, 198, 172, 0.34);
+    color: var(--am-canvas);
+  }
+}
+
+/* Notched and rounded displays. */
+@supports (padding: max(0px)) {
+  .am-inset-x {
+    padding-left: max(1.25rem, env(safe-area-inset-left));
+    padding-right: max(1.25rem, env(safe-area-inset-right));
+  }
+
+  .am-inset-bottom {
+    padding-bottom: max(3rem, env(safe-area-inset-bottom));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .js-reveal .am-word,
+  .am-word {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+  }
+
+  .am-magnetic,
+  .am-parallax {
+    transform: none !important;
+    transition: none !important;
+    will-change: auto;
+  }
+
+  .am-nav-link::after {
+    transition: none !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Statement scale and the spec plate
+   -------------------------------------------------------------------------- */
+
+/* One or two moments per page allowed to run to poster size. Light weight and
+   a line height just under 1 keep it architectural rather than shouty. */
+.am-statement {
+  font-size: clamp(2.75rem, 1.1rem + 6.9vw, 7.25rem);
+  font-weight: 300;
+  line-height: 0.95;
+  letter-spacing: -0.035em;
+}
+
+/* Hairline fact plate: reads as a spec label stamped on a machine, not as
+   marketing metrics. Every value is derived from the shipped schema. */
+/* Dividers are drawn by the cells themselves. A grid that paints its own gaps
+   shows that colour as a solid slab whenever a cell is clipped or hidden, so
+   the separators live on the cells and the container stays transparent. */
+.am-spec-grid {
+  display: grid;
+  gap: 0;
+  background: transparent;
+  border-block: 1px solid var(--am-line-muted);
+  grid-template-columns: 1fr;
+}
+
+.am-spec-cell {
+  background: var(--am-black);
+  padding: 1.5rem 1.75rem;
+  border-top: 1px solid var(--am-line-muted);
+}
+
+.am-spec-cell:first-child {
+  border-top: 0;
+}
+
+@media (min-width: 640px) {
+  .am-spec-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .am-spec-cell {
+    border-top: 0;
+    border-left: 1px solid var(--am-line-muted);
+  }
+
+  .am-spec-cell:first-child {
+    border-left: 0;
+  }
 }

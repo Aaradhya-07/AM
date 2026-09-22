@@ -1,0 +1,6 @@
+{
+  "name": "openai",
+  "version": "4.0.0-synthetic",
+  "types": "index.d.ts",
+  "main": "index.js"
+}

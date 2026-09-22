@@ -1,0 +1,2326 @@
+{
+  "format": "anvilmark-review-bundle/1",
+  "schema_version": "1.1.0",
+  "exported_at": "2026-09-16T12:00:00Z",
+  "generator": "scripts/export-review-bundle-fixtures.mjs",
+  "projection": "local",
+  "project": {
+    "id": "atlas-support-desk",
+    "name": "Atlas Support Desk",
+    "contract_revision": 1,
+    "state_revision": null,
+    "contract_hash": "sha256:6e42df1d40df5b08364214f6c9c7ec2af40799e51c9661753ca5180c2aa9d51d"
+  },
+  "contract": {
+    "canonical": {
+      "schema": "https://anvilmark.dev/schemas/project/0.1.0-draft.5",
+      "schema_version": "0.1.0-draft.5",
+      "project": {
+        "id": "atlas-support-desk",
+        "name": "Atlas Support Desk",
+        "created_at": "2026-08-17T00:00:00Z",
+        "updated_at": "2026-09-01T09:00:18.000Z",
+        "contract_revision": 1,
+        "state": "draft",
+        "repository_roots": [],
+        "owners": [],
+        "priority_order": [
+          "privacy",
+          "quality",
+          "availability",
+          "cost",
+          "latency"
+        ]
+      },
+      "intent": {
+        "summary": "Help human support agents process multilingual customer tickets using private redaction, structured routing, cited response drafting, and human approval.",
+        "users": ["support_agent", "support_manager"],
+        "outcomes": [
+          {
+            "id": "faster_resolution",
+            "measure": "median_handle_time",
+            "target": "<= 8 minutes"
+          }
+        ],
+        "non_goals": ["autonomous_response_sending"],
+        "unresolved_questions": [
+          "Exact permitted regions and providers for redacted remote processing."
+        ]
+      },
+      "constraints": [
+        {
+          "id": "privacy.raw_ticket_remote",
+          "domain": "privacy",
+          "subject": "data.raw_customer_ticket",
+          "operator": "must_not_leave",
+          "value": "local_trust_boundary",
+          "source": "user",
+          "rationale": "Raw tickets may contain personal and contractual data.",
+          "condition": null,
+          "exceptions": [],
+          "severity": "hard"
+        },
+        {
+          "id": "availability.classification_provider",
+          "domain": "availability",
+          "subject": "workload.classification",
+          "operator": "must_remain_available_without",
+          "value": "any_single_remote_provider",
+          "source": "user",
+          "rationale": null,
+          "condition": null,
+          "exceptions": [],
+          "severity": "hard"
+        },
+        {
+          "id": "budget.ai_monthly",
+          "domain": "cost",
+          "subject": "project.ai_effective_cost_monthly_usd",
+          "operator": "lte",
+          "value": 750,
+          "source": "user",
+          "rationale": null,
+          "condition": null,
+          "exceptions": [],
+          "severity": "soft",
+          "direction": "minimize"
+        },
+        {
+          "id": "latency.classification_p95",
+          "domain": "latency",
+          "subject": "workload.classification.latency_p95_ms",
+          "operator": "lte",
+          "value": 1000,
+          "source": "user",
+          "rationale": null,
+          "condition": null,
+          "exceptions": [],
+          "severity": "soft",
+          "direction": "minimize"
+        },
+        {
+          "id": "latency.drafting_p95",
+          "domain": "latency",
+          "subject": "workload.response_drafting.latency_p95_ms",
+          "operator": "lte",
+          "value": 5000,
+          "source": "user",
+          "rationale": null,
+          "condition": null,
+          "exceptions": [],
+          "severity": "soft",
+          "direction": "minimize"
+        },
+        {
+          "id": "quality.pii_recall",
+          "domain": "quality",
+          "subject": "workload.pii_redaction.metric.recall",
+          "operator": "gte",
+          "value": 0.98,
+          "source": "user",
+          "rationale": null,
+          "condition": null,
+          "exceptions": [],
+          "severity": "hard"
+        },
+        {
+          "id": "quality.classification_f1",
+          "domain": "quality",
+          "subject": "workload.classification.metric.macro_f1",
+          "operator": "gte",
+          "value": 0.9,
+          "source": "user",
+          "rationale": null,
+          "condition": null,
+          "exceptions": [],
+          "severity": "hard"
+        },
+        {
+          "id": "quality.schema_validity",
+          "domain": "quality",
+          "subject": "workload.classification.metric.schema_validity",
+          "operator": "gte",
+          "value": 0.99,
+          "source": "user",
+          "rationale": null,
+          "condition": null,
+          "exceptions": [],
+          "severity": "hard"
+        }
+      ],
+      "workloads": [
+        {
+          "id": "pii_redaction",
+          "name": "Personal-data detection and redaction",
+          "input_classification": "raw_customer_ticket",
+          "output_classification": null,
+          "output_contract": {
+            "kind": "json_schema",
+            "ref": "./schemas/redaction-output.json"
+          },
+          "expected_usage": {
+            "basis": "user_assumption",
+            "calls_per_month": 40000,
+            "input_tokens_per_call": 900,
+            "output_tokens_per_call": 120,
+            "reasoning_tokens_per_call": null
+          },
+          "latency": null,
+          "quality_gates": [
+            {
+              "metric": "recall",
+              "minimum": 0.98,
+              "evaluation_ref": "eval.pii_redaction.v1"
+            }
+          ],
+          "fallback": null,
+          "current_decision_ref": null
+        },
+        {
+          "id": "classification",
+          "name": "Ticket classification and routing",
+          "input_classification": "redacted_customer_ticket",
+          "output_classification": null,
+          "output_contract": {
+            "kind": "json_schema",
+            "ref": "./schemas/classification-output.json"
+          },
+          "expected_usage": {
+            "basis": "user_assumption",
+            "calls_per_month": 40000,
+            "input_tokens_per_call": 900,
+            "output_tokens_per_call": 60,
+            "reasoning_tokens_per_call": null
+          },
+          "latency": { "percentile": "p95", "maximum_ms": 1000 },
+          "quality_gates": [
+            {
+              "metric": "macro_f1",
+              "minimum": 0.9,
+              "evaluation_ref": "eval.classification.v1"
+            },
+            {
+              "metric": "schema_validity",
+              "minimum": 0.99,
+              "evaluation_ref": "eval.classification.v1"
+            }
+          ],
+          "fallback": null,
+          "current_decision_ref": "decision.classification"
+        },
+        {
+          "id": "extraction",
+          "name": "Structured product, account, and incident extraction",
+          "input_classification": "redacted_customer_ticket",
+          "output_classification": null,
+          "output_contract": {
+            "kind": "json_schema",
+            "ref": "./schemas/extraction-output.json"
+          },
+          "expected_usage": {
+            "basis": "user_assumption",
+            "calls_per_month": 40000,
+            "input_tokens_per_call": 900,
+            "output_tokens_per_call": 180,
+            "reasoning_tokens_per_call": null
+          },
+          "latency": null,
+          "quality_gates": [
+            {
+              "metric": "macro_f1",
+              "minimum": 0.92,
+              "evaluation_ref": "eval.extraction.v1"
+            }
+          ],
+          "fallback": null,
+          "current_decision_ref": null
+        },
+        {
+          "id": "retrieval",
+          "name": "Internal-document retrieval",
+          "input_classification": "redacted_customer_ticket",
+          "output_classification": null,
+          "output_contract": { "kind": "ranked_document_refs" },
+          "expected_usage": {
+            "basis": "user_assumption",
+            "calls_per_month": 40000,
+            "input_tokens_per_call": null,
+            "output_tokens_per_call": null,
+            "reasoning_tokens_per_call": null
+          },
+          "latency": null,
+          "quality_gates": [],
+          "fallback": null,
+          "current_decision_ref": null
+        },
+        {
+          "id": "response_drafting",
+          "name": "Cited multilingual response drafting",
+          "input_classification": "redacted_customer_ticket_with_internal_context",
+          "output_classification": null,
+          "output_contract": { "kind": "cited_text" },
+          "expected_usage": {
+            "basis": "user_assumption",
+            "calls_per_month": 40000,
+            "input_tokens_per_call": 4400,
+            "output_tokens_per_call": 450,
+            "reasoning_tokens_per_call": null
+          },
+          "latency": { "percentile": "p95", "maximum_ms": 5000 },
+          "quality_gates": [
+            {
+              "metric": "citation_validity",
+              "minimum": 0.95,
+              "evaluation_ref": "eval.response_drafting.v1"
+            }
+          ],
+          "fallback": null,
+          "current_decision_ref": null
+        }
+      ],
+      "resources": {
+        "hardware": [
+          {
+            "id": "hardware.local_gpu_1",
+            "evidence_kind": "user_declared",
+            "cpu": { "cores": 16, "model": null },
+            "ram_gb": 64,
+            "accelerators": [
+              {
+                "vendor": "nvidia",
+                "model": "RTX 4090",
+                "vram_gb": 24,
+                "count": 1
+              }
+            ],
+            "backend": "cuda",
+            "operating_system": "linux",
+            "evidence_refs": []
+          }
+        ],
+        "budgets": [
+          {
+            "currency": "USD",
+            "period": "month",
+            "amount": 750,
+            "scope": "ai_inference_and_ai_specific_infrastructure"
+          }
+        ]
+      },
+      "evidence_policy": {
+        "tiers": {
+          "T3": "directly_observed_or_measured",
+          "T2": "attributable_authoritative_evidence",
+          "T1": "user_declared_or_vendor_claim",
+          "T0": "inference_or_unknown"
+        },
+        "floors": {
+          "availability_portability_structure": "T3",
+          "hardware_compatibility_estimate": "T2",
+          "hardware_performance_gate": "T3",
+          "latency_throughput_hard_gate": "T3",
+          "license": "T2",
+          "privacy_data_flow_hard_gate": "T3",
+          "projected_cost_comparison": "T2",
+          "realized_cost_hard_gate": "T3",
+          "repository_policy": "T3",
+          "target_hardware_inventory": "T1",
+          "token_hard_gate": "T3",
+          "workload_quality_hard_gate": "T3"
+        }
+      },
+      "candidates": [
+        {
+          "id": "candidate.classification.local_unselected",
+          "workload_ref": "classification",
+          "component_kind": "model_runtime",
+          "model": {
+            "family": "synthetic-local-model",
+            "version": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "version_mutability": "pinned",
+            "quantization": null,
+            "license_evidence_ref": null
+          },
+          "deployment": {
+            "mode": "local",
+            "runtime": "ollama",
+            "hardware_ref": "hardware.local_gpu_1"
+          },
+          "measurements": {
+            "quality_result_ref": null,
+            "hardware_fit_evidence_ref": null,
+            "latency_measurement_ref": null,
+            "token_measurement_ref": null,
+            "cost_measurement_ref": null,
+            "expected_evaluation": null
+          },
+          "estimates": {
+            "tokens_per_call": null,
+            "latency_p95_ms": null,
+            "monthly_effective_cost_usd": null,
+            "basis": null,
+            "assumptions": []
+          },
+          "constraint_results": [],
+          "status": "unevaluated"
+        },
+        {
+          "id": "candidate.classification.remote_unselected",
+          "workload_ref": "classification",
+          "component_kind": "model_runtime",
+          "model": {
+            "family": "gpt-4o-mini",
+            "version": "gpt-4o-mini-2024-07-18",
+            "version_mutability": "pinned",
+            "quantization": null,
+            "license_evidence_ref": null
+          },
+          "deployment": {
+            "mode": "managed_api",
+            "provider": "openai",
+            "region": null
+          },
+          "measurements": {
+            "quality_result_ref": null,
+            "hardware_fit_evidence_ref": null,
+            "latency_measurement_ref": null,
+            "token_measurement_ref": null,
+            "cost_measurement_ref": null,
+            "expected_evaluation": null
+          },
+          "estimates": {
+            "tokens_per_call": null,
+            "latency_p95_ms": null,
+            "monthly_effective_cost_usd": null,
+            "basis": null,
+            "assumptions": []
+          },
+          "constraint_results": [],
+          "status": "unevaluated"
+        }
+      ],
+      "evidence_refs": [
+        {
+          "id": "evidence.pricing.remote",
+          "subject": "synthetic-managed-model",
+          "producer": { "name": "Synthetic Provider", "version": null },
+          "observed_at": "2026-08-30T00:00:00Z",
+          "source": {
+            "type": "url",
+            "locator": "https://provider.invalid/pricing"
+          },
+          "confidence": "high",
+          "caveats": ["Synthetic fixture value, not a real price"],
+          "refresh": { "policy": "on_pricing_change", "expires_at": null },
+          "applies_to": {
+            "candidate_ref": "candidate.classification.remote_unselected",
+            "workload_ref": "classification",
+            "hardware_ref": null,
+            "constraint_refs": ["budget.ai_monthly"]
+          },
+          "kind": "official_pricing",
+          "value": {
+            "currency": "USD",
+            "unit": "1M input tokens",
+            "amount": 1.5,
+            "region": null,
+            "tier": null,
+            "exclusions": []
+          }
+        }
+      ],
+      "decisions": [
+        {
+          "id": "decision.classification",
+          "revision": 1,
+          "status": "approved",
+          "scope": { "kind": "workload", "workload_ref": "classification" },
+          "selected_candidate_ref": "candidate.classification.remote_unselected",
+          "alternatives": ["candidate.classification.local_unselected"],
+          "satisfies_constraints": [],
+          "unresolved_constraints": [
+            "privacy.raw_ticket_remote",
+            "availability.classification_provider",
+            "quality.classification_f1",
+            "quality.schema_validity"
+          ],
+          "evidence_refs": ["evidence.pricing.remote"],
+          "rationale": {
+            "summary": "Synthetic approved decision used only as a schema-compatibility fixture.",
+            "generated_by": null,
+            "reviewed_by_user": true
+          },
+          "created_at": "2026-09-01T09:00:09.000Z",
+          "updated_at": "2026-09-01T09:00:18.000Z"
+        }
+      ],
+      "architecture": {
+        "authority": "anvilmark",
+        "nodes": [
+          {
+            "id": "ticket-intake",
+            "kind": "service",
+            "name": "Ticket Intake",
+            "trust_boundary": "local",
+            "description": null,
+            "interfaces": [],
+            "origin": {
+              "kind": "user",
+              "proposal_ref": null,
+              "confirmed_at": null,
+              "confirmed_content_hash": null
+            }
+          },
+          {
+            "id": "pii-redactor",
+            "kind": "service",
+            "name": "PII Redactor",
+            "trust_boundary": "local",
+            "description": null,
+            "interfaces": [],
+            "origin": {
+              "kind": "user",
+              "proposal_ref": null,
+              "confirmed_at": null,
+              "confirmed_content_hash": null
+            }
+          },
+          {
+            "id": "ticket-classifier",
+            "kind": "service",
+            "name": "Ticket Classifier",
+            "trust_boundary": "local",
+            "description": null,
+            "interfaces": [],
+            "origin": {
+              "kind": "user",
+              "proposal_ref": null,
+              "confirmed_at": null,
+              "confirmed_content_hash": null
+            }
+          },
+          {
+            "id": "remote-model-provider",
+            "kind": "external_system",
+            "name": "Remote Model Provider",
+            "trust_boundary": "remote_provider",
+            "description": null,
+            "interfaces": [],
+            "origin": {
+              "kind": "user",
+              "proposal_ref": null,
+              "confirmed_at": null,
+              "confirmed_content_hash": null
+            }
+          }
+        ],
+        "relationships": [
+          {
+            "id": "ticket-intake-to-pii-redactor",
+            "kind": "connects",
+            "source": "ticket-intake",
+            "destination": "pii-redactor",
+            "workload_ref": "pii_redaction",
+            "data_classification": "raw_customer_ticket",
+            "source_interface_ref": null,
+            "destination_interface_ref": null,
+            "origin": {
+              "kind": "user",
+              "proposal_ref": null,
+              "confirmed_at": null,
+              "confirmed_content_hash": null
+            }
+          },
+          {
+            "id": "pii-redactor-to-ticket-classifier",
+            "kind": "connects",
+            "source": "pii-redactor",
+            "destination": "ticket-classifier",
+            "workload_ref": "classification",
+            "data_classification": "redacted_customer_ticket",
+            "source_interface_ref": null,
+            "destination_interface_ref": null,
+            "origin": {
+              "kind": "user",
+              "proposal_ref": null,
+              "confirmed_at": null,
+              "confirmed_content_hash": null
+            }
+          },
+          {
+            "id": "ticket-classifier-to-remote-model-provider",
+            "kind": "connects",
+            "source": "ticket-classifier",
+            "destination": "remote-model-provider",
+            "workload_ref": "classification",
+            "data_classification": "redacted_customer_ticket",
+            "source_interface_ref": null,
+            "destination_interface_ref": null,
+            "origin": {
+              "kind": "user",
+              "proposal_ref": null,
+              "confirmed_at": null,
+              "confirmed_content_hash": null
+            }
+          }
+        ],
+        "generated": {
+          "calm_1_2": "./architecture/calm.json",
+          "mermaid": "./architecture/view.mmd"
+        },
+        "decision_bindings": []
+      },
+      "repository_bindings": [],
+      "conformance_rules": [
+        {
+          "id": "rule.raw_ticket_never_remote",
+          "kind": "forbid_dataflow",
+          "severity": "error",
+          "constraint_ref": "privacy.raw_ticket_remote",
+          "from": { "data_classification": "raw_customer_ticket" },
+          "to": { "trust_boundary": "remote_provider" },
+          "unless": { "passes_through": [{ "component_ref": "pii-redactor" }] }
+        },
+        {
+          "id": "rule.classification_approved_candidate",
+          "kind": "approved_candidate_only",
+          "severity": "error",
+          "workload_ref": "classification",
+          "approved_decision_ref": null
+        }
+      ],
+      "integrations": [
+        {
+          "id": "intelligence.user_agent",
+          "adapter": "user_selected",
+          "kind": "intelligence",
+          "credential_ref": "existing_session_or_environment",
+          "default_data_projection": "public_decision_layer",
+          "additional_data_requires_consent": [
+            "explicitly_selected_repository_files"
+          ]
+        },
+        {
+          "id": "evaluation.promptfoo",
+          "adapter": "promptfoo_cli",
+          "kind": "evaluation",
+          "credential_ref": null,
+          "data_directory": ".anvilmark/runtime/promptfoo",
+          "network_policy": "explicit_provider_only"
+        },
+        {
+          "id": "hardware.llmfit",
+          "adapter": "llmfit_cli",
+          "kind": "hardware_fit",
+          "mode": "local"
+        }
+      ],
+      "remote_intelligence_policy": {
+        "default_allow": [
+          "intent",
+          "constraints",
+          "workloads",
+          "non_identifying_hardware_capabilities",
+          "candidates",
+          "evidence_metadata_without_local_locators",
+          "decisions",
+          "conformance_rule_definitions"
+        ],
+        "default_deny": [
+          "repository_roots",
+          "repository_bindings",
+          "file_contents",
+          "owners",
+          "local_machine_identifiers",
+          "integration_credential_references",
+          "local_command_lines",
+          "evaluation_rows",
+          "source_quoting_conformance_explanations"
+        ],
+        "show_payload_before_remote_send": true,
+        "scan_outbound_payload_for_secrets": true
+      },
+      "approvals": [
+        {
+          "decision_ref": "decision.classification",
+          "decision_revision": 1,
+          "actor": {
+            "kind": "local_user",
+            "ref": "synthetic-conformance-fixture"
+          },
+          "approved_at": "2026-09-15T00:00:00Z",
+          "note": null,
+          "hash_algorithm": "sha-256",
+          "content_hash": "d7f6f082199b9a34ff2a34bc244b328e884b229886bb659fda29244c416f2bb4"
+        }
+      ]
+    },
+    "content_hash": "sha256:6e42df1d40df5b08364214f6c9c7ec2af40799e51c9661753ca5180c2aa9d51d",
+    "redactions": []
+  },
+  "facts": {
+    "source": {
+      "project_id": "atlas-support-desk",
+      "contract_revision": 1,
+      "state_revision": null,
+      "contract_hash": "sha256:6e42df1d40df5b08364214f6c9c7ec2af40799e51c9661753ca5180c2aa9d51d",
+      "schema_version": "0.1.0-draft.5",
+      "generator": "anvilmark-context/0.1.0-draft.2",
+      "projection": "remote-default",
+      "as_of": "2026-09-16T12:00:00Z"
+    },
+    "disclosure": "Remote-default projection: decision-layer facts and non-identifying hardware capabilities only. Repository roots, repository bindings and source locations, owners and approver identities, integration credential references and data directories, evidence locators and evidence values (including evaluation rows), command lines and source-quoting explanations are not included.",
+    "summary": {
+      "name": "Atlas Support Desk",
+      "state": "draft",
+      "intent": "Help human support agents process multilingual customer tickets using private redaction, structured routing, cited response drafting, and human approval.",
+      "users": ["support_agent", "support_manager"],
+      "outcomes": [
+        { "measure": "median_handle_time", "target": "<= 8 minutes" }
+      ],
+      "non_goals": ["autonomous_response_sending"],
+      "priority_order": [
+        "privacy",
+        "quality",
+        "availability",
+        "cost",
+        "latency"
+      ],
+      "unresolved_questions": [
+        "Exact permitted regions and providers for redacted remote processing."
+      ],
+      "decision_standings": { "approved_current": 1 }
+    },
+    "constraints": [
+      {
+        "id": "availability.classification_provider",
+        "severity": "hard",
+        "domain": "availability",
+        "subject": "workload.classification",
+        "operator": "must_remain_available_without",
+        "value": "any_single_remote_provider",
+        "direction": null,
+        "condition": null,
+        "rationale": null,
+        "knowledge": "declared",
+        "source": "user",
+        "workload_ref": "classification",
+        "exceptions": []
+      },
+      {
+        "id": "budget.ai_monthly",
+        "severity": "soft",
+        "domain": "cost",
+        "subject": "project.ai_effective_cost_monthly_usd",
+        "operator": "lte",
+        "value": 750,
+        "direction": "minimize",
+        "condition": null,
+        "rationale": null,
+        "knowledge": "declared",
+        "source": "user",
+        "workload_ref": null,
+        "exceptions": []
+      },
+      {
+        "id": "latency.classification_p95",
+        "severity": "soft",
+        "domain": "latency",
+        "subject": "workload.classification.latency_p95_ms",
+        "operator": "lte",
+        "value": 1000,
+        "direction": "minimize",
+        "condition": null,
+        "rationale": null,
+        "knowledge": "declared",
+        "source": "user",
+        "workload_ref": "classification",
+        "exceptions": []
+      },
+      {
+        "id": "latency.drafting_p95",
+        "severity": "soft",
+        "domain": "latency",
+        "subject": "workload.response_drafting.latency_p95_ms",
+        "operator": "lte",
+        "value": 5000,
+        "direction": "minimize",
+        "condition": null,
+        "rationale": null,
+        "knowledge": "declared",
+        "source": "user",
+        "workload_ref": "response_drafting",
+        "exceptions": []
+      },
+      {
+        "id": "privacy.raw_ticket_remote",
+        "severity": "hard",
+        "domain": "privacy",
+        "subject": "data.raw_customer_ticket",
+        "operator": "must_not_leave",
+        "value": "local_trust_boundary",
+        "direction": null,
+        "condition": null,
+        "rationale": "Raw tickets may contain personal and contractual data.",
+        "knowledge": "declared",
+        "source": "user",
+        "workload_ref": null,
+        "exceptions": []
+      },
+      {
+        "id": "quality.classification_f1",
+        "severity": "hard",
+        "domain": "quality",
+        "subject": "workload.classification.metric.macro_f1",
+        "operator": "gte",
+        "value": 0.9,
+        "direction": null,
+        "condition": null,
+        "rationale": null,
+        "knowledge": "declared",
+        "source": "user",
+        "workload_ref": "classification",
+        "exceptions": []
+      },
+      {
+        "id": "quality.pii_recall",
+        "severity": "hard",
+        "domain": "quality",
+        "subject": "workload.pii_redaction.metric.recall",
+        "operator": "gte",
+        "value": 0.98,
+        "direction": null,
+        "condition": null,
+        "rationale": null,
+        "knowledge": "declared",
+        "source": "user",
+        "workload_ref": "pii_redaction",
+        "exceptions": []
+      },
+      {
+        "id": "quality.schema_validity",
+        "severity": "hard",
+        "domain": "quality",
+        "subject": "workload.classification.metric.schema_validity",
+        "operator": "gte",
+        "value": 0.99,
+        "direction": null,
+        "condition": null,
+        "rationale": null,
+        "knowledge": "declared",
+        "source": "user",
+        "workload_ref": "classification",
+        "exceptions": []
+      }
+    ],
+    "workloads": [
+      {
+        "id": "classification",
+        "name": "Ticket classification and routing",
+        "input_classification": "redacted_customer_ticket",
+        "output_classification": null,
+        "output_format": "json_schema",
+        "usage": {
+          "knowledge": "declared",
+          "basis": "user_assumption",
+          "calls_per_month": 40000
+        },
+        "decisions": [
+          {
+            "id": "decision.classification",
+            "revision": 1,
+            "status": "approved",
+            "standing": "approved_current",
+            "instruction_eligible": true,
+            "knowledge": "approved",
+            "scope": { "kind": "workload", "ref": "classification" },
+            "approval": {
+              "state": "current",
+              "content_hash": "d7f6f082199b9a34ff2a34bc244b328e884b229886bb659fda29244c416f2bb4",
+              "approved_revision": 1,
+              "approved_at": "2026-09-15T00:00:00Z"
+            },
+            "selected_candidate": {
+              "id": "candidate.classification.remote_unselected",
+              "status": "unevaluated",
+              "workload_ref": "classification",
+              "component_kind": "model_runtime",
+              "deployment": {
+                "mode": "managed_api",
+                "runtime": null,
+                "provider": "openai",
+                "region": null,
+                "hardware": null
+              },
+              "model": {
+                "family": "gpt-4o-mini",
+                "version": "gpt-4o-mini-2024-07-18",
+                "version_mutability": "pinned",
+                "quantization": null
+              },
+              "estimates": {
+                "knowledge": "unknown",
+                "tokens_per_call": null,
+                "latency_p95_ms": null,
+                "monthly_effective_cost_usd": null,
+                "basis": null,
+                "assumptions": []
+              },
+              "constraint_standings": [
+                {
+                  "constraint_ref": "availability.classification_provider",
+                  "recorded_status": null,
+                  "outcome": "unknown",
+                  "knowledge": "unknown",
+                  "knowledge_basis": "not settled by admissible, current evidence"
+                },
+                {
+                  "constraint_ref": "budget.ai_monthly",
+                  "recorded_status": null,
+                  "outcome": "unknown",
+                  "knowledge": "unknown",
+                  "knowledge_basis": "not settled by admissible, current evidence"
+                },
+                {
+                  "constraint_ref": "latency.classification_p95",
+                  "recorded_status": null,
+                  "outcome": "unknown",
+                  "knowledge": "unknown",
+                  "knowledge_basis": "not settled by admissible, current evidence"
+                },
+                {
+                  "constraint_ref": "privacy.raw_ticket_remote",
+                  "recorded_status": null,
+                  "outcome": "unknown",
+                  "knowledge": "unknown",
+                  "knowledge_basis": "not settled by admissible, current evidence"
+                },
+                {
+                  "constraint_ref": "quality.classification_f1",
+                  "recorded_status": null,
+                  "outcome": "unknown",
+                  "knowledge": "unknown",
+                  "knowledge_basis": "not settled by admissible, current evidence"
+                },
+                {
+                  "constraint_ref": "quality.schema_validity",
+                  "recorded_status": null,
+                  "outcome": "unknown",
+                  "knowledge": "unknown",
+                  "knowledge_basis": "not settled by admissible, current evidence"
+                }
+              ]
+            },
+            "alternatives": ["candidate.classification.local_unselected"],
+            "satisfies": [],
+            "unresolved": [
+              "availability.classification_provider",
+              "privacy.raw_ticket_remote",
+              "quality.classification_f1",
+              "quality.schema_validity"
+            ],
+            "rationale": {
+              "summary": "Synthetic approved decision used only as a schema-compatibility fixture.",
+              "provenance": "user"
+            },
+            "evidence": [
+              {
+                "id": "evidence.pricing.remote",
+                "kind": "official_pricing",
+                "tier": "T2",
+                "knowledge": "declared",
+                "subject": "synthetic-managed-model",
+                "observed_at": "2026-08-30T00:00:00Z",
+                "freshness": "current",
+                "freshness_reason": "the record is current",
+                "caveats": ["Synthetic fixture value, not a real price"]
+              }
+            ],
+            "evidence_not_current": []
+          }
+        ],
+        "effective_decision": "decision.classification"
+      },
+      {
+        "id": "extraction",
+        "name": "Structured product, account, and incident extraction",
+        "input_classification": "redacted_customer_ticket",
+        "output_classification": null,
+        "output_format": "json_schema",
+        "usage": {
+          "knowledge": "declared",
+          "basis": "user_assumption",
+          "calls_per_month": 40000
+        },
+        "decisions": [],
+        "effective_decision": null
+      },
+      {
+        "id": "pii_redaction",
+        "name": "Personal-data detection and redaction",
+        "input_classification": "raw_customer_ticket",
+        "output_classification": null,
+        "output_format": "json_schema",
+        "usage": {
+          "knowledge": "declared",
+          "basis": "user_assumption",
+          "calls_per_month": 40000
+        },
+        "decisions": [],
+        "effective_decision": null
+      },
+      {
+        "id": "response_drafting",
+        "name": "Cited multilingual response drafting",
+        "input_classification": "redacted_customer_ticket_with_internal_context",
+        "output_classification": null,
+        "output_format": "cited_text",
+        "usage": {
+          "knowledge": "declared",
+          "basis": "user_assumption",
+          "calls_per_month": 40000
+        },
+        "decisions": [],
+        "effective_decision": null
+      },
+      {
+        "id": "retrieval",
+        "name": "Internal-document retrieval",
+        "input_classification": "redacted_customer_ticket",
+        "output_classification": null,
+        "output_format": "ranked_document_refs",
+        "usage": {
+          "knowledge": "declared",
+          "basis": "user_assumption",
+          "calls_per_month": 40000
+        },
+        "decisions": [],
+        "effective_decision": null
+      }
+    ],
+    "project_decisions": [],
+    "hardware_capabilities": [
+      {
+        "alias": "hardware-1",
+        "knowledge": "declared",
+        "cpu_cores": 16,
+        "ram_gb": 64,
+        "accelerators": ["1x nvidia RTX 4090 24 GB"],
+        "backend": "cuda",
+        "operating_system": "linux"
+      }
+    ],
+    "architecture": {
+      "authority": "anvilmark",
+      "nodes": [
+        {
+          "id": "pii-redactor",
+          "kind": "service",
+          "name": "PII Redactor",
+          "description": null,
+          "trust_boundary": "local",
+          "effective_trust_boundary": "local",
+          "knowledge": "declared",
+          "origin": {
+            "kind": "user",
+            "proposal_ref": null,
+            "confirmation": "user_declared",
+            "confirmed_at": null,
+            "trusted": true
+          },
+          "interfaces": [],
+          "associated_workloads": ["classification", "pii_redaction"],
+          "decisions": [
+            {
+              "decision_ref": "decision.classification",
+              "link": "workload_association",
+              "standing": "approved_current",
+              "authoritative": true
+            }
+          ],
+          "constraints": [
+            {
+              "constraint_ref": "availability.classification_provider",
+              "link": "constraint subject names workload classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "availability.classification_provider",
+              "link": "declared unresolved by decision decision.classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "latency.classification_p95",
+              "link": "constraint subject names workload classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "privacy.raw_ticket_remote",
+              "link": "declared unresolved by decision decision.classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "privacy.raw_ticket_remote",
+              "link": "sanitizer named by conformance rule rule.raw_ticket_never_remote",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "quality.classification_f1",
+              "link": "constraint subject names workload classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "quality.classification_f1",
+              "link": "declared unresolved by decision decision.classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "quality.pii_recall",
+              "link": "constraint subject names workload pii_redaction",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "quality.schema_validity",
+              "link": "constraint subject names workload classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "quality.schema_validity",
+              "link": "declared unresolved by decision decision.classification",
+              "authoritative": true
+            }
+          ],
+          "unresolved": []
+        },
+        {
+          "id": "remote-model-provider",
+          "kind": "external_system",
+          "name": "Remote Model Provider",
+          "description": null,
+          "trust_boundary": "remote_provider",
+          "effective_trust_boundary": "remote_provider",
+          "knowledge": "declared",
+          "origin": {
+            "kind": "user",
+            "proposal_ref": null,
+            "confirmation": "user_declared",
+            "confirmed_at": null,
+            "trusted": true
+          },
+          "interfaces": [],
+          "associated_workloads": ["classification"],
+          "decisions": [
+            {
+              "decision_ref": "decision.classification",
+              "link": "workload_association",
+              "standing": "approved_current",
+              "authoritative": true
+            }
+          ],
+          "constraints": [
+            {
+              "constraint_ref": "availability.classification_provider",
+              "link": "constraint subject names workload classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "availability.classification_provider",
+              "link": "declared unresolved by decision decision.classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "latency.classification_p95",
+              "link": "constraint subject names workload classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "privacy.raw_ticket_remote",
+              "link": "declared unresolved by decision decision.classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "quality.classification_f1",
+              "link": "constraint subject names workload classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "quality.classification_f1",
+              "link": "declared unresolved by decision decision.classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "quality.schema_validity",
+              "link": "constraint subject names workload classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "quality.schema_validity",
+              "link": "declared unresolved by decision decision.classification",
+              "authoritative": true
+            }
+          ],
+          "unresolved": []
+        },
+        {
+          "id": "ticket-classifier",
+          "kind": "service",
+          "name": "Ticket Classifier",
+          "description": null,
+          "trust_boundary": "local",
+          "effective_trust_boundary": "local",
+          "knowledge": "declared",
+          "origin": {
+            "kind": "user",
+            "proposal_ref": null,
+            "confirmation": "user_declared",
+            "confirmed_at": null,
+            "trusted": true
+          },
+          "interfaces": [],
+          "associated_workloads": ["classification"],
+          "decisions": [
+            {
+              "decision_ref": "decision.classification",
+              "link": "workload_association",
+              "standing": "approved_current",
+              "authoritative": true
+            }
+          ],
+          "constraints": [
+            {
+              "constraint_ref": "availability.classification_provider",
+              "link": "constraint subject names workload classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "availability.classification_provider",
+              "link": "declared unresolved by decision decision.classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "latency.classification_p95",
+              "link": "constraint subject names workload classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "privacy.raw_ticket_remote",
+              "link": "declared unresolved by decision decision.classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "quality.classification_f1",
+              "link": "constraint subject names workload classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "quality.classification_f1",
+              "link": "declared unresolved by decision decision.classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "quality.schema_validity",
+              "link": "constraint subject names workload classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "quality.schema_validity",
+              "link": "declared unresolved by decision decision.classification",
+              "authoritative": true
+            }
+          ],
+          "unresolved": []
+        },
+        {
+          "id": "ticket-intake",
+          "kind": "service",
+          "name": "Ticket Intake",
+          "description": null,
+          "trust_boundary": "local",
+          "effective_trust_boundary": "local",
+          "knowledge": "declared",
+          "origin": {
+            "kind": "user",
+            "proposal_ref": null,
+            "confirmation": "user_declared",
+            "confirmed_at": null,
+            "trusted": true
+          },
+          "interfaces": [],
+          "associated_workloads": ["pii_redaction"],
+          "decisions": [],
+          "constraints": [
+            {
+              "constraint_ref": "quality.pii_recall",
+              "link": "constraint subject names workload pii_redaction",
+              "authoritative": true
+            }
+          ],
+          "unresolved": ["no decision is linked to this component"]
+        }
+      ],
+      "relationships": [
+        {
+          "id": "pii-redactor-to-ticket-classifier",
+          "kind": "connects",
+          "source": "pii-redactor",
+          "destination": "ticket-classifier",
+          "workload_ref": "classification",
+          "data_classification": "redacted_customer_ticket",
+          "source_interface_ref": null,
+          "destination_interface_ref": null,
+          "knowledge": "declared",
+          "origin": {
+            "kind": "user",
+            "proposal_ref": null,
+            "confirmation": "user_declared",
+            "confirmed_at": null,
+            "trusted": true
+          },
+          "crossing": null,
+          "effective_crossing": "none",
+          "decisions": [
+            {
+              "decision_ref": "decision.classification",
+              "standing": "approved_current",
+              "authoritative": true
+            }
+          ],
+          "constraints": [
+            {
+              "constraint_ref": "availability.classification_provider",
+              "link": "constraint subject names workload classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "latency.classification_p95",
+              "link": "constraint subject names workload classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "quality.classification_f1",
+              "link": "constraint subject names workload classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "quality.schema_validity",
+              "link": "constraint subject names workload classification",
+              "authoritative": true
+            }
+          ],
+          "unresolved": []
+        },
+        {
+          "id": "ticket-classifier-to-remote-model-provider",
+          "kind": "connects",
+          "source": "ticket-classifier",
+          "destination": "remote-model-provider",
+          "workload_ref": "classification",
+          "data_classification": "redacted_customer_ticket",
+          "source_interface_ref": null,
+          "destination_interface_ref": null,
+          "knowledge": "declared",
+          "origin": {
+            "kind": "user",
+            "proposal_ref": null,
+            "confirmation": "user_declared",
+            "confirmed_at": null,
+            "trusted": true
+          },
+          "crossing": { "from": "local", "to": "remote_provider" },
+          "effective_crossing": "crossing",
+          "decisions": [
+            {
+              "decision_ref": "decision.classification",
+              "standing": "approved_current",
+              "authoritative": true
+            }
+          ],
+          "constraints": [
+            {
+              "constraint_ref": "availability.classification_provider",
+              "link": "constraint subject names workload classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "latency.classification_p95",
+              "link": "constraint subject names workload classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "quality.classification_f1",
+              "link": "constraint subject names workload classification",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "quality.schema_validity",
+              "link": "constraint subject names workload classification",
+              "authoritative": true
+            }
+          ],
+          "unresolved": []
+        },
+        {
+          "id": "ticket-intake-to-pii-redactor",
+          "kind": "connects",
+          "source": "ticket-intake",
+          "destination": "pii-redactor",
+          "workload_ref": "pii_redaction",
+          "data_classification": "raw_customer_ticket",
+          "source_interface_ref": null,
+          "destination_interface_ref": null,
+          "knowledge": "declared",
+          "origin": {
+            "kind": "user",
+            "proposal_ref": null,
+            "confirmation": "user_declared",
+            "confirmed_at": null,
+            "trusted": true
+          },
+          "crossing": null,
+          "effective_crossing": "none",
+          "decisions": [],
+          "constraints": [
+            {
+              "constraint_ref": "privacy.raw_ticket_remote",
+              "link": "constraint subject names data classification raw_customer_ticket",
+              "authoritative": true
+            },
+            {
+              "constraint_ref": "quality.pii_recall",
+              "link": "constraint subject names workload pii_redaction",
+              "authoritative": true
+            }
+          ],
+          "unresolved": [
+            "workload pii_redaction has no approved, current decision"
+          ]
+        }
+      ],
+      "decision_bindings": [],
+      "trust_boundaries": [
+        {
+          "boundary": "local",
+          "nodes": ["pii-redactor", "ticket-classifier", "ticket-intake"],
+          "unconfirmed_nodes": []
+        },
+        {
+          "boundary": "remote_provider",
+          "nodes": ["remote-model-provider"],
+          "unconfirmed_nodes": []
+        }
+      ],
+      "conformance_rules": [
+        {
+          "id": "rule.classification_approved_candidate",
+          "kind": "approved_candidate_only",
+          "severity": "error",
+          "statement": "only the approved candidate may implement workload classification (no approved decision is recorded on the rule)"
+        },
+        {
+          "id": "rule.raw_ticket_never_remote",
+          "kind": "forbid_dataflow",
+          "severity": "error",
+          "statement": "data classified raw_customer_ticket must not reach the remote_provider trust boundary unless it passes through pii-redactor (constraint privacy.raw_ticket_remote)"
+        }
+      ]
+    },
+    "evidence_gaps": {
+      "workloads": [
+        {
+          "workload_ref": "classification",
+          "gaps": [
+            {
+              "code": "missing_evidence",
+              "constraint_ref": null,
+              "subject": "workload.classification.metric.macro_f1",
+              "required_floor": "T3",
+              "admissible_kinds": ["measured_evaluation"],
+              "resolved_outcome": "unknown",
+              "reason": "evaluation \"eval.classification.v1\" has produced no evidence record"
+            },
+            {
+              "code": "missing_evidence",
+              "constraint_ref": null,
+              "subject": "workload.classification.metric.schema_validity",
+              "required_floor": "T3",
+              "admissible_kinds": ["measured_evaluation"],
+              "resolved_outcome": "unknown",
+              "reason": "evaluation \"eval.classification.v1\" has produced no evidence record"
+            }
+          ],
+          "candidates": [
+            {
+              "candidate_ref": "candidate.classification.local_unselected",
+              "gaps": [
+                {
+                  "code": "missing_hardware_benchmark",
+                  "constraint_ref": null,
+                  "subject": "candidate.classification.local_unselected.hardware_fit",
+                  "required_floor": "T2",
+                  "admissible_kinds": [
+                    "tool_observation",
+                    "measured_evaluation",
+                    "runtime_measurement"
+                  ],
+                  "resolved_outcome": "unknown",
+                  "reason": "nothing usable has been observed or measured on declared target \"hardware-1\" for candidate \"candidate.classification.local_unselected\""
+                },
+                {
+                  "code": "missing_licence",
+                  "constraint_ref": null,
+                  "subject": "candidate.classification.local_unselected.licence",
+                  "required_floor": "T2",
+                  "admissible_kinds": ["official_documentation", "source_code"],
+                  "resolved_outcome": "unknown",
+                  "reason": "candidate \"candidate.classification.local_unselected\" cites no licence evidence; missing licence data is unknown, never permissive"
+                },
+                {
+                  "code": "missing_pricing",
+                  "constraint_ref": null,
+                  "subject": "candidate.classification.local_unselected.pricing",
+                  "required_floor": "T2",
+                  "admissible_kinds": ["official_pricing"],
+                  "resolved_outcome": "unknown",
+                  "reason": "no current official pricing is attributed to candidate \"candidate.classification.local_unselected\", so its cost cannot be projected"
+                },
+                {
+                  "code": "missing_evidence",
+                  "constraint_ref": "availability.classification_provider",
+                  "subject": "workload.classification",
+                  "required_floor": "T3",
+                  "admissible_kinds": ["deterministic_observation"],
+                  "resolved_outcome": "unknown",
+                  "reason": "candidate \"candidate.classification.local_unselected\" records no result for \"availability.classification_provider\""
+                },
+                {
+                  "code": "missing_evidence",
+                  "constraint_ref": "quality.classification_f1",
+                  "subject": "workload.classification.metric.macro_f1",
+                  "required_floor": "T3",
+                  "admissible_kinds": ["measured_evaluation"],
+                  "resolved_outcome": "unknown",
+                  "reason": "candidate \"candidate.classification.local_unselected\" records no result for \"quality.classification_f1\""
+                },
+                {
+                  "code": "missing_evidence",
+                  "constraint_ref": "quality.schema_validity",
+                  "subject": "workload.classification.metric.schema_validity",
+                  "required_floor": "T3",
+                  "admissible_kinds": ["measured_evaluation"],
+                  "resolved_outcome": "unknown",
+                  "reason": "candidate \"candidate.classification.local_unselected\" records no result for \"quality.schema_validity\""
+                }
+              ]
+            },
+            {
+              "candidate_ref": "candidate.classification.remote_unselected",
+              "gaps": [
+                {
+                  "code": "missing_licence",
+                  "constraint_ref": null,
+                  "subject": "candidate.classification.remote_unselected.licence",
+                  "required_floor": "T2",
+                  "admissible_kinds": ["official_documentation", "source_code"],
+                  "resolved_outcome": "unknown",
+                  "reason": "candidate \"candidate.classification.remote_unselected\" cites no licence evidence; missing licence data is unknown, never permissive"
+                },
+                {
+                  "code": "missing_provider_region",
+                  "constraint_ref": null,
+                  "subject": "candidate.classification.remote_unselected.region",
+                  "required_floor": "T2",
+                  "admissible_kinds": [
+                    "official_documentation",
+                    "deterministic_observation"
+                  ],
+                  "resolved_outcome": "unknown",
+                  "reason": "candidate \"candidate.classification.remote_unselected\" is served by a managed API but declares no region"
+                },
+                {
+                  "code": "missing_evidence",
+                  "constraint_ref": "availability.classification_provider",
+                  "subject": "workload.classification",
+                  "required_floor": "T3",
+                  "admissible_kinds": ["deterministic_observation"],
+                  "resolved_outcome": "unknown",
+                  "reason": "candidate \"candidate.classification.remote_unselected\" records no result for \"availability.classification_provider\""
+                },
+                {
+                  "code": "missing_evidence",
+                  "constraint_ref": "quality.classification_f1",
+                  "subject": "workload.classification.metric.macro_f1",
+                  "required_floor": "T3",
+                  "admissible_kinds": ["measured_evaluation"],
+                  "resolved_outcome": "unknown",
+                  "reason": "candidate \"candidate.classification.remote_unselected\" records no result for \"quality.classification_f1\""
+                },
+                {
+                  "code": "missing_evidence",
+                  "constraint_ref": "quality.schema_validity",
+                  "subject": "workload.classification.metric.schema_validity",
+                  "required_floor": "T3",
+                  "admissible_kinds": ["measured_evaluation"],
+                  "resolved_outcome": "unknown",
+                  "reason": "candidate \"candidate.classification.remote_unselected\" records no result for \"quality.schema_validity\""
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "workload_ref": "extraction",
+          "gaps": [
+            {
+              "code": "missing_evidence",
+              "constraint_ref": null,
+              "subject": "workload.extraction.metric.macro_f1",
+              "required_floor": "T3",
+              "admissible_kinds": ["measured_evaluation"],
+              "resolved_outcome": "unknown",
+              "reason": "evaluation \"eval.extraction.v1\" has produced no evidence record"
+            }
+          ],
+          "candidates": []
+        },
+        {
+          "workload_ref": "pii_redaction",
+          "gaps": [
+            {
+              "code": "missing_evidence",
+              "constraint_ref": null,
+              "subject": "workload.pii_redaction.metric.recall",
+              "required_floor": "T3",
+              "admissible_kinds": ["measured_evaluation"],
+              "resolved_outcome": "unknown",
+              "reason": "evaluation \"eval.pii_redaction.v1\" has produced no evidence record"
+            },
+            {
+              "code": "missing_evidence",
+              "constraint_ref": "quality.pii_recall",
+              "subject": "workload.pii_redaction.metric.recall",
+              "required_floor": "T3",
+              "admissible_kinds": ["measured_evaluation"],
+              "resolved_outcome": "unknown",
+              "reason": "no candidate serves workload \"pii_redaction\", so nothing can satisfy \"quality.pii_recall\""
+            }
+          ],
+          "candidates": []
+        },
+        {
+          "workload_ref": "response_drafting",
+          "gaps": [
+            {
+              "code": "missing_evidence",
+              "constraint_ref": null,
+              "subject": "workload.response_drafting.metric.citation_validity",
+              "required_floor": "T3",
+              "admissible_kinds": ["measured_evaluation"],
+              "resolved_outcome": "unknown",
+              "reason": "evaluation \"eval.response_drafting.v1\" has produced no evidence record"
+            }
+          ],
+          "candidates": []
+        },
+        { "workload_ref": "retrieval", "gaps": [], "candidates": [] }
+      ],
+      "project": [
+        {
+          "code": "missing_evidence",
+          "constraint_ref": "budget.ai_monthly",
+          "subject": "project.ai_effective_cost_monthly_usd",
+          "required_floor": "T2",
+          "admissible_kinds": ["official_pricing"],
+          "resolved_outcome": "unknown",
+          "reason": "no candidate satisfies project-level constraint \"budget.ai_monthly\""
+        },
+        {
+          "code": "missing_evidence",
+          "constraint_ref": "privacy.raw_ticket_remote",
+          "subject": "data.raw_customer_ticket",
+          "required_floor": "T3",
+          "admissible_kinds": ["deterministic_observation", "source_code"],
+          "resolved_outcome": "unknown",
+          "reason": "no candidate satisfies project-level constraint \"privacy.raw_ticket_remote\""
+        }
+      ],
+      "adapters": []
+    }
+  },
+  "source_control": null,
+  "scan": {
+    "status": "available",
+    "freshness": "current",
+    "problems": [],
+    "content_hash": "sha256:592adf3a4b1092b2e523c7a0e403527719f6c7e99c316e0db83137f3cdf5293a",
+    "observed_at": "2026-09-16T12:00:00Z",
+    "artifact": {
+      "format": "anvilmark-repository-scan/0.1.0-draft.3",
+      "scanner": {
+        "recognizer_configuration_hash": "sha256:50b9327160b1020099f660595001fec3c5a5cdc32ecd7f1661d42e986e00bb99",
+        "id": "anvilmark-scanner",
+        "version": "0.1.0-draft.3",
+        "typescript_version": "5.9.3",
+        "flow_model": {
+          "id": "bounded-direct-call",
+          "version": "3",
+          "call_depth": 3
+        },
+        "stages": [
+          { "stage": "inventory", "id": "inventory", "version": "1" },
+          { "stage": "resolution", "id": "typescript-program", "version": "1" },
+          { "stage": "semantics", "id": "provider-semantics", "version": "1" },
+          { "stage": "flow", "id": "bounded-direct-call", "version": "3" },
+          { "stage": "evidence", "id": "source-evidence", "version": "1" },
+          { "stage": "binding", "id": "proposed-bindings", "version": "1" }
+        ],
+        "recognizers": [
+          { "id": "ai-sdk", "version": "1", "kind": "provider" },
+          { "id": "anthropic", "version": "1", "kind": "provider" },
+          { "id": "databases", "version": "1", "kind": "boundary:database" },
+          { "id": "http", "version": "1", "kind": "provider" },
+          { "id": "network", "version": "2", "kind": "boundary:network" },
+          {
+            "id": "node-events-and-processes",
+            "version": "1",
+            "kind": "boundary:event"
+          },
+          { "id": "ollama", "version": "2", "kind": "provider" },
+          { "id": "openai", "version": "3", "kind": "provider" },
+          { "id": "queues", "version": "1", "kind": "boundary:queue" },
+          { "id": "together", "version": "1", "kind": "provider" },
+          {
+            "id": "unsupported-ai-sdks",
+            "version": "3",
+            "kind": "unsupported_sdks"
+          }
+        ]
+      },
+      "contract": {
+        "project_id": "atlas-support-desk",
+        "schema_version": "0.1.0-draft.5",
+        "contract_revision": 1,
+        "contract_hash": "sha256:6e42df1d40df5b08364214f6c9c7ec2af40799e51c9661753ca5180c2aa9d51d",
+        "state_revision": null
+      },
+      "repository": {
+        "root": ".",
+        "snapshot_hash": "sha256:b4e10031f023e769d74dc556e7ed3c6fb5e8e44977813add18478fe85369d37c",
+        "declared_in_contract": true,
+        "inputs": [
+          {
+            "path": "node_modules/openai/index.d.ts",
+            "sha256": "sha256:f7a2018fd0e3f95a9a75312b11759dd03717dbaee919a8e7226a28bb87a7dcd2",
+            "role": "resolution_input"
+          },
+          {
+            "path": "node_modules/openai/package.json",
+            "sha256": "sha256:b2da448ce2c3c529de2ef38098e64de7b8b19b748bae783f95fba9ae345cb749",
+            "role": "resolution_input"
+          },
+          {
+            "path": "node_modules/openai/resources/beta/threads/messages.d.ts",
+            "sha256": "sha256:99ce1e5c92eed92df3da6efc7e34e8e3982e94b2ae30766bec3c5a5f038a4475",
+            "role": "resolution_input"
+          },
+          {
+            "path": "node_modules/openai/resources/chat/completions.d.ts",
+            "sha256": "sha256:c046a04e3e28f26d376733433b9c46dd252e4fce2dc341f4c7da93d37e954976",
+            "role": "resolution_input"
+          },
+          {
+            "path": "node_modules/openai/resources/embeddings.d.ts",
+            "sha256": "sha256:f3bd9fd651dcaf41033a71d0f97117a7aadd8db21ef26c484c077955a68814df",
+            "role": "resolution_input"
+          },
+          {
+            "path": "node_modules/openai/resources/files.d.ts",
+            "sha256": "sha256:7bebea9bbcac7da3cfea90be090975994a2f671f76eab3ab80875cd4b8f8d13a",
+            "role": "resolution_input"
+          },
+          {
+            "path": "node_modules/openai/resources/responses.d.ts",
+            "sha256": "sha256:30e32bf9083d9425e6faa579b269d624fc35f548705db175dd5b73ea996b6fce",
+            "role": "resolution_input"
+          },
+          {
+            "path": "package.json",
+            "sha256": "sha256:6e2e65bce91c7d8bd0042322f2735516737ce506bfa0e8497ac107fb669eb39e",
+            "role": "manifest"
+          },
+          {
+            "path": "src/classify.ts",
+            "sha256": "sha256:d44f24afe20449275e02cce145dcbfefaf37803704c8387bbf67eaaded0d986a",
+            "role": "source"
+          },
+          {
+            "path": "src/redact.ts",
+            "sha256": "sha256:21441a6d04312dfcc3ddd1f78e39c0d9118217e9259b6a941e9a93188c47dc32",
+            "role": "source"
+          },
+          {
+            "path": "src/tickets.ts",
+            "sha256": "sha256:d854715d7e38109db8015e98ee6d16facb5e3f41dceb96b4526f2557788192f5",
+            "role": "source"
+          },
+          {
+            "path": "tsconfig.json",
+            "sha256": "sha256:d3d9af1b7eff8bf2da0ed9b3c8e89ac2421b624f72cb3f9de59e55545658a9af",
+            "role": "compiler_config"
+          }
+        ]
+      },
+      "configuration": {
+        "normalized_sha256": "sha256:9668d44ae5e8588724f7e5c0db0ca111fd5d231b23c7f27082927e1a6d60e9dd",
+        "source": "default",
+        "path": null,
+        "sha256": null,
+        "include": ["."],
+        "exclude": [],
+        "recognizers": null,
+        "compiler": {
+          "tsconfig": "tsconfig.json",
+          "root_files": "scan_inventory",
+          "options": {
+            "target": "ES2022",
+            "module": "ESNext",
+            "module_resolution": "Bundler",
+            "jsx": null,
+            "strict": true,
+            "paths_configured": false
+          },
+          "forced": []
+        }
+      },
+      "inventory": {
+        "source_file_count": 3,
+        "declaration_file_count": 0,
+        "manifests": [
+          {
+            "path": "package.json",
+            "name": "handoff-disallowed-raw",
+            "package_manager": "pnpm@9.15.0",
+            "entry_points": [],
+            "dependency_count": 1
+          }
+        ],
+        "lockfiles": [],
+        "ai_dependencies": [
+          {
+            "name": "openai",
+            "declared": "^4.0.0",
+            "section": "dependencies",
+            "manifest": "package.json",
+            "installed_version": "4.0.0-synthetic",
+            "category": "provider_sdk",
+            "recognizer": "openai"
+          }
+        ],
+        "environment_variables": [],
+        "excluded": [
+          { "path": "node_modules", "reason": "default_excluded_directory" }
+        ]
+      },
+      "declarations": [
+        {
+          "id": "component.classifier",
+          "kind": "component",
+          "status": "resolved",
+          "problems": [],
+          "location": {
+            "path": "src/classify.ts",
+            "symbol": "classifyTicket",
+            "start": { "line": 6, "column": 1 },
+            "end": { "line": 12, "column": 2 },
+            "source_sha256": "sha256:d44f24afe20449275e02cce145dcbfefaf37803704c8387bbf67eaaded0d986a"
+          },
+          "data_classification": null,
+          "clears": [],
+          "architecture_node": {
+            "ref": "ticket-classifier",
+            "association": "declared_mapping",
+            "declaration_ref": "component.classifier",
+            "trust_boundary": "local",
+            "standing": "user_declared",
+            "content_hash": "ffdb3453685e63ee311d73b44f24dc878848e898539760476b11f9b7c1d9fcca",
+            "trusted": true
+          },
+          "candidate_ref": null,
+          "workload_ref": "classification",
+          "recognizer": null,
+          "component": {
+            "path": "src/classify.ts",
+            "export": "classifyTicket"
+          },
+          "sink": null,
+          "discovery": "declared_mapping",
+          "evidence_tier": "T1"
+        },
+        {
+          "id": "sanitizer.pii",
+          "kind": "sanitizer",
+          "status": "resolved",
+          "problems": [],
+          "location": {
+            "path": "src/redact.ts",
+            "symbol": "redactTicket",
+            "start": { "line": 1, "column": 1 },
+            "end": { "line": 3, "column": 2 },
+            "source_sha256": "sha256:21441a6d04312dfcc3ddd1f78e39c0d9118217e9259b6a941e9a93188c47dc32"
+          },
+          "data_classification": "redacted_customer_ticket",
+          "clears": ["raw_customer_ticket"],
+          "architecture_node": {
+            "ref": "pii-redactor",
+            "association": "declared_mapping",
+            "declaration_ref": "sanitizer.pii",
+            "trust_boundary": "local",
+            "standing": "user_declared",
+            "content_hash": "3c6c0437add401d7f2004b0bbb9555244c65e2b537d1c365da8a622646096860",
+            "trusted": true
+          },
+          "candidate_ref": null,
+          "workload_ref": null,
+          "recognizer": null,
+          "component": null,
+          "sink": null,
+          "discovery": "declared_mapping",
+          "evidence_tier": "T1"
+        },
+        {
+          "id": "sink.openai",
+          "kind": "sink",
+          "status": "resolved",
+          "problems": [],
+          "location": null,
+          "data_classification": null,
+          "clears": [],
+          "architecture_node": {
+            "ref": "remote-model-provider",
+            "association": "declared_mapping",
+            "declaration_ref": "sink.openai",
+            "trust_boundary": "remote_provider",
+            "standing": "user_declared",
+            "content_hash": "f612e446cac338fb15bd17f48a0995d8d76495912457cb2d583934ad3a99a4b9",
+            "trusted": true
+          },
+          "candidate_ref": "candidate.classification.remote_unselected",
+          "workload_ref": null,
+          "recognizer": "openai",
+          "component": null,
+          "sink": {
+            "operations": [],
+            "paths": [],
+            "models": null,
+            "providers": null
+          },
+          "discovery": "declared_mapping",
+          "evidence_tier": "T1"
+        },
+        {
+          "id": "source.raw_ticket",
+          "kind": "source",
+          "status": "resolved",
+          "problems": [],
+          "location": {
+            "path": "src/tickets.ts",
+            "symbol": "readTicket",
+            "start": { "line": 1, "column": 1 },
+            "end": { "line": 3, "column": 2 },
+            "source_sha256": "sha256:d854715d7e38109db8015e98ee6d16facb5e3f41dceb96b4526f2557788192f5"
+          },
+          "data_classification": "raw_customer_ticket",
+          "clears": [],
+          "architecture_node": {
+            "ref": "ticket-intake",
+            "association": "declared_mapping",
+            "declaration_ref": "source.raw_ticket",
+            "trust_boundary": "local",
+            "standing": "user_declared",
+            "content_hash": "1a0855894bc20cda08667b1294daff687531ee1da27a225e009556d1ae0f462b",
+            "trusted": true
+          },
+          "candidate_ref": null,
+          "workload_ref": null,
+          "recognizer": null,
+          "component": null,
+          "sink": null,
+          "discovery": "declared_mapping",
+          "evidence_tier": "T1"
+        }
+      ],
+      "observations": [
+        {
+          "id": "import.eb43c2e04ad48ce79bcb",
+          "kind": "sdk_import",
+          "location": {
+            "path": "src/classify.ts",
+            "symbol": null,
+            "start": { "line": 1, "column": 1 },
+            "end": { "line": 1, "column": 29 },
+            "source_sha256": "sha256:d44f24afe20449275e02cce145dcbfefaf37803704c8387bbf67eaaded0d986a"
+          },
+          "import_kind": "static",
+          "package": "openai",
+          "category": "provider_sdk",
+          "recognizer": "openai",
+          "discovery": "deterministic_observation",
+          "evidence_tier": "T3"
+        },
+        {
+          "id": "client.e19ada25585212d53e7c",
+          "kind": "client_instantiation",
+          "location": {
+            "path": "src/classify.ts",
+            "symbol": null,
+            "start": { "line": 4, "column": 16 },
+            "end": { "line": 4, "column": 28 },
+            "source_sha256": "sha256:d44f24afe20449275e02cce145dcbfefaf37803704c8387bbf67eaaded0d986a"
+          },
+          "recognizer": "openai",
+          "provider": "openai",
+          "owner": "OpenAI",
+          "default_deployment": "managed_api",
+          "endpoint": {
+            "selection": "default",
+            "host": "api.openai.com",
+            "provider": "openai",
+            "deployment": "managed_api"
+          },
+          "discovery": "deterministic_observation",
+          "evidence_tier": "T3",
+          "caveats": ["sdk_endpoint_may_be_set_by_environment:OPENAI_BASE_URL"]
+        },
+        {
+          "id": "call.f497e3da5fe31dc85f28",
+          "kind": "provider_call",
+          "location": {
+            "path": "src/classify.ts",
+            "symbol": "classifyTicket",
+            "start": { "line": 8, "column": 10 },
+            "end": { "line": 11, "column": 5 },
+            "source_sha256": "sha256:d44f24afe20449275e02cce145dcbfefaf37803704c8387bbf67eaaded0d986a"
+          },
+          "recognizer": "openai",
+          "provider": "openai",
+          "operation": "chat.completions.create",
+          "operation_kind": "inference",
+          "owner": "Completions",
+          "model": { "kind": "literal", "value": "gpt-4o-mini-2024-07-18" },
+          "client_ref": "client.e19ada25585212d53e7c",
+          "default_deployment": "managed_api",
+          "endpoint": {
+            "selection": "default",
+            "host": "api.openai.com",
+            "provider": "openai",
+            "deployment": "managed_api"
+          },
+          "linkage": "client",
+          "data_flow_ref": "flow.c9e77f8d25419789d22c",
+          "discovery": "deterministic_observation",
+          "evidence_tier": "T3",
+          "caveats": ["sdk_endpoint_may_be_set_by_environment:OPENAI_BASE_URL"]
+        }
+      ],
+      "data_flows": [
+        {
+          "transport_scope": "modeled_request_inputs",
+          "id": "flow.c9e77f8d25419789d22c",
+          "observation_ref": "call.f497e3da5fe31dc85f28",
+          "status": "raw_reaches",
+          "classifications": ["raw_customer_ticket:raw"],
+          "unknown_reasons": [],
+          "contexts": [
+            {
+              "id": "context.d49295fde83aa50811e2",
+              "kind": "intraprocedural",
+              "root": {
+                "path": "src/classify.ts",
+                "symbol": "classifyTicket",
+                "start": { "line": 6, "column": 1 },
+                "end": { "line": 12, "column": 2 }
+              },
+              "call_site": null,
+              "status": "raw_reaches",
+              "superseded": false,
+              "facts": [
+                {
+                  "classification": "raw_customer_ticket",
+                  "state": "raw",
+                  "derived_from": null,
+                  "declaration_ref": "source.raw_ticket",
+                  "conditional": false,
+                  "trace": [
+                    {
+                      "kind": "source",
+                      "path": "src/classify.ts",
+                      "start": { "line": 7, "column": 18 },
+                      "end": { "line": 7, "column": 32 },
+                      "symbol": "classifyTicket",
+                      "declaration_ref": "source.raw_ticket"
+                    },
+                    {
+                      "kind": "assignment",
+                      "path": "src/classify.ts",
+                      "start": { "line": 7, "column": 9 },
+                      "end": { "line": 7, "column": 15 },
+                      "symbol": "ticket",
+                      "declaration_ref": null
+                    },
+                    {
+                      "kind": "sink",
+                      "path": "src/classify.ts",
+                      "start": { "line": 8, "column": 10 },
+                      "end": { "line": 11, "column": 5 },
+                      "symbol": "classifyTicket",
+                      "declaration_ref": null
+                    }
+                  ]
+                }
+              ],
+              "unknowns": []
+            }
+          ],
+          "trace_tier": "T3",
+          "assumptions": [
+            {
+              "kind": "declared_source",
+              "declaration_ref": "source.raw_ticket",
+              "evidence_tier": "T1"
+            }
+          ],
+          "evidence_tier": "T3",
+          "caveats": []
+        }
+      ],
+      "proposed_bindings": [
+        {
+          "id": "binding.c9e77f8d25419789d22c",
+          "observation_ref": "call.f497e3da5fe31dc85f28",
+          "client_ref": "client.e19ada25585212d53e7c",
+          "data_flow_ref": "flow.c9e77f8d25419789d22c",
+          "repository_root": ".",
+          "location": {
+            "path": "src/classify.ts",
+            "symbol": "classifyTicket",
+            "start": { "line": 8, "column": 10 },
+            "end": { "line": 11, "column": 5 },
+            "source_sha256": "sha256:d44f24afe20449275e02cce145dcbfefaf37803704c8387bbf67eaaded0d986a"
+          },
+          "component": {
+            "ref": "ticket-classifier",
+            "association": "declared_mapping",
+            "declaration_ref": "component.classifier",
+            "trust_boundary": "local",
+            "standing": "user_declared",
+            "content_hash": "ffdb3453685e63ee311d73b44f24dc878848e898539760476b11f9b7c1d9fcca",
+            "trusted": true
+          },
+          "provider_node": {
+            "ref": "remote-model-provider",
+            "association": "declared_mapping",
+            "declaration_ref": "sink.openai",
+            "trust_boundary": "remote_provider",
+            "standing": "user_declared",
+            "content_hash": "f612e446cac338fb15bd17f48a0995d8d76495912457cb2d583934ad3a99a4b9",
+            "trusted": true
+          },
+          "workload": {
+            "ref": "classification",
+            "association": "declared_mapping",
+            "declaration_ref": "component.classifier"
+          },
+          "candidate": {
+            "ref": "candidate.classification.remote_unselected",
+            "association": "declared_mapping",
+            "declaration_ref": "sink.openai"
+          },
+          "decision": {
+            "ref": "decision.classification",
+            "association": "contract_workload_decision",
+            "status": "approved",
+            "approval_state": "current",
+            "selected_candidate_ref": "candidate.classification.remote_unselected"
+          },
+          "discovery": "declared_mapping",
+          "confidence": "high",
+          "evidence_tier": "T1",
+          "unbound_reasons": [],
+          "contract_projection": {
+            "eligible": true,
+            "discovery_kind": "deterministic",
+            "reasons": []
+          }
+        }
+      ],
+      "unknowns": [],
+      "analysis_errors": [],
+      "limits": [],
+      "notes": [],
+      "completeness": {
+        "status": "complete_within_supported_scope",
+        "reasons": []
+      },
+      "statement": "Repository observations and proposed bindings only. This is not a conformance result: it does not say whether any rule passes or fails, and it makes no whole-program privacy, runtime-enforcement or budget claim. Unknowns and analysis errors mean the scan is incomplete; an empty list of observations does not mean the repository is safe. Proposed bindings are not recorded in the project contract.",
+      "content_hash": "sha256:592adf3a4b1092b2e523c7a0e403527719f6c7e99c316e0db83137f3cdf5293a",
+      "observation": {
+        "observed_at": "2026-09-16T12:00:00Z",
+        "basis": "explicit"
+      }
+    }
+  },
+  "report": {
+    "status": "available",
+    "freshness": "current",
+    "problems": [],
+    "conformance_hash": "sha256:af26e80d49a1843a80244610099fa808ae7981c61e88daf363ab2a3a0f3e7603",
+    "evaluated_at": "2026-09-16T12:00:00Z",
+    "artifact": {
+      "format": "anvilmark-conformance-report/0.1.0-draft.2",
+      "conformance_hash": "sha256:af26e80d49a1843a80244610099fa808ae7981c61e88daf363ab2a3a0f3e7603",
+      "evaluated_at": "2026-09-16T12:00:00Z",
+      "engine": { "id": "anvilmark-conformance", "version": "0.1.0-draft.3" },
+      "contract": {
+        "project_id": "atlas-support-desk",
+        "contract_revision": 1,
+        "contract_hash": "sha256:6e42df1d40df5b08364214f6c9c7ec2af40799e51c9661753ca5180c2aa9d51d",
+        "state_revision": null
+      },
+      "scan": {
+        "content_hash": "sha256:592adf3a4b1092b2e523c7a0e403527719f6c7e99c316e0db83137f3cdf5293a",
+        "observed_at": "2026-09-16T12:00:00Z",
+        "scanner_version": "0.1.0-draft.3",
+        "repository_root": ".",
+        "configuration_source": "default",
+        "configuration_path": null,
+        "snapshot_hash": "sha256:b4e10031f023e769d74dc556e7ed3c6fb5e8e44977813add18478fe85369d37c"
+      },
+      "summary": {
+        "total": 2,
+        "pass": 1,
+        "fail": 1,
+        "unknown": 0,
+        "not_applicable": 0,
+        "compliant": false
+      },
+      "results": [
+        {
+          "id": "conformance.result.9a91bb4de4b97caf240e",
+          "rule_ref": "rule.classification_approved_candidate",
+          "rule_kind": "approved_candidate_only",
+          "severity": "error",
+          "verdict": "pass",
+          "constraint_ref": null,
+          "workload_ref": "classification",
+          "decision_ref": "decision.classification",
+          "candidate_ref": "candidate.classification.remote_unselected",
+          "architecture_node_ref": "ticket-classifier",
+          "evidence_tier": "T3",
+          "standing": "deterministic",
+          "locations": [
+            {
+              "path": "src/classify.ts",
+              "symbol": "classifyTicket",
+              "start": { "line": 8, "column": 10 },
+              "end": { "line": 11, "column": 5 },
+              "source_sha256": "sha256:d44f24afe20449275e02cce145dcbfefaf37803704c8387bbf67eaaded0d986a"
+            }
+          ],
+          "trace": [],
+          "supported_scope": "Type- and symbol-resolved OpenAI, Anthropic, Ollama and Vercel AI SDK calls, and fetch to known AI provider hosts, attributed through declared components and sinks; literal provider hosts and model references, or declared runtime values.",
+          "unknown_reasons": [],
+          "caveats": [
+            "Candidate and workload associations are declared mappings; this proves only the supported SDK/model references in the selected source.",
+            "Endpoints are the SDK defaults or literal URLs in code; runtime environment overrides and network routing are not verified.",
+            "The workload is scoped to its declared component files (1); provider calls elsewhere are not attributed to it."
+          ],
+          "suggested_alternatives": [],
+          "explanation": "Workload 'classification' invokes only the provider/model references allowed by its current candidate policy.",
+          "content_hash": "sha256:3a53addbb9598b8c639e6964b57c8060331ca3f8deee99b2c6e527a5e20c062b"
+        },
+        {
+          "id": "conformance.result.cfe99034b068adcf6f77",
+          "rule_ref": "rule.raw_ticket_never_remote",
+          "rule_kind": "forbid_dataflow",
+          "severity": "error",
+          "verdict": "fail",
+          "constraint_ref": "privacy.raw_ticket_remote",
+          "workload_ref": "classification",
+          "decision_ref": "decision.classification",
+          "candidate_ref": "candidate.classification.remote_unselected",
+          "architecture_node_ref": "remote-model-provider",
+          "evidence_tier": "T3",
+          "standing": "deterministic",
+          "locations": [
+            {
+              "path": "src/classify.ts",
+              "symbol": "classifyTicket",
+              "start": { "line": 8, "column": 10 },
+              "end": { "line": 11, "column": 5 },
+              "source_sha256": "sha256:d44f24afe20449275e02cce145dcbfefaf37803704c8387bbf67eaaded0d986a"
+            }
+          ],
+          "trace": [
+            {
+              "kind": "source",
+              "path": "src/classify.ts",
+              "start": { "line": 7, "column": 18 },
+              "end": { "line": 7, "column": 32 },
+              "symbol": "classifyTicket",
+              "declaration_ref": "source.raw_ticket"
+            },
+            {
+              "kind": "assignment",
+              "path": "src/classify.ts",
+              "start": { "line": 7, "column": 9 },
+              "end": { "line": 7, "column": 15 },
+              "symbol": "ticket",
+              "declaration_ref": null
+            },
+            {
+              "kind": "sink",
+              "path": "src/classify.ts",
+              "start": { "line": 8, "column": 10 },
+              "end": { "line": 11, "column": 5 },
+              "symbol": "classifyTicket",
+              "declaration_ref": null
+            }
+          ],
+          "supported_scope": "Intraprocedural def-use and one level of statically resolved direct-call propagation, with declared source/sink/sanitizer mappings and default SDK endpoints.",
+          "unknown_reasons": [],
+          "caveats": [
+            "Source completeness and sanitizer effectiveness are T1 declarations, not runtime measurements.",
+            "This result covers modeled request inputs and bounded direct calls, not whole-program privacy or network enforcement."
+          ],
+          "suggested_alternatives": [
+            {
+              "kind": "pass_through_sanitizer",
+              "summary": "Pass data through the declared sanitizer 'pii-redactor' before transmitting 'raw_customer_ticket' to 'remote_provider'",
+              "candidate_ref": null,
+              "component_ref": "pii-redactor",
+              "details": "Raw data of classification 'raw_customer_ticket' must not reach 'remote_provider' without passing through declared sanitizer 'pii-redactor'."
+            }
+          ],
+          "explanation": "Data classified as or derived from 'raw_customer_ticket' reaches 'remote_provider' without the rule's required sanitizer exception at src/classify.ts:8:10.",
+          "content_hash": "sha256:a3e5ab0a14a2e91150d97d64fa685cf09a4e688976e33b216e8a90dd76093c45"
+        }
+      ],
+      "analysis_errors": []
+    }
+  },
+  "sources": {
+    "src/classify.ts": "import OpenAI from \"openai\";\nimport { readTicket } from \"./tickets\";\n\nconst client = new OpenAI();\n\nexport async function classifyTicket(id: string) {\n  const ticket = readTicket(id);\n  return client.chat.completions.create({\n    model: \"gpt-4o-mini-2024-07-18\",\n    messages: [{ role: \"user\", content: ticket }],\n  });\n}\n"
+  },
+  "manifest": {
+    "files_included": [
+      "contract.yaml",
+      "scan.json",
+      "report.json",
+      "source/src/classify.ts"
+    ],
+    "has_source": true,
+    "sources_omitted": [],
+    "rule_count": 2,
+    "workload_count": 5
+  },
+  "integrity_hash": "sha256:7d77e8fefaac9e242f4c6df22523ecd433741af15a6319d9e9230b675f90a943"
+}

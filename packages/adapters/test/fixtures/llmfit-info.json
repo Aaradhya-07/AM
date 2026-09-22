@@ -1,0 +1,72 @@
+{
+  "system": {
+    "total_ram_gb": 64.0,
+    "available_ram_gb": 48.23,
+    "cpu_cores": 16,
+    "cpu_name": "AMD Ryzen 9 7950X 16-Core Processor",
+    "has_gpu": true,
+    "gpu_vram_gb": 24.0,
+    "gpu_available_gb": null,
+    "gpu_name": "NVIDIA GeForce RTX 4090",
+    "gpu_count": 1,
+    "unified_memory": false,
+    "backend": "CUDA",
+    "gpus": [
+      {
+        "name": "NVIDIA GeForce RTX 4090",
+        "vram_gb": 24.0,
+        "backend": "CUDA",
+        "count": 1,
+        "unified_memory": false,
+        "memory_bandwidth_gbps": 1008.0
+      }
+    ]
+  },
+  "models": [
+    {
+      "name": "Qwen/Qwen2.5-Coder-7B-Instruct",
+      "provider": "Qwen",
+      "parameter_count": "7B",
+      "params_b": 7.62,
+      "context_length": 32768,
+      "usable_context": 32768,
+      "effective_context_length": 32768,
+      "use_case": "coding",
+      "category": "Coding",
+      "release_date": "2024-09-18",
+      "is_moe": false,
+      "fit_level": "good",
+      "fit_label": "Good",
+      "run_mode": "gpu",
+      "run_mode_label": "GPU",
+      "score": 86.5,
+      "score_components": {
+        "quality": 87.0,
+        "speed": 81.2,
+        "fit": 90.1,
+        "context": 88.0
+      },
+      "estimated_tps": 42.5,
+      "runtime": "llama_cpp",
+      "runtime_label": "llama.cpp",
+      "best_quant": "Q5_K_M",
+      "memory_required_gb": 5.8,
+      "memory_available_gb": 24.0,
+      "moe_offloaded_gb": null,
+      "total_memory_gb": 5.8,
+      "utilization_pct": 24.2,
+      "notes": [],
+      "gguf_sources": [],
+      "capabilities": ["Coding"],
+      "capability_ids": ["Coding"],
+      "license": "apache-2.0",
+      "supports_tp": [1],
+      "installed": false,
+      "disk_size_gb": 5.44,
+      "ollama_name": "qwen2.5-coder:7b",
+      "estimate_basis": "modelled",
+      "verify_command": "llama-bench -m model.gguf",
+      "measured_tps": null
+    }
+  ]
+}

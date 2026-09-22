@@ -1,0 +1,63 @@
+{
+  "validator_commit": "efb55394df73c8066f81a8a88b0f7bbf602df507",
+  "base_fixture": "approved-atlas.draft4.yaml",
+  "reconstruction": "Parse base YAML and replace architecture.decision_bindings. document_sha256 covers canonical JSON before changing schema version lines. Each case passed the unmodified draft.4 validator with its approval current.",
+  "cases": [
+    {
+      "name": "repeated_nodes",
+      "decision_bindings": [
+        {
+          "decision_ref": "decision.classification",
+          "node_refs": [
+            "ticket-classifier",
+            "remote-model-provider",
+            "ticket-classifier"
+          ]
+        }
+      ],
+      "document_sha256": "83772610a7db71320ef8c67a1b4400977b8064881de29abf2fe4a1fc9a05cead",
+      "approval_hash": "81b8559b4cd6fdddd5addfb4bd065caa574529f8802e4f1bfe85292efe481f1d",
+      "expected_node_refs": ["remote-model-provider", "ticket-classifier"]
+    },
+    {
+      "name": "overlapping_bindings",
+      "decision_bindings": [
+        {
+          "decision_ref": "decision.classification",
+          "node_refs": ["ticket-classifier", "ticket-intake"]
+        },
+        {
+          "decision_ref": "decision.classification",
+          "node_refs": ["remote-model-provider", "ticket-intake"]
+        }
+      ],
+      "document_sha256": "317c9bafd98159ceee6eceb12b0a3b577e43acd925091410be6e74e2b369e136",
+      "approval_hash": "81b8559b4cd6fdddd5addfb4bd065caa574529f8802e4f1bfe85292efe481f1d",
+      "expected_node_refs": [
+        "remote-model-provider",
+        "ticket-classifier",
+        "ticket-intake"
+      ]
+    },
+    {
+      "name": "disjoint_bindings",
+      "decision_bindings": [
+        {
+          "decision_ref": "decision.classification",
+          "node_refs": ["ticket-intake"]
+        },
+        {
+          "decision_ref": "decision.classification",
+          "node_refs": ["pii-redactor", "ticket-classifier"]
+        }
+      ],
+      "document_sha256": "57f9ca500646611e01eba8d14e9884afb3de5a468bfc67442458caf7120324cf",
+      "approval_hash": "81b8559b4cd6fdddd5addfb4bd065caa574529f8802e4f1bfe85292efe481f1d",
+      "expected_node_refs": [
+        "pii-redactor",
+        "ticket-classifier",
+        "ticket-intake"
+      ]
+    }
+  ]
+}

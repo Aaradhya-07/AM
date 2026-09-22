@@ -1,0 +1,154 @@
+{
+  "name": "azure-search-openai-javascript",
+  "url": "https://github.com/Azure-Samples/azure-search-openai-javascript.git",
+  "commit": "dc16d1903e0b2d38a293fc7a0f24e2984a5df3f3",
+  "install": ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"],
+  "ai_calls": [
+    {
+      "path": "packages/indexer/src/lib/indexer.ts",
+      "line": 223,
+      "sdk": "openai",
+      "operation": "embeddings.create",
+      "provider": "runtime:azure_openai",
+      "model": "runtime",
+      "egress": "embedding"
+    },
+    {
+      "path": "packages/indexer/src/lib/indexer.ts",
+      "line": 230,
+      "sdk": "openai",
+      "operation": "embeddings.create",
+      "provider": "runtime:azure_openai",
+      "model": "runtime",
+      "egress": "embedding"
+    },
+    {
+      "path": "packages/search/src/lib/approaches/approach-base.ts",
+      "line": 34,
+      "sdk": "openai",
+      "operation": "embeddings.create",
+      "provider": "runtime:azure_openai",
+      "model": "runtime",
+      "egress": "embedding"
+    },
+    {
+      "path": "packages/search/src/lib/approaches/ask-retrieve-then-read.ts",
+      "line": 64,
+      "sdk": "openai",
+      "operation": "chat.completions.create",
+      "provider": "runtime:azure_openai",
+      "model": "runtime",
+      "egress": "inference"
+    },
+    {
+      "path": "packages/search/src/lib/approaches/chat-read-retrieve-read.ts",
+      "line": 70,
+      "sdk": "openai",
+      "operation": "chat.completions.create",
+      "provider": "runtime:azure_openai",
+      "model": "runtime",
+      "egress": "inference"
+    },
+    {
+      "path": "packages/search/src/lib/approaches/chat-read-retrieve-read.ts",
+      "line": 99,
+      "sdk": "openai",
+      "operation": "chat.completions.create",
+      "provider": "runtime:azure_openai",
+      "model": "runtime",
+      "egress": "inference"
+    },
+    {
+      "path": "packages/search/src/lib/approaches/chat-read-retrieve-read.ts",
+      "line": 143,
+      "sdk": "openai",
+      "operation": "chat.completions.create",
+      "provider": "runtime:azure_openai",
+      "model": "runtime",
+      "egress": "inference"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "az-chat-model",
+      "description": "Chat approaches may only use the approved Azure OpenAI deployment.",
+      "workload": {
+        "id": "chat",
+        "input": "user_message"
+      },
+      "candidate": {
+        "component_kind": "model_runtime",
+        "mode": "managed_api",
+        "provider": "azure_openai",
+        "model": "gpt-35-turbo",
+        "version": "gpt-35-turbo",
+        "mutability": "pinned"
+      },
+      "rule": {
+        "kind": "approved_candidate_only"
+      },
+      "scanner": {
+        "sinks": [
+          {
+            "id": "sink.openai",
+            "recognizer": "openai"
+          }
+        ],
+        "components": [
+          {
+            "path": "packages/search/src/lib/approaches/chat-read-retrieve-read.ts"
+          },
+          {
+            "path": "packages/search/src/lib/approaches/ask-retrieve-then-read.ts"
+          }
+        ]
+      },
+      "expected": {
+        "verdict": "unknown",
+        "acceptable": ["unknown"],
+        "why": "endpoint and deployment come from configuration at run time"
+      }
+    },
+    {
+      "id": "az-embeddings-declared",
+      "description": "Query embeddings may only use the approved Azure OpenAI embedding deployment, with the runtime values declared.",
+      "workload": {
+        "id": "retrieval",
+        "input": "user_message"
+      },
+      "candidate": {
+        "component_kind": "embedding_model",
+        "mode": "managed_api",
+        "provider": "azure_openai",
+        "model": "text-embedding-ada-002",
+        "version": "text-embedding-ada-002",
+        "mutability": "pinned"
+      },
+      "rule": {
+        "kind": "approved_candidate_only"
+      },
+      "scanner": {
+        "sinks": [
+          {
+            "id": "sink.openai",
+            "recognizer": "openai",
+            "operations": ["embeddings.create"],
+            "providers": ["azure_openai"],
+            "models": ["text-embedding-ada-002"]
+          }
+        ],
+        "components": [
+          {
+            "path": "packages/search/src/lib/approaches/approach-base.ts"
+          }
+        ]
+      },
+      "expected": {
+        "verdict": "pass",
+        "acceptable": ["pass", "unknown"],
+        "why": "client and model come from configuration; the user declares both. Unknown is acceptable only if an import genuinely cannot be resolved"
+      },
+      "held_out": "added 2026-09-17 after the scanner changes; expectation written from the code before its first run"
+    }
+  ]
+}

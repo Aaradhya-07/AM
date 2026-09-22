@@ -1,0 +1,6 @@
+{
+  "name": "together-ai",
+  "version": "0.40.0-synthetic",
+  "types": "index.d.ts",
+  "main": "index.js"
+}

@@ -2,23 +2,33 @@
   "name": "anvilmark",
   "version": "0.1.0",
   "private": true,
-  "description": "AI system cost-audit monorepo scaffold",
+  "license": "Apache-2.0",
+  "description": "Local decision contracts and bounded code conformance for AI systems",
   "packageManager": "pnpm@11.16.0",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
+    "publish:npm": "pnpm build:npm && cd dist-npm && npm publish --access public --tag next",
+    "build:npm": "pnpm build && node scripts/build-npm-package.mjs --pack",
     "build": "pnpm -r --if-present build",
     "test": "pnpm -r --if-present test",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "verify:mcp": "pnpm --filter @anvilmark/mcp verify:tools-list",
-    "dev:web": "pnpm --filter @anvilmark/web dev"
+    "verify:mcp-project": "pnpm --filter @anvilmark/mcp verify:project-tools",
+    "demo:atlas": "node scripts/demo-atlas.mjs",
+    "dev:web": "pnpm --filter @anvilmark/web dev",
+    "setup": "node scripts/setup.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "build:core": "pnpm --filter @anvilmark/mcp... --if-present build",
+    "workshop": "node scripts/atlas-workshop.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
     "@types/node": "^24.0.0",
+    "esbuild": "^0.28.2",
     "eslint": "^9.0.0",
     "prettier": "^3.0.0",
     "typescript": "^5.9.0",

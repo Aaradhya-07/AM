@@ -3,6 +3,7 @@ import type { z } from "zod/v4";
 
 import type { ContractIssue, ContractResult } from "./errors.js";
 import { fail, issue, ok, sortIssues } from "./errors.js";
+import { normalizeUserBindings } from "./normalize-bindings.js";
 import type { ProjectContract } from "./schema/contract.js";
 import { ProjectContractSchema } from "./schema/contract.js";
 import { findSecrets } from "./secrets.js";
@@ -138,8 +139,9 @@ export function parseJsonDocument(text: string): ContractResult<unknown> {
  * and secret findings are merged so that a caller sees every problem at once
  * rather than fixing them one round-trip at a time.
  *
- * Invalid input is never repaired or partially applied: on failure the caller
- * receives issues and no contract.
+ * After schema defaults, duplicate user-declared architecture bindings from
+ * draft.4 are normalized as sets, preserving every association. Other invalid
+ * input is never repaired or partially applied: failure returns no contract.
  */
 export function validateProjectContract(
   document: unknown,
@@ -164,6 +166,9 @@ export function validateProjectContract(
   }
 
   const contract = parsed.data;
+  contract.architecture.decision_bindings = normalizeUserBindings(
+    contract.architecture.decision_bindings,
+  );
   const issues: ContractIssue[] = [...checkIntegrity(contract)];
 
   for (const finding of findSecrets(contract)) {

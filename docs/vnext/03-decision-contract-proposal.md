@@ -1,7 +1,7 @@
 # ANVILMARK Decision Contract Proposal
 
 Date: **August 17, 2026**  
-Proposed version: **`0.1.0-draft.1` in `packages/project-contract`**  
+Proposed version: **`0.1.0-draft.1` in `packages/project-contract`** (the implementation is at `0.1.0-draft.4` through amendments 1–4 in [`07-schema-amendment-proposal.md`](07-schema-amendment-proposal.md) and 6–7 in [`08-milestone-3-scope-proposal.md`](08-milestone-3-scope-proposal.md))\
 Status: **Design accepted with amendments and ratified by all three developers in [`06-contract-ratification-decision.md`](06-contract-ratification-decision.md)**
 
 ## Decision this document proposes

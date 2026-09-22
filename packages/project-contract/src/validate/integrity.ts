@@ -5,11 +5,12 @@ import type { EvidenceContext } from "../evidence-tiers.js";
 import {
   RATIFIED_EVIDENCE_FLOORS,
   evaluateConstraint,
-  isHardwareIdentityMismatch,
+  hardwareObservationProblem,
   tierRank,
 } from "../evidence-tiers.js";
 import type { ProjectContract } from "../schema/contract.js";
 import type { EvidenceKind, EvidenceRecord } from "../schema/evidence.js";
+import type { Hardware } from "../schema/resources.js";
 import { resolveDecision } from "../resolve.js";
 import { RATIFIED_DEFAULT_DENY } from "../schema/remote.js";
 
@@ -23,6 +24,7 @@ export type SubjectType =
   | "decision"
   | "architecture_node"
   | "architecture_relationship"
+  | "architecture_interface"
   | "repository_binding"
   | "conformance_rule"
   | "integration"
@@ -49,6 +51,7 @@ function buildIndex(contract: ProjectContract): {
     decision: new Map(),
     architecture_node: new Map(),
     architecture_relationship: new Map(),
+    architecture_interface: new Map(),
     repository_binding: new Map(),
     conformance_rule: new Map(),
     integration: new Map(),
@@ -93,6 +96,25 @@ function buildIndex(contract: ProjectContract): {
     "architecture.relationships",
     contract.architecture.relationships,
   );
+  // I1 (draft.5): interface ids are unique across the contract. The table
+  // maps each interface id to its owning node.
+  contract.architecture.nodes.forEach((node, nodePosition) => {
+    node.interfaces.forEach((entry, position) => {
+      const table = tables.architecture_interface;
+      if (table.has(entry.id)) {
+        issues.push(
+          issue(
+            "duplicate_id",
+            `architecture.nodes[${nodePosition}].interfaces[${position}].id`,
+            `duplicate architecture_interface id "${entry.id}"; interface ids must be unique across the contract`,
+            { id: entry.id, subject_type: "architecture_interface" },
+          ),
+        );
+        return;
+      }
+      table.set(entry.id, node.id);
+    });
+  });
   collect(
     "repository_binding",
     "repository_bindings",
@@ -117,9 +139,14 @@ function buildIndex(contract: ProjectContract): {
     }
   }
 
-  // Data classifications are project vocabulary, declared by workload inputs.
+  // Data classifications are project vocabulary, declared by workload inputs
+  // and, from draft.4, by declared workload outputs.
   const dataClassifications = new Set<string>(
-    contract.workloads.map((workload) => workload.input_classification),
+    contract.workloads.flatMap((workload) =>
+      workload.output_classification === null
+        ? [workload.input_classification]
+        : [workload.input_classification, workload.output_classification],
+    ),
   );
 
   return { index: { tables, global, dataClassifications }, issues };
@@ -197,6 +224,7 @@ function checkIntegrityInner(
     string,
     EvidenceRecord
   >;
+  const hardwareById = index.tables.hardware as ReadonlyMap<string, Hardware>;
 
   // --- project ---------------------------------------------------------
   const seenDomains = new Set<string>();
@@ -261,7 +289,7 @@ function checkIntegrityInner(
           issue(
             "constraint_subject_unresolved",
             `${base}.subject`,
-            `subject "${constraint.subject}" names data classification "${second}", which no workload declares as an input`,
+            `subject "${constraint.subject}" names data classification "${second}", which no workload declares as an input or output`,
             { subject: constraint.subject, data_classification: second },
           ),
         );
@@ -414,6 +442,14 @@ function checkIntegrityInner(
     }
 
     if (record.kind === "tool_observation") {
+      // A declared target and a detected machine are separate subjects with
+      // separate evidence kinds. Pointing either field at the wrong kind
+      // collapses the distinction decision 06 section 8 depends on.
+      const expectedKind = {
+        target_hardware_ref: "user_declared",
+        detected_hardware_ref: "deterministic_observation",
+      } as const;
+
       for (const field of [
         "target_hardware_ref",
         "detected_hardware_ref",
@@ -422,13 +458,43 @@ function checkIntegrityInner(
         if (ref === null) {
           continue;
         }
-        push(
-          checkRef(index, {
-            path: `${base}.value.${field}`,
-            value: ref,
-            expected: "hardware",
-            label: `tool observation ${field}`,
-          }),
+        const problem = checkRef(index, {
+          path: `${base}.value.${field}`,
+          value: ref,
+          expected: "hardware",
+          label: `tool observation ${field}`,
+        });
+        if (problem !== null) {
+          issues.push(problem);
+          continue;
+        }
+        const entry = hardwareById.get(ref);
+        if (
+          entry !== undefined &&
+          entry.evidence_kind !== expectedKind[field]
+        ) {
+          issues.push(
+            issue(
+              "reference_wrong_type",
+              `${base}.value.${field}`,
+              `${field} names hardware "${ref}", whose evidence kind is "${entry.evidence_kind}"; expected "${expectedKind[field]}"`,
+              { hardware: ref, evidence_kind: entry.evidence_kind },
+            ),
+          );
+        }
+      }
+
+      if (
+        record.value.target_hardware_ref !== null &&
+        record.value.target_hardware_ref === record.value.detected_hardware_ref
+      ) {
+        issues.push(
+          issue(
+            "reference_wrong_type",
+            `${base}.value.detected_hardware_ref`,
+            "a declared target and the machine that was inspected are separate subjects and cannot be the same entry",
+            { hardware: record.value.target_hardware_ref },
+          ),
         );
       }
     }
@@ -484,9 +550,11 @@ function checkIntegrityInner(
     }
 
     for (const [field, allowedKinds] of Object.entries(MEASUREMENT_KINDS)) {
-      const ref =
+      const raw =
         candidate.measurements[field as keyof typeof candidate.measurements];
-      if (ref === null || ref === undefined) {
+      // `expected_evaluation` sits alongside the refs but is not one.
+      const ref = typeof raw === "string" ? raw : null;
+      if (ref === null) {
         continue;
       }
       const path = `${base}.measurements.${field}`;
@@ -541,12 +609,15 @@ function checkIntegrityInner(
         );
       }
 
-      if (isHardwareIdentityMismatch(record)) {
+      const hardwareProblem = hardwareObservationProblem(record, (id) =>
+        hardwareById.get(id),
+      );
+      if (hardwareProblem !== null) {
         issues.push(
           issue(
             "estimate_presented_as_measurement",
             path,
-            `${field} cites hardware evidence "${ref}" whose declared target and detected hardware differ; a mismatched observation cannot describe the target`,
+            `${field} cites hardware evidence "${ref}" that cannot describe the target: ${hardwareProblem}`,
             {
               evidence: ref,
               target_hardware_ref:
@@ -639,9 +710,12 @@ function checkIntegrityInner(
         usageBasis === "measured" || candidate.estimates.assumptions.length > 0;
 
       const context: EvidenceContext = {
+        projectContract: contract,
         candidateRef: candidate.id,
         workloadRef: candidate.workload_ref,
         declaredTargetHardwareRefs: declaredTargetHardware,
+        resolveHardware: (id: string) => hardwareById.get(id),
+        expectedEvaluation: candidate.measurements.expected_evaluation,
         deploymentHardwareRef:
           candidate.deployment.mode === "local"
             ? candidate.deployment.hardware_ref
@@ -871,6 +945,46 @@ function checkIntegrityInner(
         }),
       );
     }
+    // I2/I3 (draft.5): interface references name an interface on the
+    // relationship's own endpoint, and only `connects` may name interfaces.
+    for (const [field, endpoint] of [
+      ["source_interface_ref", relationship.source],
+      ["destination_interface_ref", relationship.destination],
+    ] as const) {
+      const ref = relationship[field];
+      if (ref === null) continue;
+      if (relationship.kind !== "connects") {
+        issues.push(
+          issue(
+            "schema_violation",
+            `${base}.${field}`,
+            `only connects relationships may reference interfaces; "${relationship.id}" is ${relationship.kind}`,
+            { relationship: relationship.id, kind: relationship.kind },
+          ),
+        );
+        continue;
+      }
+      const owner = index.tables.architecture_interface.get(ref);
+      if (owner === undefined) {
+        push(
+          checkRef(index, {
+            path: `${base}.${field}`,
+            value: ref,
+            expected: "architecture_interface",
+            label: `relationship ${field}`,
+          }),
+        );
+      } else if (owner !== endpoint) {
+        issues.push(
+          issue(
+            "reference_wrong_type",
+            `${base}.${field}`,
+            `interface "${ref}" is declared on node "${String(owner)}", not on this relationship's ${field.startsWith("source") ? "source" : "destination"} node "${endpoint}"`,
+            { reference: ref, owner, expected_node: endpoint },
+          ),
+        );
+      }
+    }
     if (
       relationship.data_classification !== null &&
       !index.dataClassifications.has(relationship.data_classification)
@@ -879,15 +993,46 @@ function checkIntegrityInner(
         issue(
           "reference_not_found",
           `${base}.data_classification`,
-          `data classification "${relationship.data_classification}" is not declared as the input of any workload`,
+          `data classification "${relationship.data_classification}" is not declared as the input or output of any workload`,
           { data_classification: relationship.data_classification },
         ),
       );
     }
   });
 
+  const boundDecisions = new Map<string, number>();
   contract.architecture.decision_bindings.forEach((binding, position) => {
     const base = `architecture.decision_bindings[${position}]`;
+    // I4: one binding per decision after legacy user-binding normalization.
+    // Duplicates carrying agent provenance cannot be combined safely.
+    const earlier = boundDecisions.get(binding.decision_ref);
+    if (earlier !== undefined) {
+      issues.push(
+        issue(
+          "duplicate_id",
+          `${base}.decision_ref`,
+          `decision "${binding.decision_ref}" already has a binding at architecture.decision_bindings[${earlier}]; duplicate bindings carrying agent provenance cannot be combined`,
+          { decision: binding.decision_ref, subject_type: "decision_binding" },
+        ),
+      );
+    } else {
+      boundDecisions.set(binding.decision_ref, position);
+    }
+    // I5 (draft.5): no duplicate node in one binding.
+    const seen = new Set<string>();
+    binding.node_refs.forEach((ref, refPosition) => {
+      if (seen.has(ref)) {
+        issues.push(
+          issue(
+            "duplicate_id",
+            `${base}.node_refs[${refPosition}]`,
+            `node "${ref}" appears more than once in the binding for "${binding.decision_ref}"`,
+            { reference: ref, decision: binding.decision_ref },
+          ),
+        );
+      }
+      seen.add(ref);
+    });
     push(
       checkRef(index, {
         path: `${base}.decision_ref`,
@@ -949,7 +1094,7 @@ function checkIntegrityInner(
           issue(
             "reference_not_found",
             `${base}.from.data_classification`,
-            `data classification "${rule.from.data_classification}" is not declared as the input of any workload`,
+            `data classification "${rule.from.data_classification}" is not declared as the input or output of any workload`,
             { data_classification: rule.from.data_classification },
           ),
         );

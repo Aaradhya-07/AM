@@ -1,4 +1,7 @@
+import type { ProjectContract } from "./schema/contract.js";
+import { hardwareSizingEvidenceProblem } from "./hardware-sizing-evidence.js";
 import type { Constraint } from "./schema/constraints.js";
+import type { Hardware } from "./schema/resources.js";
 import type {
   EvidenceFloorSubject,
   EvidenceKind,
@@ -169,12 +172,19 @@ const CANDIDATE_SCOPED_SUBJECTS: ReadonlySet<EvidenceFloorSubject> = new Set([
  * simply omitting it.
  */
 export interface EvidenceContext {
+  readonly projectContract?: ProjectContract;
   /** The candidate whose result is being evaluated. */
   readonly candidateRef?: string | null;
   /** The workload that candidate serves. */
   readonly workloadRef?: string | null;
   /** Ids of hardware entries the user DECLARED, as opposed to detected ones. */
   readonly declaredTargetHardwareRefs?: readonly string[];
+  /**
+   * Resolves a hardware id to its entry. Required for hardware subjects,
+   * because whether an observation describes the target depends on what the
+   * two machines actually are, not on their ids.
+   */
+  readonly resolveHardware?: (id: string) => Hardware | undefined;
   /** The hardware this candidate actually deploys to. */
   readonly deploymentHardwareRef?: string | null;
   /**
@@ -188,6 +198,19 @@ export interface EvidenceContext {
    * Must be explicitly `true`.
    */
   readonly hasDeclaredUsageInputs?: boolean;
+  /**
+   * The evaluation identity the current candidate configuration expects.
+   *
+   * REQUIRED for a `measured_evaluation` to be admitted. Without it the
+   * contract can check that a result is internally complete but not that it
+   * describes THIS candidate as configured now, so a measurement of a
+   * superseded prompt or a different provider would still look like valid T3
+   * evidence. Absence fails closed.
+   */
+  readonly expectedEvaluation?: {
+    readonly provider_id: string;
+    readonly configuration_hash: string;
+  } | null;
 }
 
 /**
@@ -253,6 +276,12 @@ export function admitEvidence(
         : `this evidence supports ${appliesToConstraints.map((entry) => `"${entry}"`).join(", ")}, not "${constraint.id}"`,
     );
   }
+
+  const sizingProblem = hardwareSizingEvidenceProblem(
+    record,
+    supplied.projectContract,
+  );
+  if (sizingProblem !== null) return reject(sizingProblem);
 
   const floorSubject = floorSubjectForConstraint(constraint);
   if (floorSubject === null) {
@@ -328,6 +357,28 @@ export function admitEvidence(
     );
   }
 
+  // A measured evaluation must describe the candidate AS CONFIGURED NOW.
+  // Leaving this to a caller who remembers to ask separately is how a stale
+  // result keeps clearing a gate, so the check lives in admission itself.
+  if (record.kind === "measured_evaluation") {
+    const expected = supplied.expectedEvaluation;
+    if (expected === undefined || expected === null) {
+      return reject(
+        "no expected evaluation identity was supplied, so this measurement cannot be shown to describe the candidate's current configuration",
+      );
+    }
+    if (record.value.identity.provider_id !== expected.provider_id) {
+      return reject(
+        `this evaluation ran against provider "${record.value.identity.provider_id}" but the candidate is configured for "${expected.provider_id}"`,
+      );
+    }
+    if (record.value.configuration_hash !== expected.configuration_hash) {
+      return reject(
+        "this evaluation describes a different configuration from the candidate's current one",
+      );
+    }
+  }
+
   // --- hardware scope ------------------------------------------------------
   //
   // A benchmark is only evidence about the machine the candidate actually
@@ -353,21 +404,19 @@ export function admitEvidence(
     }
 
     if (record.kind === "tool_observation") {
-      const { target_hardware_ref: target, detected_hardware_ref: detected } =
-        record.value;
-      if (target === null || detected === null) {
+      const resolve = supplied.resolveHardware;
+      if (resolve === undefined) {
         return reject(
-          "a hardware observation must name both the target it describes and the machine it inspected",
+          `${floorSubject} needs to resolve the hardware this observation names, and no resolver was supplied`,
         );
       }
-      if (target !== detected) {
-        return reject(
-          `declared target "${target}" and detected hardware "${detected}" differ, so this observation is not evidence about the target`,
-        );
+      const problem = hardwareObservationProblem(record, resolve);
+      if (problem !== null) {
+        return reject(problem);
       }
-      if (target !== deployment) {
+      if (record.value.target_hardware_ref !== deployment) {
         return reject(
-          `this observation describes hardware "${target}", not the candidate's deployment target "${deployment}"`,
+          `this observation describes hardware "${String(record.value.target_hardware_ref)}", not the candidate's deployment target "${deployment}"`,
         );
       }
     } else if (appliesTo.hardware_ref === null) {
@@ -379,12 +428,19 @@ export function admitEvidence(
     }
   }
 
-  // Belt and braces for any hardware-shaped record reaching a non-hardware
+  // Belt and braces for a hardware-shaped record reaching a non-hardware
   // subject: a mismatched observation is never evidence about its target.
-  if (isHardwareIdentityMismatch(record)) {
-    return reject(
-      "declared target hardware and detected hardware differ, so this observation is not evidence about the target",
+  if (
+    record.kind === "tool_observation" &&
+    supplied.resolveHardware !== undefined
+  ) {
+    const problem = hardwareObservationProblem(
+      record,
+      supplied.resolveHardware,
     );
+    if (problem !== null) {
+      return reject(problem);
+    }
   }
 
   return ADMITTED;
@@ -457,22 +513,248 @@ export function floorSubjectForConstraint(
   }
 }
 
+/** Vendor and brand words that carry no model information. */
+const ACCELERATOR_BRAND_WORDS: ReadonlySet<string> = new Set([
+  "nvidia",
+  "geforce",
+  "amd",
+  "radeon",
+  "intel",
+  "arc",
+  "apple",
+  "gpu",
+]);
+
+function canonicalToken(value: string): string {
+  return value.toLowerCase().replace(/[\s_-]+/g, "");
+}
+
 /**
- * A hardware-fit tool observation can only speak for the target it actually
- * inspected. When the declared target and the detected machine differ, the
- * observation is not evidence about the target at all.
+ * Compare accelerator model names on WORD boundaries.
  *
- * Ratified in doc 06 section 8.
+ * A user writes "RTX 4090" and a detection tool reports
+ * "NVIDIA GeForce RTX 4090", so brand words are dropped before comparing. What
+ * remains must then be EQUAL, not merely contained: "RTX 4090 Ti" and
+ * "RTX 4070 SUPER" are different cards, and substring containment cannot tell
+ * them apart from the base models whose names they extend.
  */
-export function isHardwareIdentityMismatch(record: EvidenceRecord): boolean {
+export function acceleratorModelsMatch(
+  declared: string,
+  detected: string,
+): boolean {
+  const significant = (value: string): string[] =>
+    value
+      .toLowerCase()
+      .split(/[\s_-]+/)
+      .filter(
+        (token) => token.length > 0 && !ACCELERATOR_BRAND_WORDS.has(token),
+      );
+
+  const left = significant(declared);
+  const right = significant(detected);
+
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((token, index) => token === right[index]);
+}
+
+/**
+ * Compare a declared target machine with a detected one.
+ *
+ * Decision 06 sections 6 and 8 keep these as SEPARATE subjects: a user
+ * declaration of what they own, and a deterministic observation of what is
+ * actually present. They are different records with different ids and
+ * different evidence kinds, and they always will be — so identity can never be
+ * decided by comparing ids.
+ *
+ * The rule for this milestone is deliberately CONSERVATIVE: the two machines
+ * must be the same machine in every respect a fit result depends on — RAM, CPU
+ * core count, CPU model where the target names one, operating system, backend,
+ * and every accelerator's model, count and VRAM. "The detected machine has
+ * more" is not proof about a smaller target, and anything missing or
+ * incomparable yields no match, which the caller reports as `unknown`.
+ */
+export function hardwareCapabilitiesMatch(
+  declared: Hardware,
+  detected: Hardware,
+): { readonly matches: boolean; readonly reason: string } {
+  const declaredBackend = declared.backend ?? null;
+  const detectedBackend = detected.backend ?? null;
+
+  if (declaredBackend !== null && detectedBackend !== null) {
+    if (canonicalToken(declaredBackend) !== canonicalToken(detectedBackend)) {
+      return {
+        matches: false,
+        reason: `declared backend "${declaredBackend}" and detected backend "${detectedBackend}" differ`,
+      };
+    }
+  } else if (declaredBackend !== null || detectedBackend !== null) {
+    return {
+      matches: false,
+      reason:
+        "one of the declared target and the detected machine records a backend and the other does not, so they cannot be compared",
+    };
+  }
+
+  // A fit estimate depends on the whole machine. A CUDA-on-Linux estimate does
+  // not describe a macOS host even with an identical card, so an operating
+  // system difference invalidates rather than merely downgrades the evidence.
+  if (declared.operating_system !== detected.operating_system) {
+    return {
+      matches: false,
+      reason: `declared operating system "${declared.operating_system}" and detected "${detected.operating_system}" differ`,
+    };
+  }
+
+  // RAM and CPU must MATCH, not merely suffice.
+  //
+  // A measurement taken on a 64 GB / 16-core machine is not evidence about a
+  // 32 GB / 8-core target: the fit, the achievable context, and the throughput
+  // all differ. "The detected machine is bigger" says nothing about how the
+  // smaller one behaves, so anything other than equality is `unknown`.
+  if (detected.ram_gb !== declared.ram_gb) {
+    return {
+      matches: false,
+      reason: `declared RAM ${declared.ram_gb}GB and detected RAM ${detected.ram_gb}GB differ; a result from a different machine size does not transfer`,
+    };
+  }
+  if (detected.cpu.cores !== declared.cpu.cores) {
+    return {
+      matches: false,
+      reason: `declared CPU cores ${declared.cpu.cores} and detected ${detected.cpu.cores} differ; a result from a different machine size does not transfer`,
+    };
+  }
+  // The CPU model is compared only when the declared target names one: a
+  // target that does not specify a CPU is not making a claim about it.
+  if (declared.cpu.model !== null) {
+    if (detected.cpu.model === null) {
+      return {
+        matches: false,
+        reason: `the declared target names CPU "${declared.cpu.model}" but the detected machine reports none, so they cannot be compared`,
+      };
+    }
+    if (
+      canonicalToken(declared.cpu.model) !== canonicalToken(detected.cpu.model)
+    ) {
+      return {
+        matches: false,
+        reason: `declared CPU "${declared.cpu.model}" and detected "${detected.cpu.model}" differ`,
+      };
+    }
+  }
+
+  const declaredCount = declared.accelerators.reduce(
+    (sum, entry) => sum + entry.count,
+    0,
+  );
+  const detectedCount = detected.accelerators.reduce(
+    (sum, entry) => sum + entry.count,
+    0,
+  );
+  if (declaredCount !== detectedCount) {
+    return {
+      matches: false,
+      reason: `declared target has ${declaredCount} accelerator(s) but the detected machine has ${detectedCount}`,
+    };
+  }
+
+  if (declared.accelerators.length !== detected.accelerators.length) {
+    return {
+      matches: false,
+      reason: `declared target lists ${declared.accelerators.length} accelerator entr(ies) but the detected machine lists ${detected.accelerators.length}`,
+    };
+  }
+
+  const order = (entry: Hardware["accelerators"][number]): string =>
+    `${entry.vram_gb.toString().padStart(8, "0")}|${entry.count}`;
+  const declaredSorted = [...declared.accelerators].sort((left, right) =>
+    order(left) < order(right) ? -1 : 1,
+  );
+  const detectedSorted = [...detected.accelerators].sort((left, right) =>
+    order(left) < order(right) ? -1 : 1,
+  );
+
+  for (let index = 0; index < declaredSorted.length; index += 1) {
+    const declaredEntry = declaredSorted[index];
+    const detectedEntry = detectedSorted[index];
+    if (declaredEntry === undefined || detectedEntry === undefined) {
+      return {
+        matches: false,
+        reason: "accelerator lists could not be paired",
+      };
+    }
+    if (declaredEntry.vram_gb !== detectedEntry.vram_gb) {
+      return {
+        matches: false,
+        reason: `declared VRAM ${declaredEntry.vram_gb}GB and detected VRAM ${detectedEntry.vram_gb}GB differ`,
+      };
+    }
+    if (declaredEntry.count !== detectedEntry.count) {
+      return {
+        matches: false,
+        reason: `declared accelerator count ${declaredEntry.count} and detected count ${detectedEntry.count} differ`,
+      };
+    }
+    if (!acceleratorModelsMatch(declaredEntry.model, detectedEntry.model)) {
+      return {
+        matches: false,
+        reason: `declared accelerator "${declaredEntry.model}" and detected device "${detectedEntry.model}" differ`,
+      };
+    }
+  }
+
+  return {
+    matches: true,
+    reason:
+      "the detected machine has the capabilities the declared target claims",
+  };
+}
+
+/**
+ * Check a hardware-fit observation against the two machines it names.
+ *
+ * Returns `null` when the observation legitimately describes the declared
+ * target, and a reason when it does not. Requires a resolver because the
+ * question cannot be answered from the record alone: it depends on what the
+ * two referenced hardware entries actually say.
+ */
+export function hardwareObservationProblem(
+  record: EvidenceRecord,
+  resolve: (id: string) => Hardware | undefined,
+): string | null {
   if (record.kind !== "tool_observation") {
-    return false;
+    return null;
   }
-  const { target_hardware_ref, detected_hardware_ref } = record.value;
-  if (target_hardware_ref === null || detected_hardware_ref === null) {
-    return false;
+  const { target_hardware_ref: targetRef, detected_hardware_ref: detectedRef } =
+    record.value;
+
+  if (targetRef === null || detectedRef === null) {
+    return "a hardware observation must name both the target it describes and the machine it inspected";
   }
-  return target_hardware_ref !== detected_hardware_ref;
+  if (targetRef === detectedRef) {
+    // The two are different subjects by ratified design. Collapsing them hides
+    // whether anything was actually detected.
+    return "the declared target and the detected machine must be separate subjects, but this observation names the same entry for both";
+  }
+
+  const declared = resolve(targetRef);
+  const detected = resolve(detectedRef);
+  if (declared === undefined) {
+    return `declared target "${targetRef}" does not resolve to a hardware entry`;
+  }
+  if (detected === undefined) {
+    return `detected machine "${detectedRef}" does not resolve to a hardware entry`;
+  }
+  if (declared.evidence_kind !== "user_declared") {
+    return `"${targetRef}" is not a user-declared target`;
+  }
+  if (detected.evidence_kind !== "deterministic_observation") {
+    return `"${detectedRef}" is not a deterministic observation of a machine`;
+  }
+
+  const comparison = hardwareCapabilitiesMatch(declared, detected);
+  return comparison.matches ? null : comparison.reason;
 }
 
 export interface EvidenceAssessment {
@@ -620,6 +902,24 @@ export function evaluateConstraint(
       outcome: "unknown",
       assessment,
       explanation: "the recorded result is already unknown",
+    };
+  }
+
+  const contradictorySizing = citedEvidence.find(
+    (record) =>
+      record.kind === "tool_observation" &&
+      record.value?.estimate_basis?.format ===
+        "anvilmark-hardware-fit-evidence/1" &&
+      !assessment.excluded.some((entry) => entry.id === record.id) &&
+      record.value.findings.memory_fit !== true,
+  );
+  if (contradictorySizing) {
+    return {
+      outcome: "unknown",
+      assessment,
+      downgradedFrom: "pass",
+      explanation:
+        "The recomputed memory estimate exceeds its selected budget; an asserted pass contradicts that evidence.",
     };
   }
 

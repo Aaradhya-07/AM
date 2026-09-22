@@ -175,7 +175,16 @@ const WORKLOAD = "classification";
 const TARGET_HARDWARE = "hardware.declared_target";
 
 /** The context a real caller supplies for a candidate-scoped quality gate. */
-const qualityContext = { candidateRef: CANDIDATE, workloadRef: WORKLOAD };
+const EXPECTED_EVALUATION = {
+  provider_id: "example-provider",
+  configuration_hash: "cfg",
+} as const;
+
+const qualityContext = {
+  candidateRef: CANDIDATE,
+  workloadRef: WORKLOAD,
+  expectedEvaluation: EXPECTED_EVALUATION,
+};
 
 /** Evidence correctly attributed to the candidate and workload under test. */
 function attributed(id: string, kind: EvidenceKind): EvidenceRecord {
@@ -186,6 +195,15 @@ function attributed(id: string, kind: EvidenceKind): EvidenceRecord {
           dataset_version: "v1",
           candidate_ref: CANDIDATE,
           configuration_hash: "cfg",
+          identity: {
+            workload_ref: null,
+            dataset_hash: `sha256:${"a".repeat(64)}`,
+            prompt_hash: `sha256:${"b".repeat(64)}`,
+            evaluator_hash: `sha256:${"c".repeat(64)}`,
+            model_configuration_hash: `sha256:${"d".repeat(64)}`,
+            config_digest: `sha256:${"e".repeat(64)}`,
+            provider_id: "example-provider",
+          },
           metrics: { macro_f1: 0.95 },
           result_artifact_hash: "artifact",
         }
@@ -410,12 +428,21 @@ describe("declared target and detected local hardware stay separate subjects", (
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    const [target, detected] = result.value.resources.hardware;
+    const hardware = result.value.resources.hardware;
+    const target = hardware.find(
+      (entry) => entry.id === "hardware.declared_target",
+    );
+    const detectedLocal = hardware.find(
+      (entry) => entry.id === "hardware.detected_local",
+    );
+
     expect(target?.evidence_kind).toBe("user_declared");
-    expect(detected?.evidence_kind).toBe("deterministic_observation");
-    // The detected machine has no GPU; the declared target must not inherit it.
+    expect(detectedLocal?.evidence_kind).toBe("deterministic_observation");
+    // The detected machine has no GPU; the declared target must not inherit it,
+    // and the two remain separate entries with separate ids.
     expect(target?.accelerators).toHaveLength(1);
-    expect(detected?.accelerators).toHaveLength(0);
+    expect(detectedLocal?.accelerators).toHaveLength(0);
+    expect(target?.id).not.toBe(detectedLocal?.id);
   });
 
   it("refuses hardware-fit evidence whose target and detected machines differ", () => {
@@ -467,7 +494,7 @@ describe("declared target and detected local hardware stay separate subjects", (
         applies_to: { candidate_ref: "candidate.classification.local" },
         value: {
           target_hardware_ref: "hardware.declared_target",
-          detected_hardware_ref: "hardware.declared_target",
+          detected_hardware_ref: "hardware.detected_matching",
           findings: { fit_level: "good" },
         },
         confidence: "medium",
@@ -477,6 +504,10 @@ describe("declared target and detected local hardware stay separate subjects", (
       at(d, "candidates", 0).measurements = {
         quality_result_ref: "evidence.eval.classification",
         hardware_fit_evidence_ref: "evidence.fit.matched",
+        expected_evaluation: {
+          provider_id: "example-provider",
+          configuration_hash: "cfg-1",
+        },
       };
     });
 
@@ -820,6 +851,15 @@ describe("evidence must be about the thing it is cited for", () => {
             dataset_version: "v1",
             candidate_ref: "candidate.other",
             configuration_hash: "cfg",
+            identity: {
+              workload_ref: null,
+              dataset_hash: `sha256:${"a".repeat(64)}`,
+              prompt_hash: `sha256:${"b".repeat(64)}`,
+              evaluator_hash: `sha256:${"c".repeat(64)}`,
+              model_configuration_hash: `sha256:${"d".repeat(64)}`,
+              config_digest: `sha256:${"e".repeat(64)}`,
+              provider_id: "example-provider",
+            },
             metrics: { macro_f1: 0.95 },
             result_artifact_hash: "art",
           },
@@ -998,6 +1038,15 @@ describe("the evidence API fails closed on missing context", () => {
         dataset_version: "v1",
         candidate_ref: "candidate.someone_else",
         configuration_hash: "cfg",
+        identity: {
+          workload_ref: null,
+          dataset_hash: `sha256:${"a".repeat(64)}`,
+          prompt_hash: `sha256:${"b".repeat(64)}`,
+          evaluator_hash: `sha256:${"c".repeat(64)}`,
+          model_configuration_hash: `sha256:${"d".repeat(64)}`,
+          config_digest: `sha256:${"e".repeat(64)}`,
+          provider_id: "example-provider",
+        },
         metrics: { macro_f1: 0.99 },
         result_artifact_hash: "artifact",
       },
@@ -1285,6 +1334,15 @@ describe("evidence must be attributed to the constraint it supports", () => {
         dataset_version: "v1",
         candidate_ref: CANDIDATE,
         configuration_hash: "cfg",
+        identity: {
+          workload_ref: null,
+          dataset_hash: `sha256:${"a".repeat(64)}`,
+          prompt_hash: `sha256:${"b".repeat(64)}`,
+          evaluator_hash: `sha256:${"c".repeat(64)}`,
+          model_configuration_hash: `sha256:${"d".repeat(64)}`,
+          config_digest: `sha256:${"e".repeat(64)}`,
+          provider_id: "example-provider",
+        },
         metrics: { macro_f1: 0.93 },
         result_artifact_hash: "artifact",
       },
@@ -1315,10 +1373,23 @@ describe("evidence must be attributed to the constraint it supports", () => {
       dataset_version: "v1",
       candidate_ref: CANDIDATE,
       configuration_hash: "cfg",
+      identity: {
+        workload_ref: null,
+        dataset_hash: `sha256:${"a".repeat(64)}`,
+        prompt_hash: `sha256:${"b".repeat(64)}`,
+        evaluator_hash: `sha256:${"c".repeat(64)}`,
+        model_configuration_hash: `sha256:${"d".repeat(64)}`,
+        config_digest: `sha256:${"e".repeat(64)}`,
+        provider_id: "example-provider",
+      },
       metrics: { macro_f1: 0.93, p95_ms: 800 },
       result_artifact_hash: "artifact",
     };
-    const context = { candidateRef: CANDIDATE, workloadRef: WORKLOAD };
+    const context = {
+      candidateRef: CANDIDATE,
+      workloadRef: WORKLOAD,
+      expectedEvaluation: EXPECTED_EVALUATION,
+    };
 
     const onlyQuality = evidence("both", "measured_evaluation", value, {
       candidate_ref: CANDIDATE,
@@ -1518,6 +1589,127 @@ describe("usage inputs must come from the user, not a vendor", () => {
       costResult("agent_inference").some(
         (entry) => entry.code === "pass_below_evidence_floor",
       ),
+    ).toBe(true);
+  });
+});
+
+/**
+ * A measured evaluation is evidence about one candidate as configured now.
+ * Leaving that to a caller who remembers to ask separately is how a stale
+ * result keeps clearing a gate, so admission itself enforces it.
+ */
+describe("a measured evaluation must match the candidate's current identity", () => {
+  const evaluation = (
+    overrides: Record<string, unknown> = {},
+    identityOverrides: Record<string, unknown> = {},
+  ): EvidenceRecord =>
+    evidence(
+      "eval",
+      "measured_evaluation",
+      {
+        dataset_ref: "dataset.classification",
+        dataset_version: "v1",
+        candidate_ref: CANDIDATE,
+        configuration_hash: "cfg",
+        identity: {
+          workload_ref: WORKLOAD,
+          dataset_hash: `sha256:${"a".repeat(64)}`,
+          prompt_hash: `sha256:${"b".repeat(64)}`,
+          evaluator_hash: `sha256:${"c".repeat(64)}`,
+          model_configuration_hash: `sha256:${"d".repeat(64)}`,
+          config_digest: `sha256:${"e".repeat(64)}`,
+          provider_id: "example-provider",
+          ...identityOverrides,
+        },
+        metrics: { macro_f1: 0.95 },
+        result_artifact_hash: "artifact",
+        ...overrides,
+      },
+      {
+        candidate_ref: CANDIDATE,
+        workload_ref: WORKLOAD,
+        constraint_refs: ["quality.gate"],
+      },
+    );
+
+  it("passes when provider and configuration both match", () => {
+    expect(
+      evaluateConstraint(
+        hardQuality,
+        "pass",
+        [evaluation()],
+        emptyPolicy,
+        qualityContext,
+      ).outcome,
+    ).toBe("pass");
+  });
+
+  it("yields unknown when no expected identity is supplied", () => {
+    const result = evaluateConstraint(
+      hardQuality,
+      "pass",
+      [evaluation()],
+      emptyPolicy,
+      { candidateRef: CANDIDATE, workloadRef: WORKLOAD },
+    );
+
+    // Missing comparison context fails closed.
+    expect(result.outcome).toBe("unknown");
+    expect(result.assessment.excluded[0]?.reason).toContain(
+      "no expected evaluation identity",
+    );
+  });
+
+  it("yields unknown for the wrong provider", () => {
+    const result = evaluateConstraint(
+      hardQuality,
+      "pass",
+      [evaluation({}, { provider_id: "other-provider" })],
+      emptyPolicy,
+      qualityContext,
+    );
+
+    expect(result.outcome).toBe("unknown");
+    expect(result.assessment.excluded[0]?.reason).toContain("other-provider");
+  });
+
+  it("yields unknown for a stale candidate configuration", () => {
+    const result = evaluateConstraint(
+      hardQuality,
+      "pass",
+      [evaluation({ configuration_hash: "superseded-cfg" })],
+      emptyPolicy,
+      qualityContext,
+    );
+
+    expect(result.outcome).toBe("unknown");
+    expect(result.assessment.excluded[0]?.reason).toContain(
+      "different configuration",
+    );
+  });
+
+  it("cannot be recorded at all without a provider", () => {
+    const document = baseDocument();
+    const record = at(document, "evidence_refs", 0);
+    delete (
+      record.value as Record<string, unknown> & {
+        identity: Record<string, unknown>;
+      }
+    ).identity.provider_id;
+
+    const result = validateProjectContract(document);
+
+    // A nullable provider let "we never found out" look like a value.
+    expect(result.ok).toBe(false);
+  });
+
+  it("is refused by the contract when the candidate declares no expectation", () => {
+    const issues = issuesFor((d) => {
+      delete at(d, "candidates", 0, "measurements").expected_evaluation;
+    });
+
+    expect(
+      issues.some((entry) => entry.code === "pass_below_evidence_floor"),
     ).toBe(true);
   });
 });

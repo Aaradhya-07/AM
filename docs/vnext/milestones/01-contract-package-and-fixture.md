@@ -2,7 +2,7 @@
 
 Target: **Week 1**
 
-Status: **Complete — implemented in `packages/project-contract` at `0.1.0-draft.1`, corrected after independent review**
+Status: **Complete — originally implemented in `packages/project-contract` at `0.1.0-draft.1`, corrected after independent review. The implementation has since moved to `0.1.0-draft.3` through amendments 1–4, ratified on September 13, 2026 under the scoped acknowledgement exception in [`../07-schema-amendment-proposal.md`](../07-schema-amendment-proposal.md), and to `0.1.0-draft.4` through amendments 6–7 in [`../08-milestone-3-scope-proposal.md`](../08-milestone-3-scope-proposal.md), accepted on September 14, 2026 under a separate scoped exception.**
 
 Depends on: **Milestone 0 human gate (closed August 20, 2026)**
 
@@ -177,7 +177,7 @@ Agree the public package exports and structured-error shape before parallel work
 
 ## Exit checklist
 
-- [x] `packages/project-contract` exists at `0.1.0-draft.1`.
+- [x] `packages/project-contract` exists (created at `0.1.0-draft.1`; now `0.1.0-draft.4`).
 - [x] Historical `packages/contract` is unchanged.
 - [x] Atlas validates without fabricated decisions or evidence.
 - [x] Invalid references fail with structured errors.

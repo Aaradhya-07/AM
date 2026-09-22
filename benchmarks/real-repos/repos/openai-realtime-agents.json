@@ -1,0 +1,123 @@
+{
+  "name": "openai-realtime-agents",
+  "url": "https://github.com/openai/openai-realtime-agents.git",
+  "commit": "94c9e9116b581052655cff7b756cc5e02771cda1",
+  "install": ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"],
+  "ai_calls": [
+    {
+      "path": "src/app/api/responses/route.ts",
+      "line": 19,
+      "sdk": "openai",
+      "operation": "responses.parse",
+      "provider": "openai",
+      "model": "runtime",
+      "egress": "inference",
+      "note": "model comes from the proxied request body"
+    },
+    {
+      "path": "src/app/api/responses/route.ts",
+      "line": 33,
+      "sdk": "openai",
+      "operation": "responses.create",
+      "provider": "openai",
+      "model": "runtime",
+      "egress": "inference"
+    },
+    {
+      "path": "src/app/api/session/route.ts",
+      "line": 5,
+      "sdk": "http",
+      "operation": "POST realtime/sessions",
+      "provider": "openai",
+      "model": "literal:gpt-4o-realtime-preview-2025-06-03",
+      "egress": "management",
+      "note": "fetch to https://api.openai.com/v1/realtime/sessions"
+    },
+    {
+      "path": "src/app/hooks/useRealtimeSession.ts",
+      "line": 128,
+      "sdk": "openai-agents",
+      "operation": "RealtimeSession",
+      "provider": "openai",
+      "model": "runtime",
+      "egress": "inference",
+      "note": "@openai/agents-realtime browser session"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "ra-session-approved-model",
+      "description": "The realtime session route may only request the approved realtime model.",
+      "workload": {
+        "id": "realtime_session",
+        "input": "user_message"
+      },
+      "candidate": {
+        "component_kind": "model_runtime",
+        "mode": "managed_api",
+        "provider": "openai",
+        "model": "gpt-4o-realtime-preview",
+        "version": "gpt-4o-realtime-preview-2025-06-03",
+        "mutability": "pinned"
+      },
+      "rule": {
+        "kind": "approved_candidate_only"
+      },
+      "scanner": {
+        "sinks": [
+          {
+            "id": "sink.openai",
+            "recognizer": "openai"
+          }
+        ],
+        "components": [
+          {
+            "path": "src/app/api/session/route.ts"
+          }
+        ]
+      },
+      "expected": {
+        "verdict": "pass",
+        "acceptable": ["pass"],
+        "why": "a literal HTTPS POST to api.openai.com with the literal model gpt-4o-realtime-preview-2025-06-03"
+      }
+    },
+    {
+      "id": "ra-proxy-model",
+      "description": "The responses proxy may only use the approved model.",
+      "workload": {
+        "id": "supervisor",
+        "input": "user_message"
+      },
+      "candidate": {
+        "component_kind": "model_runtime",
+        "mode": "managed_api",
+        "provider": "openai",
+        "model": "gpt-4.1",
+        "version": "gpt-4.1",
+        "mutability": "pinned"
+      },
+      "rule": {
+        "kind": "approved_candidate_only"
+      },
+      "scanner": {
+        "sinks": [
+          {
+            "id": "sink.openai",
+            "recognizer": "openai"
+          }
+        ],
+        "components": [
+          {
+            "path": "src/app/api/responses/route.ts"
+          }
+        ]
+      },
+      "expected": {
+        "verdict": "unknown",
+        "acceptable": ["unknown"],
+        "why": "the model is whatever the caller sends in the request body"
+      }
+    }
+  ]
+}

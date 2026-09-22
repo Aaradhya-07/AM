@@ -5,11 +5,29 @@ Status: **Execution companion to the ratified vertical-slice plan**
 
 This directory turns the summary in [`../04-vertical-slice-build-plan.md`](../04-vertical-slice-build-plan.md) into an executable handbook for three developers and their coding agents.
 
+Execution status, September 19, 2026: **Milestones 1–6 are reviewed and merged
+into `main`. M7 onboarding tooling is also verified and merged into `main`;
+real-project approval and agent acceptance remain open. Two bodies of post-M7
+work are merged into `main`: repository-scanning and conformance hardening
+against public repositories, and hardware sizing with bounded inventory
+collection and explicit local evidence attachment.** See the
+[M6 correction record](06-correction-record.md), the
+[M7 onboarding record](07-onboarding-record.md), the
+[real-repository hardening record](08-real-repository-hardening.md) and the
+[hardware sizing record](../../handoffs/hardware-sizing-implementation.md),
+whose supported scope is stated in
+[`packages/hardware-sizing/README.md`](../../../packages/hardware-sizing/README.md).
+The M5 record includes the R1–R4 review corrections at `b4b4157` and merge
+of branch head `33d0656`. The M4 record is in
+[`04-architecture-and-generated-context.md`](04-architecture-and-generated-context.md);
+the M5 record is in
+[`05-repository-mapping.md`](05-repository-mapping.md#review-and-merge-record--september-15-2026).
+
 ## Authority
 
 Use the documents in this order when statements conflict:
 
-1. [`../06-contract-ratification-decision.md`](../06-contract-ratification-decision.md) — contract, evidence, approval, security, CALM, language, and acceptance-test decisions;
+1. [`../06-contract-ratification-decision.md`](../06-contract-ratification-decision.md), as amended by ratified amendments 1–4 in [`../07-schema-amendment-proposal.md`](../07-schema-amendment-proposal.md) — contract, evidence, approval, security, CALM, language, and acceptance-test decisions; document 07 also records the scoped acknowledgement exception for those amendments only; and by amendments 6–7 and the Milestone 3 scope decisions in [`../08-milestone-3-scope-proposal.md`](../08-milestone-3-scope-proposal.md), accepted under a separate exception scoped to those four decisions; and by amendments 8–9 and the Milestone 4 interpretations in [`../09-milestone-4-architecture-amendment-proposal.md`](../09-milestone-4-architecture-amendment-proposal.md), accepted by Anurag under a further exception scoped to those Milestone 4 decisions;
 2. [`../04-vertical-slice-build-plan.md`](../04-vertical-slice-build-plan.md) — milestone order, product scope, ownership, and stop triggers;
 3. the detailed milestone files in this directory — execution detail;
 4. older research and validation documents — historical evidence only.

@@ -2,23 +2,35 @@
   "name": "@anvilmark/web",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "build": "next build --webpack",
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "start": "next start",
-    "test": "vitest run"
+    "test": "vitest run",
+    "smoke:playground": "node scripts/smoke-playground.mjs"
   },
   "dependencies": {
+    "@anvilmark/conformance": "workspace:*",
+    "@anvilmark/context": "workspace:*",
     "@anvilmark/contract": "workspace:*",
+    "@anvilmark/hardware-sizing": "workspace:*",
+    "@anvilmark/project-contract": "workspace:*",
+    "@anvilmark/scanner": "workspace:*",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.116.0",
     "next": "^16.0.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "typescript": "^5.7.0",
+    "zod": "^4.2.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.4.0",
+    "happy-dom": "^20.14.5",
     "postcss": "^8.5.0",
     "tailwindcss": "^3.4.0"
   }

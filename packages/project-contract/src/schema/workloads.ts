@@ -33,15 +33,49 @@ export const UsageBasisSchema = z.enum([
   "measured",
   "vendor_claim",
   "agent_inference",
+  /** Amendment 6: the monthly call volume is not known yet. */
+  "unknown",
 ]);
 
-export const ExpectedUsageSchema = z.strictObject({
-  basis: UsageBasisSchema,
-  calls_per_month: z.number().nonnegative(),
-  input_tokens_per_call: z.number().nonnegative().nullable().default(null),
-  output_tokens_per_call: z.number().nonnegative().nullable().default(null),
-  reasoning_tokens_per_call: z.number().nonnegative().nullable().default(null),
-});
+/**
+ * Amendment 6 (draft.4): a workload can be recorded before its volume is known.
+ *
+ * `calls_per_month` is a required key whose value may be `null`, and `null` is
+ * allowed exactly when `basis` is `unknown`. Unknown is therefore always written
+ * explicitly and can never be read as zero. Evidence rules accept only
+ * `user_assumption` or `measured` as usage inputs, so a projected cost
+ * comparison stays unknown for a workload whose usage is unknown.
+ */
+export const ExpectedUsageSchema = z
+  .strictObject({
+    basis: UsageBasisSchema,
+    calls_per_month: z.number().nonnegative().nullable(),
+    input_tokens_per_call: z.number().nonnegative().nullable().default(null),
+    output_tokens_per_call: z.number().nonnegative().nullable().default(null),
+    reasoning_tokens_per_call: z
+      .number()
+      .nonnegative()
+      .nullable()
+      .default(null),
+  })
+  .superRefine((value, context) => {
+    if (value.calls_per_month === null && value.basis !== "unknown") {
+      context.addIssue({
+        code: "custom",
+        path: ["basis"],
+        message:
+          'calls_per_month is null (unknown), so basis must be "unknown"; an unknown volume cannot have been assumed, measured or claimed',
+      });
+    }
+    if (value.calls_per_month !== null && value.basis === "unknown") {
+      context.addIssue({
+        code: "custom",
+        path: ["calls_per_month"],
+        message:
+          'basis is "unknown", so calls_per_month must be null; a number with an unknown basis would present a guess as data',
+      });
+    }
+  });
 
 export type ExpectedUsage = z.infer<typeof ExpectedUsageSchema>;
 
@@ -81,6 +115,12 @@ export const WorkloadSchema = z.strictObject({
   id: IdSchema,
   name: NonEmptyStringSchema,
   input_classification: DataClassificationSchema,
+  /**
+   * Amendment 7 (draft.4): the data classification of what the workload
+   * produces. `null` means not declared, which is unknown -- never "not
+   * sensitive". The output FORMAT is `output_contract`.
+   */
+  output_classification: DataClassificationSchema.nullable().default(null),
   output_contract: OutputContractSchema,
   expected_usage: ExpectedUsageSchema,
   latency: LatencyRequirementSchema.nullable().default(null),

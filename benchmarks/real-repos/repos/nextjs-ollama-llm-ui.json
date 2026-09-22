@@ -1,0 +1,88 @@
+{
+  "name": "nextjs-ollama-llm-ui",
+  "url": "https://github.com/jakobhoeg/nextjs-ollama-llm-ui.git",
+  "commit": "79c53f4ab0db3ebe18e9389e56eb639e1371c75f",
+  "install": ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"],
+  "ai_calls": [
+    {
+      "path": "src/app/api/chat/route.ts",
+      "line": 28,
+      "sdk": "ai-sdk",
+      "operation": "streamText",
+      "provider": "runtime:ollama",
+      "model": "runtime",
+      "egress": "inference",
+      "note": "ollama-ai-provider with baseURL from OLLAMA_URL"
+    },
+    {
+      "path": "src/app/api/model/route.ts",
+      "line": 7,
+      "sdk": "http",
+      "operation": "POST api/pull",
+      "provider": "runtime:ollama",
+      "model": "none",
+      "egress": "management"
+    },
+    {
+      "path": "src/app/api/tags/route.ts",
+      "line": 7,
+      "sdk": "http",
+      "operation": "GET api/tags",
+      "provider": "runtime:ollama",
+      "model": "none",
+      "egress": "management"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "no-chat-stays-local",
+      "description": "Chat messages must not reach a remote provider.",
+      "workload": {
+        "id": "chat",
+        "input": "user_message"
+      },
+      "candidate": {
+        "component_kind": "model_runtime",
+        "mode": "local",
+        "runtime": "ollama",
+        "model": "llama3.2",
+        "version": "llama3.2",
+        "mutability": "pinned"
+      },
+      "rule": {
+        "kind": "forbid_dataflow",
+        "classification": "user_message"
+      },
+      "scanner": {
+        "sources": [
+          {
+            "id": "source.chat_request",
+            "data_classification": "user_message",
+            "function": {
+              "path": "src/app/api/chat/route.ts",
+              "export": "POST"
+            },
+            "from": "parameter",
+            "parameter": 0
+          }
+        ],
+        "sinks": [
+          {
+            "id": "sink.ai_sdk",
+            "recognizer": "ai-sdk"
+          }
+        ],
+        "components": [
+          {
+            "path": "src/app/api/chat/route.ts"
+          }
+        ]
+      },
+      "expected": {
+        "verdict": "unknown",
+        "acceptable": ["unknown"],
+        "why": "the Ollama base URL comes from OLLAMA_URL, which may be remote"
+      }
+    }
+  ]
+}

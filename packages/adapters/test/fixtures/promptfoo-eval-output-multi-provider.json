@@ -1,0 +1,94 @@
+{
+  "evalId": "eval-2026-08-20T11:00:00-multi",
+  "results": {
+    "version": 3,
+    "timestamp": "2026-08-20T10:30:00.000Z",
+    "prompts": [
+      {
+        "raw": "Classify the ticket: {{ticket}}",
+        "label": "classification-v1",
+        "provider": "example:model-a",
+        "metrics": {
+          "score": 0.93,
+          "testPassCount": 38,
+          "testFailCount": 2,
+          "assertPassCount": 76,
+          "assertFailCount": 4,
+          "totalLatencyMs": 32800,
+          "tokenUsage": {
+            "total": 38400,
+            "prompt": 36000,
+            "completion": 2400,
+            "cached": 0,
+            "numRequests": 40
+          },
+          "namedScores": {
+            "macro_f1": 0.93,
+            "schema_validity": 0.99
+          },
+          "cost": 0.0192
+        }
+      },
+      {
+        "raw": "Classify the ticket: {{ticket}}",
+        "label": "classification-v1-b",
+        "provider": "example:model-b",
+        "metrics": {
+          "score": 0.93,
+          "testPassCount": 38,
+          "testFailCount": 2,
+          "assertPassCount": 76,
+          "assertFailCount": 4,
+          "totalLatencyMs": 32800,
+          "tokenUsage": {
+            "total": 38400,
+            "prompt": 36000,
+            "completion": 2400,
+            "cached": 0,
+            "numRequests": 40
+          },
+          "namedScores": {
+            "macro_f1": 0.93,
+            "schema_validity": 0.99
+          },
+          "cost": 0.0192
+        }
+      }
+    ],
+    "results": [
+      {
+        "success": true,
+        "score": 1,
+        "provider": {
+          "id": "example:model-a",
+          "label": "A"
+        }
+      },
+      {
+        "success": true,
+        "score": 1,
+        "provider": {
+          "id": "example:model-b",
+          "label": "B"
+        }
+      }
+    ],
+    "stats": {
+      "successes": 38,
+      "failures": 2,
+      "errors": 0,
+      "tokenUsage": {
+        "total": 38400,
+        "prompt": 36000,
+        "completion": 2400,
+        "cached": 0,
+        "numRequests": 40
+      }
+    }
+  },
+  "config": {
+    "description": "Atlas classification evaluation",
+    "providers": ["example:model-a"]
+  },
+  "shareableUrl": null
+}

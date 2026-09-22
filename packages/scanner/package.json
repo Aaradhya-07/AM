@@ -1,0 +1,29 @@
+{
+  "name": "@anvilmark/scanner",
+  "version": "0.1.0-draft.1",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "tsc -b && vitest run"
+  },
+  "dependencies": {
+    "@anvilmark/context": "workspace:*",
+    "@anvilmark/project-contract": "workspace:*",
+    "typescript": "5.9.3",
+    "zod": "^4.2.0"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"],
+  "references": [
+    {
+      "path": "../hardware-sizing"
+    },
+    {
+      "path": "../project-contract"
+    },
+    {
+      "path": "../adapters"
+    },
+    {
+      "path": "../context"
+    },
+    {
+      "path": "../scanner"
+    },
+    {
+      "path": "../conformance"
+    }
+  ]
+}

@@ -1,0 +1,361 @@
+{
+  "name": "chatbot-ui",
+  "url": "https://github.com/mckaywrigley/chatbot-ui.git",
+  "commit": "81328b61d2a4ab597a7a057be70e785cf756d9f8",
+  "install": ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"],
+  "ai_calls": [
+    {
+      "path": "app/api/assistants/openai/route.ts",
+      "line": 18,
+      "sdk": "openai",
+      "operation": "beta.assistants.list",
+      "provider": "openai",
+      "model": "none",
+      "egress": "management"
+    },
+    {
+      "path": "app/api/chat/anthropic/route.ts",
+      "line": 63,
+      "sdk": "anthropic",
+      "operation": "messages.create",
+      "provider": "anthropic",
+      "model": "runtime",
+      "egress": "inference"
+    },
+    {
+      "path": "app/api/chat/azure/route.ts",
+      "line": 54,
+      "sdk": "openai",
+      "operation": "chat.completions.create",
+      "provider": "runtime:azure_openai",
+      "model": "runtime",
+      "egress": "inference",
+      "note": "baseURL built from profile settings"
+    },
+    {
+      "path": "app/api/chat/custom/route.ts",
+      "line": 40,
+      "sdk": "openai",
+      "operation": "chat.completions.create",
+      "provider": "runtime",
+      "model": "runtime",
+      "egress": "inference",
+      "note": "baseURL from a user-defined custom model"
+    },
+    {
+      "path": "app/api/chat/google/route.ts",
+      "line": 31,
+      "sdk": "google-generative-ai",
+      "operation": "ChatSession.sendMessageStream",
+      "provider": "google",
+      "model": "runtime",
+      "egress": "inference"
+    },
+    {
+      "path": "app/api/chat/groq/route.ts",
+      "line": 26,
+      "sdk": "openai",
+      "operation": "chat.completions.create",
+      "provider": "groq",
+      "model": "runtime",
+      "egress": "inference",
+      "note": "OpenAI SDK with literal baseURL https://api.groq.com/openai/v1"
+    },
+    {
+      "path": "app/api/chat/mistral/route.ts",
+      "line": 27,
+      "sdk": "openai",
+      "operation": "chat.completions.create",
+      "provider": "mistral",
+      "model": "runtime",
+      "egress": "inference",
+      "note": "literal baseURL https://api.mistral.ai/v1"
+    },
+    {
+      "path": "app/api/chat/openai/route.ts",
+      "line": 27,
+      "sdk": "openai",
+      "operation": "chat.completions.create",
+      "provider": "openai",
+      "model": "runtime",
+      "egress": "inference"
+    },
+    {
+      "path": "app/api/chat/openrouter/route.ts",
+      "line": 27,
+      "sdk": "openai",
+      "operation": "chat.completions.create",
+      "provider": "openrouter",
+      "model": "runtime",
+      "egress": "inference",
+      "note": "literal baseURL https://openrouter.ai/api/v1"
+    },
+    {
+      "path": "app/api/chat/perplexity/route.ts",
+      "line": 26,
+      "sdk": "openai",
+      "operation": "chat.completions.create",
+      "provider": "perplexity",
+      "model": "runtime",
+      "egress": "inference",
+      "note": "literal baseURL https://api.perplexity.ai/"
+    },
+    {
+      "path": "app/api/chat/tools/route.ts",
+      "line": 62,
+      "sdk": "openai",
+      "operation": "chat.completions.create",
+      "provider": "openai",
+      "model": "runtime",
+      "egress": "inference"
+    },
+    {
+      "path": "app/api/chat/tools/route.ts",
+      "line": 201,
+      "sdk": "openai",
+      "operation": "chat.completions.create",
+      "provider": "openai",
+      "model": "runtime",
+      "egress": "inference"
+    },
+    {
+      "path": "app/api/command/route.ts",
+      "line": 23,
+      "sdk": "openai",
+      "operation": "chat.completions.create",
+      "provider": "openai",
+      "model": "literal:gpt-4-1106-preview",
+      "egress": "inference"
+    },
+    {
+      "path": "app/api/retrieval/process/docx/route.ts",
+      "line": 65,
+      "sdk": "openai",
+      "operation": "embeddings.create",
+      "provider": "runtime:openai|azure_openai",
+      "model": "literal:text-embedding-3-small",
+      "egress": "embedding"
+    },
+    {
+      "path": "app/api/retrieval/process/route.ts",
+      "line": 118,
+      "sdk": "openai",
+      "operation": "embeddings.create",
+      "provider": "runtime:openai|azure_openai",
+      "model": "literal:text-embedding-3-small",
+      "egress": "embedding"
+    },
+    {
+      "path": "app/api/retrieval/retrieve/route.ts",
+      "line": 52,
+      "sdk": "openai",
+      "operation": "embeddings.create",
+      "provider": "runtime:openai|azure_openai",
+      "model": "literal:text-embedding-3-small",
+      "egress": "embedding"
+    },
+    {
+      "path": "lib/models/fetch-models.ts",
+      "line": 84,
+      "sdk": "http",
+      "operation": "GET models",
+      "provider": "openrouter",
+      "model": "none",
+      "egress": "management",
+      "note": "fetch to https://openrouter.ai/api/v1/models"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "cb-chat-openai-only",
+      "description": "Chat may only use the approved OpenAI model gpt-4o.",
+      "workload": {
+        "id": "chat",
+        "input": "user_message"
+      },
+      "candidate": {
+        "component_kind": "model_runtime",
+        "mode": "managed_api",
+        "provider": "openai",
+        "model": "gpt-4o",
+        "version": "gpt-4o-2024-08-06",
+        "mutability": "pinned"
+      },
+      "rule": {
+        "kind": "approved_candidate_only"
+      },
+      "scanner": {
+        "sinks": [
+          {
+            "id": "sink.openai",
+            "recognizer": "openai"
+          }
+        ],
+        "components": [
+          {
+            "path": "app/api/chat/anthropic/route.ts"
+          },
+          {
+            "path": "app/api/chat/azure/route.ts"
+          },
+          {
+            "path": "app/api/chat/custom/route.ts"
+          },
+          {
+            "path": "app/api/chat/google/route.ts"
+          },
+          {
+            "path": "app/api/chat/groq/route.ts"
+          },
+          {
+            "path": "app/api/chat/mistral/route.ts"
+          },
+          {
+            "path": "app/api/chat/openai/route.ts"
+          },
+          {
+            "path": "app/api/chat/openrouter/route.ts"
+          },
+          {
+            "path": "app/api/chat/perplexity/route.ts"
+          },
+          {
+            "path": "app/api/chat/tools/route.ts"
+          }
+        ]
+      },
+      "expected": {
+        "verdict": "fail",
+        "acceptable": ["fail"],
+        "evidence_any": [
+          "app/api/chat/anthropic/route.ts",
+          "app/api/chat/groq/route.ts",
+          "app/api/chat/mistral/route.ts",
+          "app/api/chat/openrouter/route.ts",
+          "app/api/chat/perplexity/route.ts"
+        ],
+        "why": "Anthropic (SDK default endpoint) and Groq, Mistral, OpenRouter and Perplexity (OpenAI SDK with literal non-OpenAI base URLs) are all providers other than the approved OpenAI candidate"
+      }
+    },
+    {
+      "id": "cb-retrieval-embeddings",
+      "description": "Document embeddings may only use OpenAI text-embedding-3-small.",
+      "workload": {
+        "id": "retrieval",
+        "input": "user_document"
+      },
+      "candidate": {
+        "component_kind": "embedding_model",
+        "mode": "managed_api",
+        "provider": "openai",
+        "model": "text-embedding-3-small",
+        "version": "text-embedding-3-small",
+        "mutability": "pinned"
+      },
+      "rule": {
+        "kind": "approved_candidate_only"
+      },
+      "scanner": {
+        "sinks": [
+          {
+            "id": "sink.openai",
+            "recognizer": "openai"
+          }
+        ],
+        "components": [
+          {
+            "path": "app/api/retrieval/process/route.ts"
+          },
+          {
+            "path": "app/api/retrieval/process/docx/route.ts"
+          },
+          {
+            "path": "app/api/retrieval/retrieve/route.ts"
+          }
+        ]
+      },
+      "expected": {
+        "verdict": "unknown",
+        "acceptable": ["unknown"],
+        "why": "the literal model matches, but the client may be an Azure endpoint chosen from profile settings at run time"
+      }
+    },
+    {
+      "id": "cb-command-model",
+      "description": "The command route may only use the approved model gpt-4-1106-preview.",
+      "workload": {
+        "id": "command",
+        "input": "user_message"
+      },
+      "candidate": {
+        "component_kind": "model_runtime",
+        "mode": "managed_api",
+        "provider": "openai",
+        "model": "gpt-4-1106-preview",
+        "version": "gpt-4-1106-preview",
+        "mutability": "pinned"
+      },
+      "rule": {
+        "kind": "approved_candidate_only"
+      },
+      "scanner": {
+        "sinks": [
+          {
+            "id": "sink.openai",
+            "recognizer": "openai"
+          }
+        ],
+        "components": [
+          {
+            "path": "app/api/command/route.ts"
+          }
+        ]
+      },
+      "expected": {
+        "verdict": "pass",
+        "acceptable": ["pass"],
+        "why": "a default OpenAI client and the literal model gpt-4-1106-preview"
+      },
+      "held_out": "added 2026-09-17 after the scanner changes; expectation written from the code before its first run"
+    },
+    {
+      "id": "cb-command-wrong-model",
+      "description": "The command route may only use gpt-4o.",
+      "workload": {
+        "id": "command",
+        "input": "user_message"
+      },
+      "candidate": {
+        "component_kind": "model_runtime",
+        "mode": "managed_api",
+        "provider": "openai",
+        "model": "gpt-4o",
+        "version": "gpt-4o-2024-08-06",
+        "mutability": "pinned"
+      },
+      "rule": {
+        "kind": "approved_candidate_only"
+      },
+      "scanner": {
+        "sinks": [
+          {
+            "id": "sink.openai",
+            "recognizer": "openai"
+          }
+        ],
+        "components": [
+          {
+            "path": "app/api/command/route.ts"
+          }
+        ]
+      },
+      "expected": {
+        "verdict": "fail",
+        "acceptable": ["fail"],
+        "evidence_path": "app/api/command/route.ts",
+        "why": "the route calls gpt-4-1106-preview"
+      },
+      "held_out": "added 2026-09-17 after the scanner changes; expectation written from the code before its first run"
+    }
+  ]
+}

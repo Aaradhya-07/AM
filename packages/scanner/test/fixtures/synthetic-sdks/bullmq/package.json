@@ -1,0 +1,6 @@
+{
+  "name": "bullmq",
+  "version": "5.0.0-synthetic",
+  "types": "index.d.ts",
+  "main": "index.js"
+}
