@@ -49,6 +49,22 @@ anvilmark hardware recommend --file scenario.json
 Exact integer-byte memory arithmetic over pinned model metadata, with every
 unbudgeted component left explicitly unknown rather than assumed.
 
+## Model research
+
+```bash
+anvilmark quality benchmarks --search SWE-bench
+anvilmark quality leaderboard SWE-bench/SWE-bench_Verified --limit 10
+anvilmark quality model openai/gpt-oss-20b
+```
+
+These commands fetch public Hugging Face benchmark results with source links,
+verification flags, and retrieval dates. `quality catalog` can fetch the
+Artificial Analysis Free language-model catalog with an
+`ARTIFICIAL_ANALYSIS_API_KEY`; its data is for internal use with attribution.
+Use `quality cache --help` for an optional local SQLite history on Node 24.
+Public scores help research candidates; a project's hard quality gate still
+needs a matching measured evaluation.
+
 ## MCP
 
 Two read-only MCP servers ship with the package: `anvilmark-project-mcp`

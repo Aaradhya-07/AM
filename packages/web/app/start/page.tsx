@@ -49,6 +49,50 @@ export default function StartPage() {
         </div>
 
         <div className="mx-auto max-w-[108rem] px-5 py-12 sm:px-8">
+          <div className="mb-8 rounded border border-gold/35 bg-surface p-6">
+            <h2 className="text-xl font-medium text-canvas">
+              Start in the browser
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm text-sand/70">
+              Draft an idea, workload, restrictions, and model candidates, then
+              download a schema-valid contract for the local CLI. The browser
+              comparison records unknown evidence; it does not approve a model.
+            </p>
+            <Link
+              href="/demo"
+              className="mt-4 inline-block text-sm text-gold hover:underline"
+            >
+              Create a draft contract →
+            </Link>
+          </div>
+          <div className="mb-8 rounded border border-line-muted bg-surface p-6">
+            <h2 className="text-xl font-medium text-canvas">
+              Browser → CLI → MCP
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm text-sand/70">
+              The hosted browser creates a downloadable draft. Import it into a
+              local project, add evidence, and approve decisions there. The
+              project MCP server reads that same local project for a coding
+              agent; the hosted website does not connect to a local stdio MCP
+              server.
+            </p>
+            <pre className="mt-4 overflow-x-auto rounded bg-ink p-3 font-mono text-xs text-sand">{`anvilmark init --from-contract ./support-triage.anvilmark.json
+anvilmark compare
+anvilmark status`}</pre>
+            <p className="mt-3 text-xs text-sand/60">
+              For Codex or Claude Code setup, see the{" "}
+              <a
+                href={`${GITHUB_URL}/blob/main/packages/mcp/README.md`}
+                className="text-gold hover:underline"
+              >
+                project MCP guide
+              </a>
+              . Use{" "}
+              <code className="font-mono text-gold">anvilmark-project-mcp</code>
+              ; the older <code className="font-mono">anvilmark-mcp</code>{" "}
+              command serves fixture data.
+            </p>
+          </div>
           <div className="mb-8 rounded border border-line-muted bg-surface p-6">
             <h2 className="text-xl font-medium text-canvas">
               Set up the CLI from a checkout

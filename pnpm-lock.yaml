@@ -59,6 +59,9 @@ importers:
       '@anvilmark/hardware-sizing':
         specifier: workspace:*
         version: link:../hardware-sizing
+      '@anvilmark/model-catalog':
+        specifier: workspace:*
+        version: link:../model-catalog
       '@anvilmark/project-contract':
         specifier: workspace:*
         version: link:../project-contract
@@ -144,6 +147,12 @@ importers:
         specifier: ^4.2.0
         version: 4.4.3
 
+  packages/model-catalog:
+    dependencies:
+      '@anvilmark/adapters':
+        specifier: workspace:*
+        version: link:../adapters
+
   packages/project-contract:
     dependencies:
       '@anvilmark/hardware-sizing':
@@ -177,6 +186,9 @@ importers:
 
   packages/web:
     dependencies:
+      '@anvilmark/adapters':
+        specifier: workspace:*
+        version: link:../adapters
       '@anvilmark/conformance':
         specifier: workspace:*
         version: link:../conformance

@@ -42,20 +42,87 @@ declined. A refused, failed or cancelled command writes nothing to the contract.
 
 ## Commands
 
-| Area         | Commands                                                                                                |
-| ------------ | ------------------------------------------------------------------------------------------------------- |
-| Start        | `init`, `status`, `validate`, `history`                                                                 |
-| Describe     | `elicit`, `intent`, `workload`, `constraint`, `priority`, `hardware`, `budget`, `candidate`, `evidence` |
-| Intelligence | `intelligence list\|select`, `propose preview\|send\|export\|import`                                    |
-| Decide       | `compare`, `decision draft\|propose\|revise\|reject`, `review`, `approve`, `approval status`            |
-| Architecture | `architecture show\|validate\|node\|relationship\|bind\|unbind\|views`, `generate [--check]`            |
-| Repository   | `inventory`, `scan [--check]`, `scan show`, `scan draft-config`                                         |
-| Conformance  | `rule list\|add\|remove`, `conformance [--check]` (`check` is an alias)                                 |
-| Cloud Sync   | `login [--token TOKEN] [--whoami] [--logout]`, `push [--yes] [--dry-run] [--json]`                      |
+| Area           | Commands                                                                                                |
+| -------------- | ------------------------------------------------------------------------------------------------------- |
+| Start          | `init`, `status`, `validate`, `history`                                                                 |
+| Describe       | `elicit`, `intent`, `workload`, `constraint`, `priority`, `hardware`, `budget`, `candidate`, `evidence` |
+| Intelligence   | `intelligence list\|select`, `propose preview\|send\|export\|import`                                    |
+| Model research | `quality benchmarks\|leaderboard\|model\|catalog`, `quality cache refresh\|show\|history`               |
+| Decide         | `compare`, `decision draft\|propose\|revise\|reject`, `review`, `approve`, `approval status`            |
+| Architecture   | `architecture show\|validate\|node\|relationship\|bind\|unbind\|views`, `generate [--check]`            |
+| Repository     | `inventory`, `scan [--check]`, `scan show`, `scan draft-config`                                         |
+| Conformance    | `rule list\|add\|remove`, `conformance [--check]` (`check` is an alias)                                 |
+| Cloud Sync     | `login [--token TOKEN] [--whoami] [--logout]`, `push [--yes] [--dry-run] [--json]`                      |
 
 `status`, `history`, `compare`, `review`, `approval status`, `intelligence list`,
 `propose preview`, `architecture show|validate`, `generate`, `scan`, `rule list`,
 `inventory`, and `push` accept `--json` for tools and agents. `approve` does not.
+
+### Public model quality research (`quality`)
+
+```bash
+anvilmark quality benchmarks --search coding
+anvilmark quality leaderboard SWE-bench/SWE-bench_Verified --limit 10
+anvilmark quality model openai/gpt-oss-20b --json
+ARTIFICIAL_ANALYSIS_API_KEY="your-key" anvilmark quality catalog --search openai
+```
+
+These read-only commands need no Anvilmark project. `benchmarks`,
+`leaderboard`, and `model` query the public [Hugging Face benchmark
+API](https://huggingface.co/docs/hub/leaderboard-data-guide) without a key.
+`benchmarks` discovers datasets tagged `benchmark:official`; `leaderboard`
+shows submitted results for one dataset; `model` shows published evaluations
+for one Hub model ID. `catalog` queries the [Artificial Analysis Free language
+model API](https://artificialanalysis.ai/data-api/docs) using
+`ARTIFICIAL_ANALYSIS_API_KEY` in the environment. It lists tracked model
+identities, headline and capability indices, median performance, and input and
+output token prices. `--search` filters IDs or model names as appropriate,
+`--limit` controls text rows, `--all` shows every matching text row, and
+`--json` returns the full matching snapshot. Run `anvilmark quality --help`
+for exact options.
+
+Each snapshot records its source URL, retrieval time, and SHA-256 response hash.
+Hugging Face results retain the benchmark, model ID, score, verification state
+and available submission source. An official benchmark dataset can contain **unverified
+submissions**; the displayed flag applies to each result. Models with no
+published result are absent, and scores from different benchmarks are not
+interchangeable. Artificial Analysis indices are composite research signals;
+its aggregated prices are not provider-official pricing evidence. These
+commands do not add evidence to a project contract or settle a workload
+quality gate. A hard gate requires a matching measured evaluation of the
+candidate and workload.
+
+[Artificial Analysis Free API rights](https://artificialanalysis.ai/data-api)
+are internal use with attribution. Customer-facing or public redistribution
+requires appropriate rights; the CLI attributes the source in text and JSON.
+
+See [model quality sources and catalog design](../../docs/vnext/model-quality-sources.md)
+for coverage limits and the path to requirement-aware model selection.
+
+### Local model research cache (`quality cache`)
+
+```bash
+anvilmark quality cache refresh benchmarks --db ./model-catalog.sqlite
+anvilmark quality cache refresh leaderboard SWE-bench/SWE-bench_Verified --db ./model-catalog.sqlite
+anvilmark quality cache show leaderboard SWE-bench/SWE-bench_Verified --db ./model-catalog.sqlite --json
+anvilmark quality cache history leaderboard SWE-bench/SWE-bench_Verified --db ./model-catalog.sqlite
+# Requires ARTIFICIAL_ANALYSIS_API_KEY; keep Free API data for internal use.
+ARTIFICIAL_ANALYSIS_API_KEY="your-key" anvilmark quality cache refresh catalog --db ./model-catalog.sqlite
+```
+
+`refresh` fetches one live source and appends its snapshot to the named local
+SQLite file. Kinds are `benchmarks`, `leaderboard PUBLISHER/DATASET`, `model
+PUBLISHER/MODEL`, and `catalog`. `show` reads the latest saved snapshot;
+`history` reads earlier snapshots. Reads mark data `fresh` or `stale` using a
+24-hour default, adjustable with `--max-age-hours N`. `history --limit N`
+defaults to 20 rows (maximum 200). `--json` includes snapshot metadata and,
+for `show`, normalized observations. `show` and `history` work offline after a
+refresh. Storage needs Node.js 24 or newer. There is no scheduled refresh yet.
+
+The cache keeps source-scoped IDs; it does not infer that similarly named Hugging
+Face and Artificial Analysis models are identical. Cached scores and indices
+remain research signals, and Artificial Analysis Free data retains its
+internal-use attribution requirement. See the [local catalog package](../model-catalog/README.md).
 
 ### Cloud Console Sync (`login`, `push`)
 

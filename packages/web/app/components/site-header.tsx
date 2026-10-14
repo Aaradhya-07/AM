@@ -12,8 +12,9 @@ import { UserMenu } from "./user-menu";
 import { CliConnectModal } from "../dashboard/components/cli-connect-modal";
 
 const NAV = [
-  { href: "/#flow", label: "The flow", anchor: "flow" },
-  { href: "/#contract", label: "The contract", anchor: "contract" },
+  { href: "/demo", label: "Create a contract" },
+  { href: "/overview#flow", label: "The flow", anchor: "flow" },
+  { href: "/overview#contract", label: "The contract", anchor: "contract" },
   { href: "/playground", label: "Playground" },
   { href: "/studio", label: "Studio" },
   { href: "/start", label: "Quickstart" },

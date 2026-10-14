@@ -24,6 +24,7 @@ import { exportCommand } from "./commands/export.js";
 import { INVENTORY_USAGE, inventoryCommand } from "./commands/inventory.js";
 import { LOGIN_USAGE, loginCommand } from "./commands/login.js";
 import { PUSH_USAGE, pushCommand } from "./commands/push.js";
+import { QUALITY_USAGE, qualityCommand } from "./commands/quality.js";
 import { RULE_USAGE, ruleCommand } from "./commands/rule.js";
 import { reportError } from "./commands/common.js";
 import {
@@ -55,8 +56,9 @@ export const USAGE = `anvilmark — local decision and conformance contracts for
 
 Usage: anvilmark <command> [options]      (anvilmark <command> --help for details)
 
-Inventory (no project needed; writes nothing)
-  inventory       list the AI providers, models and call sites a repository uses
+Research and inventory (no project needed)
+  inventory       list the AI providers, models and call sites a repository uses (read-only)
+  quality         inspect public benchmarks and a model catalog
 
 Start
   init            create .anvilmark/ from an idea, a repository reference, or a contract file
@@ -129,6 +131,7 @@ const GROUPED = new Set([
   "rule",
   "login",
   "push",
+  "quality",
 ]);
 
 /**
@@ -216,6 +219,8 @@ export async function run(
         return await generateCommand(context);
       case "inventory":
         return await inventoryCommand(context);
+      case "quality":
+        return await qualityCommand(context, sub);
       case "rule":
         return await ruleCommand(context, sub);
       case "scan":
@@ -246,6 +251,7 @@ export {
   INVENTORY_USAGE,
   LOGIN_USAGE,
   PUSH_USAGE,
+  QUALITY_USAGE,
   RULE_USAGE,
   SCAN_USAGE,
 };

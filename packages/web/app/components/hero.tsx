@@ -137,12 +137,12 @@ export function Hero() {
               <div className="mt-8 space-y-3">
                 <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
                   <Link
-                    href="/playground"
+                    href="/demo"
                     data-magnetic
                     data-testid="hero-playground-cta"
                     className="am-btn am-btn-primary am-magnetic inline-flex items-center gap-2"
                   >
-                    <span>Try in Playground</span>
+                    <span>Create a contract</span>
                     <span aria-hidden="true" className="text-xs">
                       →
                     </span>

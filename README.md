@@ -4,6 +4,8 @@ Anvilmark is being shaped as a free, local-first, vendor-neutral decision and co
 
 Read [`ANVILMARK-CANONICAL-BRIEF.md`](ANVILMARK-CANONICAL-BRIEF.md) first. It is the current product and engineering direction.
 
+For current feature status, phase gates, and the website/MCP path, see the [project tracker](PROJECT-TRACKER.md).
+
 ## Packages
 
 - `packages/project-contract` — the project contract (`0.1.0-draft.5`): schema, validation, evidence floors, decision resolution, approval hashing, architecture provenance and declared interfaces.

@@ -26,11 +26,11 @@ export function Closing() {
 
           <div className="mt-9 flex flex-wrap items-center justify-center gap-4">
             <Link
-              href="/playground"
+              href="/demo"
               data-magnetic
               className="am-btn am-btn-primary am-magnetic"
             >
-              <span>Explore Playground</span>
+              <span>Create a contract</span>
               <span aria-hidden="true" className="text-xs">
                 →
               </span>

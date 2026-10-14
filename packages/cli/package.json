@@ -29,6 +29,7 @@
     "@anvilmark/conformance": "workspace:*",
     "@anvilmark/context": "workspace:*",
     "@anvilmark/hardware-sizing": "workspace:*",
+    "@anvilmark/model-catalog": "workspace:*",
     "@anvilmark/project-contract": "workspace:*",
     "@anvilmark/scanner": "workspace:*",
     "zod": "^4.2.0"

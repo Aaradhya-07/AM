@@ -5,13 +5,14 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "build": "next build --webpack",
+    "build": "pnpm --filter '@anvilmark/web^...' --if-present build && next build --webpack",
     "dev": "next dev --webpack",
     "start": "next start",
     "test": "vitest run",
     "smoke:playground": "node scripts/smoke-playground.mjs"
   },
   "dependencies": {
+    "@anvilmark/adapters": "workspace:*",
     "@anvilmark/conformance": "workspace:*",
     "@anvilmark/context": "workspace:*",
     "@anvilmark/contract": "workspace:*",
