@@ -23,9 +23,9 @@ export default function DemoPage() {
             From an idea to a decision draft
           </h1>
           <p className="mt-4 text-base leading-7 text-sand/75">
-            Describe one workload, set its restrictions, and compare two ways to
-            run it. Download a real ANVILMARK project contract to continue in
-            the CLI and MCP workflow.
+            Describe one workload, choose a data-flow path, and compare sourced
+            model starting points. Download a draft ANVILMARK project contract
+            to continue in the CLI and MCP workflow.
           </p>
         </div>
         <DemoClient />

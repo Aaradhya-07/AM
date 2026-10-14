@@ -6,9 +6,20 @@ import { useMemo, useState } from "react";
 import {
   createDraftContract,
   demoExample,
+  emptyDraft,
   type DemoCandidate,
   type DemoDraft,
 } from "../../lib/draft-contract";
+import {
+  ARCHITECTURE_PATTERNS,
+  architectureConflict,
+} from "../../lib/architecture-guide";
+import {
+  MODEL_STARTERS,
+  candidateFromStarter,
+  getModelStarter,
+  starterFit,
+} from "../../lib/model-starters";
 
 const fieldClass =
   "mt-2 w-full rounded border border-line-muted bg-ink px-3 py-2.5 text-sm text-canvas outline-none focus:border-gold";
@@ -71,7 +82,7 @@ function deploymentLabel(candidate: DemoCandidate): string {
 }
 
 export function DemoClient() {
-  const [draft, setDraft] = useState<DemoDraft>(demoExample);
+  const [draft, setDraft] = useState<DemoDraft>(emptyDraft);
   const [error, setError] = useState<string | null>(null);
   const [exported, setExported] = useState(false);
   const [lookups, setLookups] = useState<Record<number, Lookup>>({});
@@ -93,16 +104,48 @@ export function DemoClient() {
     );
   };
 
+  const selectStarter = (index: number, modelId: string) => {
+    const starter = getModelStarter(modelId);
+    update(
+      "candidates",
+      draft.candidates.map((candidate, position) =>
+        position === index
+          ? starter
+            ? candidateFromStarter(starter)
+            : { ...candidate, model: "", version: "" }
+          : candidate,
+      ),
+    );
+  };
+
+  const orderedStarters = [...MODEL_STARTERS].sort((left, right) => {
+    const score = (starter: (typeof MODEL_STARTERS)[number]) =>
+      Number(starter.workloadKinds.includes(draft.workloadKind)) * 2 +
+      Number(
+        (starter.deployment === "local") ===
+          (draft.architecturePattern === "local"),
+      );
+    return score(right) - score(left);
+  });
+
   const comparison = useMemo(
     () =>
       draft.candidates.map((candidate) => ({
         candidate,
         boundary:
           draft.privacy === "local_only" && candidate.deployment !== "local"
-            ? "Potential privacy conflict: show that input is transformed before it leaves the local boundary, or use a local path."
-            : candidate.deployment === "local"
-              ? "Local deployment declared. Hardware fit and runtime configuration still need evidence."
-              : "Remote deployment declared. Verify provider, region, and data handling before selection.",
+            ? draft.architecturePattern === "redacted_remote"
+              ? "Remote use depends on a redactor that still needs implementation and evidence."
+              : "Conflicts with the local-only input boundary. Use local processing or verify a redaction path."
+            : draft.architecturePattern === "local" &&
+                candidate.deployment !== "local"
+              ? "This managed model needs a different architecture path."
+              : draft.architecturePattern !== "local" &&
+                  candidate.deployment === "local"
+                ? "This local alternative needs the local architecture path."
+                : candidate.deployment === "local"
+                  ? "Local deployment declared. Hardware fit and runtime configuration still need evidence."
+                  : "Remote deployment declared. Verify provider, region, and data handling before selection.",
         missing: [
           draft.qualityMinimum.trim()
             ? `${draft.qualityMetric || "Quality"} evaluation on your data`
@@ -117,6 +160,16 @@ export function DemoClient() {
       })),
     [draft],
   );
+  const hasCandidate = draft.candidates.some((candidate) =>
+    candidate.model.trim(),
+  );
+
+  const loadExample = () => {
+    setDraft(demoExample);
+    setLookups({});
+    setError(null);
+    setExported(false);
+  };
 
   const lookupPublishedEvals = async (index: number, modelId: string) => {
     const trimmed = modelId.trim();
@@ -190,6 +243,19 @@ export function DemoClient() {
   return (
     <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.85fr)]">
       <div className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-line-muted bg-surface px-5 py-4 text-sm sm:px-7">
+          <p className="text-sand/75">
+            Start with your project, or inspect a sample draft.
+          </p>
+          <button
+            type="button"
+            className="text-gold hover:underline"
+            onClick={loadExample}
+          >
+            Load support triage example →
+          </button>
+        </div>
+
         <section className="rounded border border-line-muted bg-surface p-5 sm:p-7">
           <div className="mb-5 flex items-center gap-3">
             <span className="font-mono text-xs text-gold">01</span>
@@ -229,6 +295,27 @@ export function DemoClient() {
               value={draft.workload}
               onChange={(value) => update("workload", value)}
             />
+            <label className={labelClass}>
+              Workload type
+              <select
+                className={fieldClass}
+                value={draft.workloadKind}
+                onChange={(event) =>
+                  update(
+                    "workloadKind",
+                    event.target.value as DemoDraft["workloadKind"],
+                  )
+                }
+              >
+                <option value="classification">
+                  Classification or routing
+                </option>
+                <option value="extraction">Structured extraction</option>
+                <option value="drafting">Text drafting</option>
+                <option value="reasoning">Reasoning or analysis</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
             <Field
               label="Input data label"
               value={draft.inputClassification}
@@ -266,45 +353,112 @@ export function DemoClient() {
                 </option>
               </select>
             </label>
-            <Field
-              label="Expected calls per month"
-              value={draft.callsPerMonth}
-              onChange={(value) => update("callsPerMonth", value)}
-              placeholder="Unknown"
-              type="number"
-            />
-            <Field
-              label="Monthly budget (USD)"
-              value={draft.monthlyBudget}
-              onChange={(value) => update("monthlyBudget", value)}
-              placeholder="Unset"
-              type="number"
-            />
-            <Field
-              label="Quality metric"
-              value={draft.qualityMetric}
-              onChange={(value) => update("qualityMetric", value)}
-              placeholder="e.g. classification_f1"
-            />
-            <Field
-              label="Minimum quality target"
-              value={draft.qualityMinimum}
-              onChange={(value) => update("qualityMinimum", value)}
-              placeholder="e.g. 0.9"
-              type="number"
-            />
           </div>
-          <p className="mt-4 text-xs leading-5 text-sand/55">
-            Empty usage and budget fields remain unknown or unset in the
-            contract. A target creates an evaluation gap until measured.
-          </p>
+          <details className="mt-5 rounded border border-line-muted bg-ink/40 p-4">
+            <summary className="cursor-pointer text-sm font-medium text-gold">
+              Add planning limits (optional)
+            </summary>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Expected calls per month"
+                value={draft.callsPerMonth}
+                onChange={(value) => update("callsPerMonth", value)}
+                placeholder="Unknown"
+                type="number"
+              />
+              <Field
+                label="Monthly budget (USD)"
+                value={draft.monthlyBudget}
+                onChange={(value) => update("monthlyBudget", value)}
+                placeholder="Unset"
+                type="number"
+              />
+              <Field
+                label="Quality metric"
+                value={draft.qualityMetric}
+                onChange={(value) => update("qualityMetric", value)}
+                placeholder="e.g. classification_f1"
+              />
+              <Field
+                label="Minimum quality target"
+                value={draft.qualityMinimum}
+                onChange={(value) => update("qualityMinimum", value)}
+                placeholder="e.g. 0.9"
+                type="number"
+              />
+            </div>
+            <p className="mt-3 text-xs leading-5 text-sand/55">
+              Empty values remain unknown. A target stays unverified until you
+              measure it on your data.
+            </p>
+          </details>
         </section>
 
         <section className="rounded border border-line-muted bg-surface p-5 sm:p-7">
           <div className="mb-5 flex items-center gap-3">
             <span className="font-mono text-xs text-gold">03</span>
-            <h2 className="font-brand text-2xl">Candidate paths</h2>
+            <h2 className="font-brand text-2xl">Architecture path</h2>
           </div>
+          <p className="mb-5 max-w-2xl text-sm leading-6 text-sand/70">
+            Choose where the input and model run. This adds a draft data-flow
+            map to your contract. It does not prove that the system is built or
+            that redaction works.
+          </p>
+          <fieldset>
+            <legend className="sr-only">Architecture path</legend>
+            <div className="grid gap-3">
+              {ARCHITECTURE_PATTERNS.map((pattern) => (
+                <label
+                  key={pattern.id}
+                  className={`cursor-pointer rounded border p-4 transition-colors ${
+                    draft.architecturePattern === pattern.id
+                      ? "border-gold bg-gold/5"
+                      : "border-line-muted bg-ink/40 hover:border-gold/50"
+                  }`}
+                >
+                  <span className="flex items-center gap-3 text-sm font-medium text-canvas">
+                    <input
+                      type="radio"
+                      name="architecture-pattern"
+                      value={pattern.id}
+                      checked={draft.architecturePattern === pattern.id}
+                      onChange={() => update("architecturePattern", pattern.id)}
+                      className="accent-gold"
+                    />
+                    {pattern.title}
+                  </span>
+                  <span className="mt-2 block pl-6 font-mono text-xs text-gold">
+                    {pattern.flow}
+                  </span>
+                  {draft.architecturePattern === pattern.id && (
+                    <span className="mt-2 block pl-6 text-xs leading-5 text-sand/65">
+                      {pattern.description}
+                    </span>
+                  )}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          {architectureConflict(draft) && (
+            <p
+              role="alert"
+              className="mt-4 rounded border border-red-400/40 p-3 text-sm text-red-200"
+            >
+              {architectureConflict(draft)}
+            </p>
+          )}
+        </section>
+
+        <section className="rounded border border-line-muted bg-surface p-5 sm:p-7">
+          <div className="mb-5 flex items-center gap-3">
+            <span className="font-mono text-xs text-gold">04</span>
+            <h2 className="font-brand text-2xl">Compare models</h2>
+          </div>
+          <p className="mb-5 text-sm leading-6 text-sand/70">
+            Select sourced starting points or enter your own model. The notes
+            describe published capabilities. They are not scores for your
+            workload or a recommendation to approve a model.
+          </p>
           <div className="space-y-5">
             {draft.candidates.map((candidate, index) => (
               <div
@@ -333,56 +487,120 @@ export function DemoClient() {
                   )}
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Field
-                    label="Model or runtime name"
-                    value={candidate.model}
-                    onChange={(value) => updateCandidate(index, "model", value)}
-                  />
-                  <Field
-                    label="Exact version"
-                    value={candidate.version}
-                    onChange={(value) =>
-                      updateCandidate(index, "version", value)
-                    }
-                    placeholder="Unknown / floating"
-                  />
-                  <label className={labelClass}>
-                    Deployment
+                  <label className={`${labelClass} sm:col-span-2`}>
+                    Choose a model
                     <select
                       className={fieldClass}
-                      value={candidate.deployment}
+                      value={getModelStarter(candidate.model)?.id ?? "custom"}
                       onChange={(event) =>
-                        updateCandidate(index, "deployment", event.target.value)
+                        selectStarter(index, event.target.value)
                       }
                     >
-                      <option value="local">Local</option>
-                      <option value="managed_api">Managed API</option>
-                      <option value="self_hosted">Self hosted</option>
+                      <option value="custom">Custom model or runtime</option>
+                      {orderedStarters.map((starter) => (
+                        <option key={starter.id} value={starter.id}>
+                          {starter.label}
+                        </option>
+                      ))}
                     </select>
                   </label>
-                  <Field
-                    label={
-                      candidate.deployment === "local"
-                        ? "Local runtime"
-                        : "Provider"
-                    }
-                    value={candidate.provider}
-                    onChange={(value) =>
-                      updateCandidate(index, "provider", value)
-                    }
-                    placeholder="Unknown"
-                  />
-                  {candidate.deployment !== "local" && (
+                  {!getModelStarter(candidate.model) && (
                     <Field
-                      label="Region"
-                      value={candidate.region}
+                      label="Model or runtime ID"
+                      value={candidate.model}
                       onChange={(value) =>
-                        updateCandidate(index, "region", value)
+                        updateCandidate(index, "model", value)
                       }
-                      placeholder="Unknown"
+                      placeholder="Exact provider ID or publisher/model"
                     />
                   )}
                 </div>
+                {getModelStarter(candidate.model) && (
+                  <div className="mt-4 rounded border border-line-muted bg-surface/70 p-4 text-xs leading-5 text-sand/75">
+                    <p className="font-medium text-gold">
+                      {starterFit(
+                        getModelStarter(candidate.model)!,
+                        draft,
+                        candidate.deployment,
+                      )}
+                    </p>
+                    <p className="mt-2">
+                      <span className="font-medium text-canvas">
+                        Documented strength:
+                      </span>{" "}
+                      {getModelStarter(candidate.model)!.strength}
+                    </p>
+                    <p className="mt-1">
+                      <span className="font-medium text-canvas">
+                        Still verify:
+                      </span>{" "}
+                      {getModelStarter(candidate.model)!.verify}
+                    </p>
+                    <a
+                      href={getModelStarter(candidate.model)!.sourceUrl}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="mt-2 inline-block text-gold hover:underline"
+                    >
+                      Official model source ↗
+                    </a>
+                  </div>
+                )}
+                <details className="mt-4 border-t border-line-muted pt-3">
+                  <summary className="cursor-pointer text-xs font-medium text-gold">
+                    Deployment and version details
+                  </summary>
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <Field
+                      label="Exact version or revision"
+                      value={candidate.version}
+                      onChange={(value) =>
+                        updateCandidate(index, "version", value)
+                      }
+                      placeholder="Unknown / floating"
+                    />
+                    <label className={labelClass}>
+                      Deployment
+                      <select
+                        className={fieldClass}
+                        value={candidate.deployment}
+                        onChange={(event) =>
+                          updateCandidate(
+                            index,
+                            "deployment",
+                            event.target.value,
+                          )
+                        }
+                      >
+                        <option value="local">Local</option>
+                        <option value="managed_api">Managed API</option>
+                        <option value="self_hosted">Self hosted</option>
+                      </select>
+                    </label>
+                    <Field
+                      label={
+                        candidate.deployment === "local"
+                          ? "Local runtime"
+                          : "Provider"
+                      }
+                      value={candidate.provider}
+                      onChange={(value) =>
+                        updateCandidate(index, "provider", value)
+                      }
+                      placeholder="Unknown"
+                    />
+                    {candidate.deployment !== "local" && (
+                      <Field
+                        label="Region"
+                        value={candidate.region}
+                        onChange={(value) =>
+                          updateCandidate(index, "region", value)
+                        }
+                        placeholder="Unknown"
+                      />
+                    )}
+                  </div>
+                </details>
               </div>
             ))}
           </div>
@@ -418,131 +636,153 @@ export function DemoClient() {
             Hugging Face evaluations for an exact Hub model ID. Such scores do
             not test your workload; there is no winner or approval here.
           </p>
-          <div className="mt-5 space-y-4">
-            {comparison.map(({ candidate, boundary, missing }, index) => (
-              <div
-                className="rounded border border-line-muted bg-ink/60 p-4"
-                key={index}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <h3 className="font-medium text-canvas">
-                    {candidate.model.trim() || `Candidate ${index + 1}`}
-                  </h3>
-                  <span className="whitespace-nowrap rounded bg-gold/10 px-2 py-1 font-mono text-[10px] uppercase text-gold">
-                    Unevaluated
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-sand/70">
-                  {deploymentLabel(candidate)}
-                  {candidate.version.trim()
-                    ? ` · ${candidate.version.trim()}`
-                    : " · floating version"}
-                </p>
-                <p className="mt-3 text-xs leading-5 text-sand/80">
-                  {boundary}
-                </p>
-                <p className="mt-4 font-mono text-[10px] uppercase tracking-wider text-sand/55">
-                  Evidence needed
-                </p>
-                <ul className="mt-2 space-y-1 text-xs text-sand/65">
-                  {missing.map((item) => (
-                    <li key={item}>• {item}</li>
-                  ))}
-                </ul>
-                <div className="mt-4 border-t border-line-muted pt-4">
-                  <button
-                    type="button"
-                    className="text-xs text-gold hover:underline disabled:opacity-50"
-                    disabled={lookups[index]?.status === "loading"}
-                    onClick={() => lookupPublishedEvals(index, candidate.model)}
+          {!hasCandidate && (
+            <p className="mt-5 rounded border border-line-muted bg-ink/60 p-4 text-sm text-sand/75">
+              Select two model paths to see their deployment fit and evidence
+              gaps.
+            </p>
+          )}
+          {hasCandidate && (
+            <div className="mt-5 space-y-4">
+              {comparison.map(({ candidate, boundary, missing }, index) =>
+                candidate.model.trim() ? (
+                  <div
+                    className="rounded border border-line-muted bg-ink/60 p-4"
+                    key={index}
                   >
-                    {lookups[index]?.status === "loading"
-                      ? "Checking published evaluations…"
-                      : "Check Hugging Face evaluations →"}
-                  </button>
-                  {lookups[index]?.modelId === candidate.model.trim() &&
-                    lookups[index]?.status === "error" && (
-                      <p className="mt-2 text-xs leading-5 text-sand/65">
-                        {lookups[index]?.message}
-                      </p>
-                    )}
-                  {lookups[index]?.modelId === candidate.model.trim() &&
-                    lookups[index]?.status === "ready" &&
-                    lookups[index]?.data && (
-                      <div className="mt-3 text-xs leading-5 text-sand/70">
-                        <p>
-                          <a
-                            href={lookups[index].data.source_url}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                            className="text-gold hover:underline"
-                          >
-                            Hugging Face model page ↗
-                          </a>{" "}
-                          · fetched{" "}
-                          {new Date(
-                            lookups[index].data.fetched_at,
-                          ).toLocaleDateString()}
-                        </p>
-                        <p className="mt-1 font-mono text-[10px]">
-                          Response SHA-256:{" "}
-                          {lookups[index].data.response_sha256.slice(0, 16)}…
-                        </p>
-                        {lookups[index].data.results.length === 0 ? (
-                          <p className="mt-2">
-                            No published evaluations were returned for this
-                            model.
-                          </p>
-                        ) : (
-                          <ul className="mt-2 space-y-1">
-                            {lookups[index].data.results
-                              .slice(0, 5)
-                              .map((result, position) => (
-                                <li key={`${result.benchmark_id}-${position}`}>
-                                  {result.benchmark_id}
-                                  {result.task_id ? ` / ${result.task_id}` : ""}
-                                  : {result.score} ·{" "}
-                                  {result.verified === true
-                                    ? "verified submission"
-                                    : result.verified === false
-                                      ? "unverified submission"
-                                      : "verification unknown"}
-                                  {result.evaluation_date
-                                    ? ` · ${result.evaluation_date.slice(0, 10)}`
-                                    : ""}
-                                  {result.source_url && (
-                                    <>
-                                      {" · "}
-                                      <a
-                                        href={result.source_url}
-                                        target="_blank"
-                                        rel="noreferrer noopener"
-                                        className="text-gold hover:underline"
-                                      >
-                                        source ↗
-                                      </a>
-                                    </>
-                                  )}
-                                </li>
-                              ))}
-                          </ul>
-                        )}
-                        {lookups[index].data.results.length > 5 && (
-                          <p className="mt-1">
-                            Showing 5 of {lookups[index].data.results.length}{" "}
-                            published results.
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="font-medium text-canvas">
+                        {candidate.model.trim() || `Candidate ${index + 1}`}
+                      </h3>
+                      <span className="whitespace-nowrap rounded bg-gold/10 px-2 py-1 font-mono text-[10px] uppercase text-gold">
+                        Unevaluated
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-sand/70">
+                      {deploymentLabel(candidate)}
+                      {candidate.version.trim()
+                        ? ` · ${candidate.version.trim()}`
+                        : " · floating version"}
+                    </p>
+                    <p className="mt-3 text-xs leading-5 text-sand/80">
+                      {boundary}
+                    </p>
+                    <details className="mt-4 text-xs text-sand/65">
+                      <summary className="cursor-pointer font-medium text-gold">
+                        Evidence needed ({missing.length})
+                      </summary>
+                      <ul className="mt-2 space-y-1 pl-4">
+                        {missing.map((item) => (
+                          <li key={item} className="list-disc">
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                    <div className="mt-4 border-t border-line-muted pt-4">
+                      <button
+                        type="button"
+                        className="text-xs text-gold hover:underline disabled:opacity-50"
+                        disabled={lookups[index]?.status === "loading"}
+                        onClick={() =>
+                          lookupPublishedEvals(index, candidate.model)
+                        }
+                      >
+                        {lookups[index]?.status === "loading"
+                          ? "Checking published evaluations…"
+                          : "Check Hugging Face evaluations →"}
+                      </button>
+                      {lookups[index]?.modelId === candidate.model.trim() &&
+                        lookups[index]?.status === "error" && (
+                          <p className="mt-2 text-xs leading-5 text-sand/65">
+                            {lookups[index]?.message}
                           </p>
                         )}
-                        <p className="mt-2 text-sand/55">
-                          Scores have benchmark-specific meanings. They do not
-                          establish quality on this workload.
-                        </p>
-                      </div>
-                    )}
-                </div>
-              </div>
-            ))}
-          </div>
+                      {lookups[index]?.modelId === candidate.model.trim() &&
+                        lookups[index]?.status === "ready" &&
+                        lookups[index]?.data && (
+                          <div className="mt-3 text-xs leading-5 text-sand/70">
+                            <p>
+                              <a
+                                href={lookups[index].data.source_url}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                                className="text-gold hover:underline"
+                              >
+                                Hugging Face model page ↗
+                              </a>{" "}
+                              · fetched{" "}
+                              {new Date(
+                                lookups[index].data.fetched_at,
+                              ).toLocaleDateString()}
+                            </p>
+                            <p className="mt-1 font-mono text-[10px]">
+                              Response SHA-256:{" "}
+                              {lookups[index].data.response_sha256.slice(0, 16)}
+                              …
+                            </p>
+                            {lookups[index].data.results.length === 0 ? (
+                              <p className="mt-2">
+                                No published evaluations were returned for this
+                                model.
+                              </p>
+                            ) : (
+                              <ul className="mt-2 space-y-1">
+                                {lookups[index].data.results
+                                  .slice(0, 5)
+                                  .map((result, position) => (
+                                    <li
+                                      key={`${result.benchmark_id}-${position}`}
+                                    >
+                                      {result.benchmark_id}
+                                      {result.task_id
+                                        ? ` / ${result.task_id}`
+                                        : ""}
+                                      : {result.score} ·{" "}
+                                      {result.verified === true
+                                        ? "verified submission"
+                                        : result.verified === false
+                                          ? "unverified submission"
+                                          : "verification unknown"}
+                                      {result.evaluation_date
+                                        ? ` · ${result.evaluation_date.slice(0, 10)}`
+                                        : ""}
+                                      {result.source_url && (
+                                        <>
+                                          {" · "}
+                                          <a
+                                            href={result.source_url}
+                                            target="_blank"
+                                            rel="noreferrer noopener"
+                                            className="text-gold hover:underline"
+                                          >
+                                            source ↗
+                                          </a>
+                                        </>
+                                      )}
+                                    </li>
+                                  ))}
+                              </ul>
+                            )}
+                            {lookups[index].data.results.length > 5 && (
+                              <p className="mt-1">
+                                Showing 5 of{" "}
+                                {lookups[index].data.results.length} published
+                                results.
+                              </p>
+                            )}
+                            <p className="mt-2 text-sand/55">
+                              Scores have benchmark-specific meanings. They do
+                              not establish quality on this workload.
+                            </p>
+                          </div>
+                        )}
+                    </div>
+                  </div>
+                ) : null,
+              )}
+            </div>
+          )}
           {error && (
             <p
               role="alert"

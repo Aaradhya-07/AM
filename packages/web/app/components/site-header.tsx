@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 
 import { ExternalGlyph, GITHUB_URL, GitHubGlyph } from "./circuitry";
 
@@ -22,6 +22,23 @@ export function SiteHeader() {
   const toggleRef = useRef<HTMLButtonElement>(null);
 
   const navItems = NAV;
+
+  const openHome = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (
+      pathname !== "/" ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    window.history.replaceState(window.history.state, "", "/");
+    window.scrollTo({ top: 0, behavior: "instant" });
+  };
 
   useEffect(() => {
     let raf = 0;
@@ -77,6 +94,7 @@ export function SiteHeader() {
           <div className="flex items-center gap-5 lg:gap-8">
             <Link
               href="/"
+              onClick={openHome}
               className="-my-2 flex items-center rounded-edge"
               aria-label="ANVILMARK — back to home"
             >
@@ -105,6 +123,9 @@ export function SiteHeader() {
                   <Link
                     key={item.href}
                     href={item.href}
+                    onClick={(event) => {
+                      if (item.href === "/") openHome(event);
+                    }}
                     aria-current={isCurrent ? "page" : undefined}
                     className={`am-ui am-nav-link rounded-edge py-2 font-medium transition-colors ${
                       isCurrent
@@ -173,7 +194,10 @@ export function SiteHeader() {
                   >
                     <Link
                       href={item.href}
-                      onClick={() => setOpen(false)}
+                      onClick={(event) => {
+                        if (item.href === "/") openHome(event);
+                        setOpen(false);
+                      }}
                       aria-current={isCurrent ? "page" : undefined}
                       className="am-ui flex min-h-[44px] items-center gap-2 py-3.5 font-medium text-gold transition-colors hover:text-sand"
                     >
