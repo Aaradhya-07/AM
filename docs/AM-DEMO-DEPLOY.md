@@ -4,13 +4,13 @@ Updated: 2026-10-14
 
 ## What the new entry does
 
-The site root opens `/demo`. A visitor can record one project idea, one workload, input data boundary, optional usage/budget/quality target, and two or more candidate model paths. The side-by-side comparison shows declared deployment facts and missing evidence. An optional lookup fetches published evaluations for an exact Hugging Face `publisher/model` ID through a read-only website endpoint. **It does not rank, measure, select, or approve a model.** Download creates a draft.5 JSON contract in the browser; draft form data is not sent to the website server. A lookup sends only the requested public model ID.
+The site root is the landing page, with **Create a contract** leading to `/demo`. A visitor can record one project idea, one workload, input data boundary, optional usage/budget/quality target, and two or more candidate model paths. The side-by-side comparison shows declared deployment facts and missing evidence. An optional lookup fetches published evaluations for an exact Hugging Face `publisher/model` ID through a read-only website endpoint. **It does not rank, measure, select, or approve a model.** Download creates a draft.5 JSON contract in the browser; draft form data is not sent to the website server. A lookup sends only the requested public model ID.
 
-The former marketing page remains at `/overview`. Studio still opens an exported review bundle. The dashboard and Atlas playground are separate early surfaces and are not the contract authoring flow.
+The previous `/overview` path redirects to the landing page. Studio still opens an exported review bundle. The dashboard and Atlas playground are separate early surfaces and are not the contract authoring flow. Public sign-in is removed and `/login` redirects to the contract demo while the optional dashboard authentication is unconfigured.
 
 ## Demo walkthrough
 
-1. Open the new AM site root (or `/demo`). The prefilled Support Triage example is illustrative; edit it to fit the project.
+1. Open the AM site and choose **Create a contract** (or go directly to `/demo`). The prefilled Support Triage example is illustrative; edit it to fit the project.
 2. Enter the workload and select whether input data must stay local.
 3. Enter two candidate names and their deployment modes. For a Hugging Face model, use its exact `publisher/model` ID and click **Check Hugging Face evaluations**. Note the source, retrieval date, published scores, privacy question, and evidence still needed for each.
 4. Click **Download draft contract**. The file is validated against the project-contract schema and has `draft` state, `unevaluated` candidates, no decision, and no approval.

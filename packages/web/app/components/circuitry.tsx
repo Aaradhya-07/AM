@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
 
-export const GITHUB_URL = "https://github.com/N6118/ANVILMARK";
-export const BRIEF_URL =
-  "https://github.com/N6118/ANVILMARK/blob/main/ANVILMARK-CANONICAL-BRIEF.md";
+export const GITHUB_URL = "https://github.com/Aaradhya-07/AM";
+export const BRIEF_URL = `${GITHUB_URL}/blob/main/ANVILMARK-CANONICAL-BRIEF.md`;
 
 /** Small circular terminal node, the recurring joint of the logo linework. */
 export function TerminalNode({

@@ -6,15 +6,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { ExternalGlyph, GITHUB_URL, GitHubGlyph } from "./circuitry";
-import { AuthModal } from "./auth-modal";
-import { useAuth } from "./auth-provider";
-import { UserMenu } from "./user-menu";
-import { CliConnectModal } from "../dashboard/components/cli-connect-modal";
 
 const NAV = [
   { href: "/demo", label: "Create a contract" },
-  { href: "/overview#flow", label: "The flow", anchor: "flow" },
-  { href: "/overview#contract", label: "The contract", anchor: "contract" },
+  { href: "/#flow", label: "The flow", anchor: "flow" },
+  { href: "/#contract", label: "The contract", anchor: "contract" },
   { href: "/playground", label: "Playground" },
   { href: "/studio", label: "Studio" },
   { href: "/start", label: "Quickstart" },
@@ -26,19 +22,13 @@ const SECTION_IDS = NAV.filter((item) => item.anchor).map(
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const { user } = useAuth();
-  const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [cliModalOpen, setCliModalOpen] = useState(false);
-  const isPlayground = pathname === "/playground";
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState<string | null>(null);
   const railRef = useRef<HTMLSpanElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
 
-  const navItems = user
-    ? [{ href: "/dashboard", label: "Dashboard" }, ...NAV]
-    : NAV;
+  const navItems = NAV;
 
   useEffect(() => {
     let raf = 0;
@@ -162,7 +152,7 @@ export function SiteHeader() {
                     key={item.href}
                     href={item.href}
                     aria-current={
-                      !isPlayground && current === item.anchor
+                      pathname === "/" && current === item.anchor
                         ? "true"
                         : undefined
                     }
@@ -199,11 +189,6 @@ export function SiteHeader() {
           </div>
 
           <div className="flex items-center gap-3">
-            <UserMenu
-              onOpenAuth={() => setAuthModalOpen(true)}
-              onOpenCliConnect={() => setCliModalOpen(true)}
-            />
-
             <a
               href={GITHUB_URL}
               target="_blank"
@@ -253,7 +238,7 @@ export function SiteHeader() {
                         href={item.href}
                         onClick={() => setOpen(false)}
                         aria-current={
-                          !isPlayground && current === item.anchor
+                          pathname === "/" && current === item.anchor
                             ? "true"
                             : undefined
                         }
@@ -300,12 +285,6 @@ export function SiteHeader() {
           </nav>
         </div>
       </header>
-
-      <AuthModal open={authModalOpen} onClose={() => setAuthModalOpen(false)} />
-      <CliConnectModal
-        open={cliModalOpen}
-        onClose={() => setCliModalOpen(false)}
-      />
     </>
   );
 }

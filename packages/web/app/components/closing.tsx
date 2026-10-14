@@ -49,9 +49,7 @@ export function Closing() {
             </a>
           </div>
 
-          <p className="am-mono mt-6 text-sand/60">
-            github.com/N6118/ANVILMARK
-          </p>
+          <p className="am-mono mt-6 text-sand/60">github.com/Aaradhya-07/AM</p>
         </div>
       </div>
     </section>
