@@ -5,10 +5,9 @@ import { BRIEF_URL, ExternalGlyph, GITHUB_URL } from "./circuitry";
 
 const LINKS: Array<{ href: string; label: string; external?: boolean }> = [
   { href: "/", label: "Home" },
-  { href: "/demo", label: "Create a contract" },
-  { href: "/playground", label: "Playground" },
-  { href: "/studio", label: "Studio" },
-  { href: "/start", label: "Quickstart" },
+  { href: "/start", label: "Getting started" },
+  { href: "/demo", label: "Create contract" },
+  { href: "/studio", label: "Review bundle" },
   { href: GITHUB_URL, label: "Repository", external: true },
   { href: BRIEF_URL, label: "Canonical brief", external: true },
 ];

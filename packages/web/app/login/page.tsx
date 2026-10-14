@@ -1,6 +1,17 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import { LoginClient } from "./login-client";
 
-/** Dashboard OAuth is not part of the public contract demo. */
-export default function LoginPage() {
-  redirect("/demo");
+export const metadata: Metadata = {
+  title: "Sign In",
+};
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string | string[] }>;
+}) {
+  const params = await searchParams;
+  const error =
+    typeof params.error === "string" ? params.error.slice(0, 300) : null;
+  return <LoginClient initialError={error} />;
 }

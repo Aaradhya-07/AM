@@ -172,7 +172,7 @@ describe("browser bundle verification", () => {
 describe("Studio and Start surfaces", () => {
   it("renders StudioClient empty dropzone state", () => {
     const html = renderToStaticMarkup(createElement(StudioClient));
-    expect(html).toContain("Review Workspace");
+    expect(html).toContain("Review bundle");
     expect(html).toContain("100% Browser-Local · Zero Server Uploads");
     expect(html).toContain("Open your project review bundle");
     expect(html).toContain(".anvilmark/review-bundle.json");
@@ -360,6 +360,11 @@ describe("Studio and Start surfaces", () => {
   it("renders StartPage setup guide", () => {
     const html = renderToStaticMarkup(createElement(StartPage));
     expect(html).toContain("Get Started with ANVILMARK");
+    expect(html).toContain("Create a decision contract");
+    expect(html).toContain("Explore Atlas Support Desk");
+    expect(html).toContain('href="/demo"');
+    expect(html).toContain('href="/playground"');
+    expect(html).toContain('href="/studio?example=atlas"');
     expect(html).toContain("Existing TypeScript / JavaScript Project");
     expect(html).toContain("New Project Built with Coding Agents");
     expect(html).toContain("node scripts/setup.mjs");

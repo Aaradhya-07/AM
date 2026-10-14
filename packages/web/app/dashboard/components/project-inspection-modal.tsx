@@ -460,10 +460,10 @@ jobs:
           </div>
 
           <Link
-            href="/studio?load=atlas"
+            href="/studio"
             className="inline-flex items-center gap-1.5 rounded-edge border border-gold/60 bg-gold/10 px-3.5 py-1.5 font-mono text-xs font-semibold text-gold hover:bg-gold hover:text-ink transition-colors"
           >
-            <span>Open in Studio</span>
+            <span>Review bundle</span>
             <svg
               className="h-3.5 w-3.5"
               fill="none"

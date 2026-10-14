@@ -5,7 +5,7 @@ import { SiteHeader } from "../components/site-header";
 import { StudioClient } from "./StudioClient";
 
 export const metadata: Metadata = {
-  title: "ANVILMARK Studio · Browser-Local Review Cockpit",
+  title: "Review bundle · ANVILMARK",
   description:
     "Review locally exported project review bundles in memory with zero cloud uploads or telemetry.",
 };

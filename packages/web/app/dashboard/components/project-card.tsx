@@ -125,10 +125,10 @@ export function ProjectCard({
           )}
 
           <Link
-            href="/studio?load=atlas"
+            href="/studio"
             className="inline-flex items-center gap-1 rounded-edge border border-gold/50 bg-gold/10 px-3 py-1.5 font-mono text-xs font-medium text-gold hover:border-gold hover:bg-gold/20 transition-colors"
           >
-            <span>Open in Studio</span>
+            <span>Review bundle</span>
             <svg
               className="h-3.5 w-3.5"
               fill="none"

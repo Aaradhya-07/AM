@@ -14,6 +14,7 @@ export function UserMenu({
 }) {
   const { user, loading, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -55,10 +56,17 @@ export function UserMenu({
       .toUpperCase() || "AM";
 
   const handleSignOut = async () => {
-    setMenuOpen(false);
-    await signOut();
-    if (typeof window !== "undefined") {
+    setSignOutError(null);
+    try {
+      await signOut();
+      setMenuOpen(false);
       window.location.href = "/";
+    } catch (error) {
+      setSignOutError(
+        error instanceof Error
+          ? error.message
+          : "Sign-out failed. Please try again.",
+      );
     }
   };
 
@@ -171,7 +179,7 @@ export function UserMenu({
                   d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"
                 />
               </svg>
-              <span>Architecture Studio</span>
+              <span>Review bundle</span>
             </Link>
 
             {onOpenCliConnect && (
@@ -202,6 +210,11 @@ export function UserMenu({
           </div>
 
           <div className="border-t border-line-muted/60 pt-1">
+            {signOutError && (
+              <p role="alert" className="px-2.5 py-2 text-xs text-red-400">
+                {signOutError}
+              </p>
+            )}
             <button
               type="button"
               onClick={handleSignOut}

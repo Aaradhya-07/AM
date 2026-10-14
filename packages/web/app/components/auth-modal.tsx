@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { useAuth } from "./auth-provider";
 import { GitHubGlyph, TerminalNode } from "./circuitry";
 import { GoogleGlyph } from "./google-glyph";
@@ -9,13 +10,15 @@ import { GoogleGlyph } from "./google-glyph";
 export function AuthModal({
   open,
   onClose,
+  initialError,
 }: {
   open: boolean;
   onClose: () => void;
+  initialError?: string | null;
 }) {
-  const { signInWithProvider, signInDemo, isConfigured } = useAuth();
+  const { signInWithProvider, isConfigured } = useAuth();
   const [submitting, setSubmitting] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError ?? null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -27,12 +30,13 @@ export function AuthModal({
       setError(null);
       return;
     }
+    setError(initialError ?? null);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, initialError]);
 
   if (!open || !mounted) return null;
 
@@ -40,15 +44,6 @@ export function AuthModal({
     setSubmitting(provider);
     setError(null);
     try {
-      if (!isConfigured) {
-        // Fallback demo login if keys aren't set
-        signInDemo(provider === "github" ? "developer" : "architect");
-        onClose();
-        if (typeof window !== "undefined") {
-          window.location.href = "/dashboard";
-        }
-        return;
-      }
       await signInWithProvider(provider);
     } catch (err) {
       console.error("Sign-in failed:", err);
@@ -59,14 +54,6 @@ export function AuthModal({
       );
     } finally {
       setSubmitting(null);
-    }
-  };
-
-  const handleDemo = (role: "developer" | "architect") => {
-    signInDemo(role);
-    onClose();
-    if (typeof window !== "undefined") {
-      window.location.href = "/dashboard";
     }
   };
 
@@ -118,89 +105,87 @@ export function AuthModal({
             id="auth-modal-title"
             className="font-brand text-2xl font-bold tracking-tight text-canvas"
           >
-            Access the Platform
+            Sign in to your workspace
           </h2>
           <p className="mt-2 text-sm text-sand/70">
-            Synchronize local decision contracts, inspect CALM architectures,
-            and monitor agent conformance in real-time.
+            Use GitHub or Google to access projects saved to your configured
+            Supabase workspace.
           </p>
         </div>
 
         {error && (
-          <div className="mt-4 rounded-edge border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-300">
+          <div
+            role="alert"
+            className="mt-4 rounded-edge border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-300"
+          >
             {error}
           </div>
         )}
 
         {/* Auth Buttons */}
-        <div className="mt-8 space-y-3">
-          <button
-            type="button"
-            disabled={Boolean(submitting)}
-            onClick={() => handleOAuth("github")}
-            className="flex w-full min-h-[46px] items-center justify-center gap-3 rounded-edge border border-line-muted bg-graphite/40 px-4 font-sans text-sm font-medium text-canvas transition-all hover:border-gold hover:bg-graphite/80 focus:outline-none focus:ring-2 focus:ring-gold"
-          >
-            <GitHubGlyph />
-            <span>
-              {submitting === "github"
-                ? "Connecting to GitHub..."
-                : "Continue with GitHub"}
-            </span>
-          </button>
+        {isConfigured && (
+          <div className="mt-8 space-y-3">
+            <button
+              type="button"
+              disabled={Boolean(submitting)}
+              onClick={() => handleOAuth("github")}
+              className="flex w-full min-h-[46px] items-center justify-center gap-3 rounded-edge border border-line-muted bg-graphite/40 px-4 font-sans text-sm font-medium text-canvas transition-all hover:border-gold hover:bg-graphite/80 focus:outline-none focus:ring-2 focus:ring-gold"
+            >
+              <GitHubGlyph />
+              <span>
+                {submitting === "github"
+                  ? "Connecting to GitHub..."
+                  : "Continue with GitHub"}
+              </span>
+            </button>
 
-          <button
-            type="button"
-            disabled={Boolean(submitting)}
-            onClick={() => handleOAuth("google")}
-            className="flex w-full min-h-[46px] items-center justify-center gap-3 rounded-edge border border-line-muted bg-graphite/40 px-4 font-sans text-sm font-medium text-canvas transition-all hover:border-gold hover:bg-graphite/80 focus:outline-none focus:ring-2 focus:ring-gold"
-          >
-            <GoogleGlyph />
-            <span>
-              {submitting === "google"
-                ? "Connecting to Google..."
-                : "Continue with Google"}
-            </span>
-          </button>
-        </div>
+            <button
+              type="button"
+              disabled={Boolean(submitting)}
+              onClick={() => handleOAuth("google")}
+              className="flex w-full min-h-[46px] items-center justify-center gap-3 rounded-edge border border-line-muted bg-graphite/40 px-4 font-sans text-sm font-medium text-canvas transition-all hover:border-gold hover:bg-graphite/80 focus:outline-none focus:ring-2 focus:ring-gold"
+            >
+              <GoogleGlyph />
+              <span>
+                {submitting === "google"
+                  ? "Connecting to Google..."
+                  : "Continue with Google"}
+              </span>
+            </button>
+          </div>
+        )}
 
-        {/* Demo / Sandbox mode fallback */}
         {!isConfigured && (
           <div className="mt-6 rounded-edge border border-gold/30 bg-gold/5 p-4 text-left">
             <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-gold">
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-gold" />
-              <span>Preview / Sandbox Mode</span>
+              <span>Guest workspace available</span>
             </div>
             <p className="mt-1.5 text-xs text-sand/80 leading-relaxed">
-              Supabase OAuth keys are not yet configured in{" "}
+              Supabase sign-in is not configured for this deployment. Set{" "}
               <code className="rounded bg-graphite px-1 py-0.5 font-mono text-[10px] text-canvas">
-                .env.local
+                NEXT_PUBLIC_SUPABASE_URL
+              </code>{" "}
+              and{" "}
+              <code className="rounded bg-graphite px-1 py-0.5 font-mono text-[10px] text-canvas">
+                NEXT_PUBLIC_SUPABASE_ANON_KEY
               </code>
-              . You can preview the full platform cockpit immediately with demo
-              identities:
+              . You can still use the local workspace without signing in.
             </p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => handleDemo("developer")}
-                className="rounded-edge border border-line-muted bg-surface px-2.5 py-1.5 font-mono text-xs text-sand hover:border-gold hover:text-gold"
-              >
-                Developer Role
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDemo("architect")}
-                className="rounded-edge border border-line-muted bg-surface px-2.5 py-1.5 font-mono text-xs text-sand hover:border-gold hover:text-gold"
-              >
-                Lead Architect
-              </button>
-            </div>
+            <Link
+              href="/dashboard"
+              onClick={onClose}
+              className="mt-3 inline-flex min-h-[40px] items-center rounded-edge border border-gold/50 px-3 text-xs font-medium text-gold hover:bg-gold/10"
+            >
+              Open local workspace
+            </Link>
           </div>
         )}
 
         {/* Privacy Note */}
         <div className="mt-6 border-t border-line-muted/60 pt-4 text-center font-mono text-[11px] text-sand/50">
-          Local-first & privacy-respecting. Your source code stays on your
-          machine.
+          Guest projects are stored in this browser. Sign-in requires a
+          configured Supabase project.
         </div>
       </div>
     </div>,

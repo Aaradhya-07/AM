@@ -165,17 +165,17 @@ export default function DashboardPage() {
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="font-brand text-base font-bold tracking-tight text-canvas">
-                    Guest Sandbox Mode Active
+                    Local workspace
                   </h3>
                   <span className="rounded bg-amber-500/20 px-2 py-0.5 font-mono text-[10px] uppercase font-bold text-amber-300">
-                    Preloaded Reference Contracts
+                    Browser storage
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-sand/80 leading-relaxed max-w-2xl">
-                  You are exploring sample FINOS CALM 1.2 architectures in guest
-                  mode. Sign in with GitHub or Google to connect your private
-                  repositories, persist decision contracts, and stream real-time
-                  CI telemetry directly into this cockpit.
+                  Projects that you register here are stored in this browser.
+                  Sign in to use account-backed project records when this site
+                  is configured for authentication. To draft a portable
+                  contract, use Create contract.
                 </p>
               </div>
             </div>
@@ -186,7 +186,7 @@ export default function DashboardPage() {
                 onClick={() => setAuthModalOpen(true)}
                 className="inline-flex min-h-[38px] items-center justify-center gap-2 rounded-edge border border-gold bg-gold px-4 font-mono text-xs font-bold uppercase tracking-wider text-ink hover:bg-goldsoft transition-colors"
               >
-                <span>Sign In with GitHub / Google</span>
+                <span>Sign in</span>
                 <span aria-hidden="true">→</span>
               </button>
             </div>
@@ -209,17 +209,16 @@ export default function DashboardPage() {
               <>
                 Welcome back,{" "}
                 <span className="font-semibold text-canvas">{user.name}</span>.
-                All local decision contracts are synchronized with zero source
-                code egress.
+                This workspace includes browser projects and account-backed
+                records available to your session.
               </>
             ) : (
               <>
-                Viewing in{" "}
+                Viewing the{" "}
                 <span className="font-semibold text-amber-400">
-                  Guest Sandbox Mode
+                  local workspace
                 </span>
-                . Connect your account to persist private contracts and stream
-                CI telemetry.
+                . Browser projects stay on this device.
               </>
             )}
           </p>
@@ -273,7 +272,7 @@ export default function DashboardPage() {
               />
             </svg>
             <span>
-              {user ? "Connect Repository" : "Sign In to Connect Repo"}
+              {user ? "Register Project" : "Sign in for account projects"}
             </span>
           </button>
         </div>
@@ -313,7 +312,7 @@ export default function DashboardPage() {
             </span>
           </div>
           <p className="mt-1 font-mono text-[10px] text-sand/60">
-            Zero unauthorized egress flows
+            Based on recorded project status
           </p>
         </div>
 
@@ -330,21 +329,21 @@ export default function DashboardPage() {
             </span>
           </div>
           <p className="mt-1 font-mono text-[10px] text-sand/60">
-            Requires architect hash sign-off
+            Based on recorded project status
           </p>
         </div>
 
         <div className="rounded-module border border-line-muted bg-surface/80 p-4">
           <span className="block font-mono text-[11px] uppercase tracking-wider text-sand/60">
-            Connected Agents
+            Local agent setup
           </span>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="font-brand text-3xl font-bold text-canvas">
-              Claude / Cursor
+              CLI + MCP
             </span>
           </div>
           <p className="mt-1 font-mono text-[10px] text-sand/60">
-            Building against frozen contracts
+            Configure in your repository
           </p>
         </div>
       </div>
@@ -415,8 +414,8 @@ export default function DashboardPage() {
                 No repositories registered yet
               </h3>
               <p className="mx-auto mt-2 max-w-md text-sm text-sand/70">
-                Connect your repository to monitor agent conformance, verify
-                architectural boundaries, and stream live audits.
+                Register a project here, or create a portable contract in the
+                browser and continue with the local CLI.
               </p>
               <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
                 <button
@@ -437,7 +436,7 @@ export default function DashboardPage() {
                   href="/start"
                   className="inline-flex items-center gap-2 rounded-edge border border-line-muted bg-surface px-4 py-2 font-mono text-xs text-sand transition-all hover:border-gold hover:text-gold"
                 >
-                  <span>Quickstart Docs →</span>
+                  <span>Getting started →</span>
                 </Link>
               </div>
             </div>
@@ -475,19 +474,18 @@ export default function DashboardPage() {
           <div className="rounded-module border border-gold/30 bg-gold/5 p-5">
             <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-gold">
               <TerminalNode active />
-              <span>Interactive Architecture Studio</span>
+              <span>Review bundle</span>
             </div>
             <p className="mt-2 text-xs text-sand/80 leading-relaxed">
-              Launch the in-browser cockpit to inspect full FINOS CALM 1.2
-              architectures, interactive Mermaid state graphs, and memory sizing
-              curves.
+              Open a local review bundle exported by the CLI. The Atlas bundle
+              is available as an optional example inside the review page.
             </p>
             <div className="mt-4">
               <Link
-                href="/studio?load=atlas"
+                href="/studio"
                 className="inline-flex w-full items-center justify-center gap-2 rounded-edge border border-gold/60 bg-gold/10 px-4 py-2 font-mono text-xs font-semibold text-gold hover:bg-gold hover:text-ink transition-colors"
               >
-                <span>Launch Studio Viewer</span>
+                <span>Open Review bundle</span>
                 <svg
                   className="h-3.5 w-3.5"
                   fill="none"

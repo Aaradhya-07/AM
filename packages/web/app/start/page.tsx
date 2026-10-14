@@ -12,9 +12,9 @@ export ANVILMARK_CHECKOUT="$PWD"
 anvilmark() { node "$ANVILMARK_CHECKOUT/packages/cli/bin/anvilmark.mjs" "$@"; }`;
 
 export const metadata: Metadata = {
-  title: "Quickstart & Setup · ANVILMARK",
+  title: "Getting Started · ANVILMARK",
   description:
-    "Verified setup instructions for existing AI repositories and new agent-built projects.",
+    "Choose a project workflow or explore the optional Atlas example, then set up the local ANVILMARK tools.",
 };
 
 export default function StartPage() {
@@ -33,41 +33,130 @@ export default function StartPage() {
                 <span aria-hidden="true">←</span> Back to Home
               </Link>
               <span className="text-line-muted">/</span>
-              <span className="text-sand/90">Quickstart</span>
+              <span className="text-sand/90">Getting Started</span>
             </div>
             <p className="text-[11px] font-medium uppercase tracking-brand text-gold">
-              Setup &amp; Workflow Guide
+              Choose a path
             </p>
             <h1 className="mt-3 font-brand text-3xl font-light leading-tight text-canvas sm:text-4xl">
               Get Started with ANVILMARK
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-sand/80">
-              Zero cloud account setup required. ANVILMARK runs entirely locally
-              on your machine and in your browser.
+              Define the intended AI architecture, check code against it, and
+              review the result. Start with your own project or explore a
+              prepared example. No account is required for either path.
             </p>
           </div>
         </div>
 
         <div className="mx-auto max-w-[108rem] px-5 py-12 sm:px-8">
-          <div className="mb-8 rounded border border-gold/35 bg-surface p-6">
-            <h2 className="text-xl font-medium text-canvas">
-              Start in the browser
-            </h2>
-            <p className="mt-2 max-w-3xl text-sm text-sand/70">
-              Draft an idea, workload, restrictions, and model candidates, then
-              download a schema-valid contract for the local CLI. The browser
-              comparison records unknown evidence; it does not approve a model.
-            </p>
-            <Link
-              href="/demo"
-              className="mt-4 inline-block text-sm text-gold hover:underline"
-            >
-              Create a draft contract →
-            </Link>
+          <div className="mb-10 grid gap-5 md:grid-cols-2">
+            <section className="flex flex-col rounded border border-gold/35 bg-surface p-6">
+              <p className="text-[11px] font-semibold uppercase tracking-brand text-gold">
+                Your project
+              </p>
+              <h2 className="mt-3 text-xl font-medium text-canvas">
+                Create a decision contract
+              </h2>
+              <p className="mt-2 flex-1 text-sm leading-6 text-sand/75">
+                Bring a project idea, one AI workload, and the restrictions it
+                must meet. Draft a portable contract in the browser, then check
+                your implementation with the local CLI.
+              </p>
+              <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3">
+                <Link
+                  href="/demo"
+                  className="inline-flex min-h-11 items-center justify-center rounded bg-gold px-4 text-sm font-semibold text-ink transition-colors hover:bg-goldsoft"
+                >
+                  Create a contract{" "}
+                  <span aria-hidden="true" className="ml-2">
+                    →
+                  </span>
+                </Link>
+                <Link
+                  href="#local-setup"
+                  className="inline-flex min-h-11 items-center text-sm text-sand/80 hover:text-gold"
+                >
+                  Local setup steps
+                </Link>
+              </div>
+            </section>
+            <section className="flex flex-col rounded border border-line-muted bg-surface p-6">
+              <p className="text-[11px] font-semibold uppercase tracking-brand text-gold">
+                Prepared example
+              </p>
+              <h2 className="mt-3 text-xl font-medium text-canvas">
+                Explore Atlas Support Desk
+              </h2>
+              <p className="mt-2 flex-1 text-sm leading-6 text-sand/75">
+                Use synthetic project data to change a model or data path and
+                see how the code checks respond. Then inspect its exported
+                review bundle on the Review bundle page. No local setup is
+                needed.
+              </p>
+              <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3">
+                <Link
+                  href="/playground"
+                  className="inline-flex min-h-11 items-center text-sm font-medium text-gold hover:underline"
+                >
+                  Explore the example{" "}
+                  <span aria-hidden="true" className="ml-2">
+                    →
+                  </span>
+                </Link>
+                <Link
+                  href="/studio?example=atlas"
+                  className="inline-flex min-h-11 items-center text-sm text-sand/80 hover:text-gold"
+                >
+                  View its review bundle
+                </Link>
+              </div>
+            </section>
           </div>
+
+          <section
+            aria-labelledby="workflow-heading"
+            className="mb-10 rounded border border-line-muted bg-surface/60 p-6"
+          >
+            <h2
+              id="workflow-heading"
+              className="text-xl font-medium text-canvas"
+            >
+              From contract to review
+            </h2>
+            <ol className="mt-5 grid gap-5 text-sm md:grid-cols-3">
+              <li className="border-l-2 border-gold/60 pl-4">
+                <span className="font-mono text-xs text-gold">01 · Define</span>
+                <p className="mt-2 text-sand/75">
+                  Describe one workload, its limits, and the candidates you want
+                  to compare. Download the draft contract.
+                </p>
+              </li>
+              <li className="border-l-2 border-gold/60 pl-4">
+                <span className="font-mono text-xs text-gold">02 · Check</span>
+                <p className="mt-2 text-sand/75">
+                  Import the contract into your local project, record a
+                  decision, and run the CLI conformance check.
+                </p>
+              </li>
+              <li className="border-l-2 border-gold/60 pl-4">
+                <span className="font-mono text-xs text-gold">03 · Review</span>
+                <p className="mt-2 text-sand/75">
+                  Export a review bundle and open it on the Review bundle page.
+                  A failed rule needs a code or contract correction; an unknown
+                  result needs more evidence.
+                </p>
+              </li>
+            </ol>
+            <p className="mt-5 text-xs leading-5 text-sand/60">
+              The browser comparison does not approve a model. Review and
+              approve decisions locally before a current conformance check.
+            </p>
+          </section>
+
           <div className="mb-8 rounded border border-line-muted bg-surface p-6">
             <h2 className="text-xl font-medium text-canvas">
-              Browser → CLI → MCP
+              How the browser, CLI, and MCP server connect
             </h2>
             <p className="mt-2 max-w-3xl text-sm text-sand/70">
               The hosted browser creates a downloadable draft. Import it into a
@@ -93,7 +182,10 @@ anvilmark status`}</pre>
               command serves fixture data.
             </p>
           </div>
-          <div className="mb-8 rounded border border-line-muted bg-surface p-6">
+          <div
+            id="local-setup"
+            className="mb-8 scroll-mt-24 rounded border border-line-muted bg-surface p-6"
+          >
             <h2 className="text-xl font-medium text-canvas">
               Set up the CLI from a checkout
             </h2>
@@ -178,7 +270,7 @@ anvilmark status`}</pre>
                   <p className="mt-1 text-sand/80">
                     Open{" "}
                     <Link href="/studio" className="text-gold hover:underline">
-                      ANVILMARK Studio
+                      Review bundle
                     </Link>{" "}
                     and drop your generated{" "}
                     <code className="font-mono text-gold">

@@ -35,13 +35,11 @@ export interface StudioClientProps {
   /** A bundle that has already been verified, such as a bundled example. */
   readonly initialBundle?: WebReviewEnvelope | null;
   readonly initialTab?: StudioTab;
-  readonly autoLoadExample?: boolean;
 }
 
 export function StudioClient({
   initialBundle = null,
   initialTab = "review",
-  autoLoadExample = false,
 }: StudioClientProps) {
   const [bundle, setBundle] = useState<WebReviewEnvelope | null>(initialBundle);
   const [bundleWarnings, setBundleWarnings] = useState<readonly string[]>([]);
@@ -105,15 +103,11 @@ export function StudioClient({
 
   useEffect(() => {
     if (initialBundle) return;
-    if (autoLoadExample) {
-      void loadExample();
-      return;
-    }
     const params = new URLSearchParams(window.location.search);
     if (params.get("example") === "atlas" || params.get("load") === "atlas") {
       void loadExample();
     }
-  }, [autoLoadExample, initialBundle, loadExample]);
+  }, [initialBundle, loadExample]);
 
   const evidenceGaps = useMemo(
     () => (bundle ? collectEvidenceGaps(bundle.facts) : []),
@@ -169,10 +163,10 @@ export function StudioClient({
               <span aria-hidden="true">←</span> Back to Home
             </Link>
             <span className="text-line-muted">/</span>
-            <span className="text-sand/90">Studio</span>
+            <span className="text-sand/90">Review bundle</span>
           </div>
           <h1 className="mt-2 text-2xl font-light text-canvas sm:text-3xl">
-            {bundle ? bundle.project.name : "Review Workspace"}
+            {bundle ? bundle.project.name : "Review bundle"}
           </h1>
           <p className="mt-1 text-sm text-sand/70">
             {bundle
@@ -285,7 +279,7 @@ export function StudioClient({
               href="/playground"
               className="text-sm text-sand/70 transition-colors hover:text-gold"
             >
-              Try the Playground →
+              Explore Atlas checks →
             </Link>
           </div>
 

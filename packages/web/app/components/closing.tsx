@@ -30,7 +30,7 @@ export function Closing() {
               data-magnetic
               className="am-btn am-btn-primary am-magnetic"
             >
-              <span>Create a contract</span>
+              <span>Create contract</span>
               <span aria-hidden="true" className="text-xs">
                 →
               </span>

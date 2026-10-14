@@ -153,7 +153,7 @@ export function PlaygroundClient() {
               href="/studio?example=atlas"
               className="rounded border border-line-muted bg-surface px-3 py-1.5 text-xs text-sand transition-colors hover:border-gold hover:text-gold"
             >
-              Open an exported Atlas bundle in Studio →
+              Open the Atlas review bundle →
             </Link>
           </div>
         </div>

@@ -6,7 +6,7 @@ Updated: 2026-10-14
 
 The site root is the landing page, with **Create a contract** leading to `/demo`. A visitor can record one project idea, one workload, input data boundary, optional usage/budget/quality target, and two or more candidate model paths. The side-by-side comparison shows declared deployment facts and missing evidence. An optional lookup fetches published evaluations for an exact Hugging Face `publisher/model` ID through a read-only website endpoint. **It does not rank, measure, select, or approve a model.** Download creates a draft.5 JSON contract in the browser; draft form data is not sent to the website server. A lookup sends only the requested public model ID.
 
-The previous `/overview` path redirects to the landing page. Studio still opens an exported review bundle. The dashboard and Atlas playground are separate early surfaces and are not the contract authoring flow. Public sign-in is removed and `/login` redirects to the contract demo while the optional dashboard authentication is unconfigured.
+The previous `/overview` path redirects to the landing page. The primary navigation is Home, Getting started, Create contract, and Review bundle. Studio starts with an empty import state; Atlas opens only when a visitor selects the example. The Atlas playground and optional dashboard are separate from contract authoring. `/login` is the sign-in route for an account-backed dashboard when Supabase is configured.
 
 ## Demo walkthrough
 
@@ -33,6 +33,8 @@ The website `build` script first builds workspace dependencies, then runs Next.j
 ## New Vercel project
 
 Create a **new** Vercel project from the AM Git repository. In the import screen select `packages/web` as the Root Directory, Next.js as the framework, and Node.js 24. Enable **Include source files outside of the Root Directory in the Build Step**, because the site uses workspace packages from `packages/`. Keep the build command as the package's `pnpm run build` and the output directory at the framework default. Set `NEXT_PUBLIC_SITE_URL` to the new production URL after it is known; this is used for social metadata. Supabase variables are optional for the draft demo, and no account is required to use it.
+
+For optional dashboard authentication, set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in the deployment. Configure the Supabase Site URL and redirect allowlist to include `https://<site>/auth/callback`. Enable GitHub and/or Google in Supabase Auth and set each provider's credentials and callback URL in the provider console. The public draft and local bundle review do not require Supabase. Do not put a service role key in a public environment variable.
 
 Vercel project slugs must be lowercase, so `am` is the natural project name even if the product is displayed as **AM**. The new deployment must contain these repository changes in its connected branch. This document does not change or redeploy the old `anvilmark.vercel.app` project.
 

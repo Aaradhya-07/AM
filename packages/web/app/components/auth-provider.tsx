@@ -15,8 +15,7 @@ export interface PlatformUser {
   email: string;
   name: string;
   avatarUrl?: string;
-  provider: "github" | "google" | "demo";
-  role?: string;
+  provider: "github" | "google";
 }
 
 interface AuthContextValue {
@@ -24,36 +23,10 @@ interface AuthContextValue {
   loading: boolean;
   isConfigured: boolean;
   signInWithProvider: (provider: "github" | "google") => Promise<void>;
-  signInDemo: (role?: "developer" | "architect") => void;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-
-const DEMO_DEVELOPER: PlatformUser = {
-  id: "usr_demo_dev_01",
-  email: "anurag@anvilmark.dev",
-  name: "Anurag Dev",
-  avatarUrl:
-    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80",
-  provider: "demo",
-  role: "Core Systems Engineer",
-};
-
-const DEMO_ARCHITECT: PlatformUser = {
-  id: "usr_demo_arch_02",
-  email: "lead.architect@atlasbank.internal",
-  name: "Aaradhya Lead",
-  avatarUrl:
-    "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80",
-  provider: "demo",
-  role: "Lead Architect",
-};
-
-const DEMO_USERS: Record<"developer" | "architect", PlatformUser> = {
-  developer: DEMO_DEVELOPER,
-  architect: DEMO_ARCHITECT,
-};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<PlatformUser | null>(null);
@@ -63,57 +36,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const syncUserFromSupabase = useCallback(async () => {
     const supabase = createClient();
     if (!supabase) {
-      // Check local storage for demo user
-      const stored = localStorage.getItem("anvilmark_demo_user");
-      if (stored) {
-        try {
-          setUser(JSON.parse(stored));
-        } catch {
-          localStorage.removeItem("anvilmark_demo_user");
-        }
-      }
+      setUser(null);
       setLoading(false);
       return;
     }
 
     try {
-      // Handle OAuth redirect code fallback if URL has ?code= parameter
-      if (typeof window !== "undefined") {
-        const urlParams = new URLSearchParams(window.location.search);
-        const code = urlParams.get("code");
-        if (code) {
-          try {
-            const { data, error } =
-              await supabase.auth.exchangeCodeForSession(code);
-            if (!error && data?.session?.user) {
-              urlParams.delete("code");
-              const next =
-                urlParams.get("next") ||
-                (window.location.pathname === "/" ||
-                window.location.pathname === "/login"
-                  ? "/dashboard"
-                  : window.location.pathname);
-              urlParams.delete("next");
-              const newSearch = urlParams.toString();
-              const newUrl =
-                next +
-                (newSearch ? `?${newSearch}` : "") +
-                window.location.hash;
-              window.history.replaceState({}, document.title, newUrl);
-              if (
-                window.location.pathname === "/" ||
-                window.location.pathname === "/login"
-              ) {
-                window.location.href = newUrl;
-                return;
-              }
-            }
-          } catch (exchangeErr) {
-            console.warn("Client-side code exchange note:", exchangeErr);
-          }
-        }
-      }
-
       const {
         data: { user: sbUser },
       } = await supabase.auth.getUser();
@@ -152,25 +80,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           )
           .then(() => {});
       } else {
-        const stored = localStorage.getItem("anvilmark_demo_user");
-        if (stored) {
-          try {
-            setUser(JSON.parse(stored));
-          } catch {
-            localStorage.removeItem("anvilmark_demo_user");
-          }
-        } else {
-          setUser(null);
-        }
+        setUser(null);
       }
     } catch (err) {
       console.error("Failed to sync Supabase user:", err);
+      setUser(null);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    localStorage.removeItem("anvilmark_demo_user");
     syncUserFromSupabase();
 
     const supabase = createClient();
@@ -178,7 +99,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "INITIAL_SESSION") return;
       if (session?.user) {
         const sbUser = session.user;
         const userName =
@@ -198,18 +120,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           provider:
             (sbUser.app_metadata?.provider as "github" | "google") || "github",
         });
-        localStorage.removeItem("anvilmark_demo_user");
       } else {
-        const stored = localStorage.getItem("anvilmark_demo_user");
-        if (stored) {
-          try {
-            setUser(JSON.parse(stored));
-          } catch {
-            setUser(null);
-          }
-        } else {
-          setUser(null);
-        }
+        setUser(null);
       }
       setLoading(false);
     });
@@ -222,9 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithProvider = async (provider: "github" | "google") => {
     const supabase = createClient();
     if (!supabase) {
-      // If keys are not set up yet, fallback to demo developer
-      signInDemo("developer");
-      return;
+      throw new Error("Sign-in is unavailable. Supabase is not configured.");
     }
 
     const origin = typeof window !== "undefined" ? window.location.origin : "";
@@ -242,21 +152,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (data?.url && typeof window !== "undefined") {
       window.location.href = data.url;
+    } else {
+      throw new Error("The identity provider did not return a sign-in URL.");
     }
-  };
-
-  const signInDemo = (role: "developer" | "architect" = "developer") => {
-    const demoUser = DEMO_USERS[role] ?? DEMO_DEVELOPER;
-    localStorage.setItem("anvilmark_demo_user", JSON.stringify(demoUser));
-    setUser(demoUser);
   };
 
   const signOut = async () => {
     const supabase = createClient();
     if (supabase) {
-      await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
     }
-    localStorage.removeItem("anvilmark_demo_user");
     setUser(null);
   };
 
@@ -267,7 +173,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         isConfigured: configured,
         signInWithProvider,
-        signInDemo,
         signOut,
       }}
     >
@@ -281,7 +186,6 @@ const DEFAULT_AUTH_CONTEXT: AuthContextValue = {
   loading: false,
   isConfigured: false,
   signInWithProvider: async () => {},
-  signInDemo: () => {},
   signOut: async () => {},
 };
 

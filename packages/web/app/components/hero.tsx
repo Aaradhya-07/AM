@@ -65,7 +65,7 @@ export function Hero() {
                   data-testid="hero-contract-cta"
                   className="am-btn am-btn-primary am-magnetic inline-flex items-center gap-2"
                 >
-                  <span>Create a contract</span>
+                  <span>Create contract</span>
                   <span aria-hidden="true" className="text-xs">
                     →
                   </span>
@@ -75,14 +75,14 @@ export function Hero() {
                   data-magnetic
                   className="am-btn am-btn-secondary am-magnetic"
                 >
-                  Review a bundle
+                  Review bundle
                 </Link>
                 <Link
                   href="/start"
                   data-magnetic
                   className="am-btn am-btn-secondary am-magnetic text-sand/70 hover:text-canvas"
                 >
-                  Quickstart
+                  Getting started
                 </Link>
               </div>
               <div className="flex items-center gap-2 font-mono text-[11px] text-sand/60">

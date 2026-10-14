@@ -8,23 +8,16 @@ import { useEffect, useRef, useState } from "react";
 import { ExternalGlyph, GITHUB_URL, GitHubGlyph } from "./circuitry";
 
 const NAV = [
-  { href: "/demo", label: "Create a contract" },
-  { href: "/#flow", label: "The flow", anchor: "flow" },
-  { href: "/#contract", label: "The contract", anchor: "contract" },
-  { href: "/playground", label: "Playground" },
-  { href: "/studio", label: "Studio" },
-  { href: "/start", label: "Quickstart" },
+  { href: "/", label: "Home" },
+  { href: "/start", label: "Getting started" },
+  { href: "/demo", label: "Create contract" },
+  { href: "/studio", label: "Review bundle" },
 ];
-
-const SECTION_IDS = NAV.filter((item) => item.anchor).map(
-  (item) => item.anchor!,
-);
 
 export function SiteHeader() {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
-  const [current, setCurrent] = useState<string | null>(null);
   const railRef = useRef<HTMLSpanElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
 
@@ -55,42 +48,6 @@ export function SiteHeader() {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
     };
-  }, []);
-
-  /* Scrollspy. rootMargin pins the trigger line just under the header so a
-     section counts as current once its heading clears the chrome. */
-  useEffect(() => {
-    const sections = SECTION_IDS.map((id) =>
-      document.getElementById(id),
-    ).filter((node): node is HTMLElement => node !== null);
-    if (sections.length === 0) return;
-
-    const visible = new Map<string, number>();
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting)
-            visible.set(entry.target.id, entry.intersectionRatio);
-          else visible.delete(entry.target.id);
-        }
-        let best: string | null = null;
-        let bestRatio = 0;
-        for (const [id, ratio] of visible) {
-          if (ratio >= bestRatio) {
-            bestRatio = ratio;
-            best = id;
-          }
-        }
-        setCurrent(best);
-      },
-      {
-        rootMargin: "-25% 0px -55% 0px",
-        threshold: [0, 0.15, 0.35, 0.6, 1],
-      },
-    );
-
-    for (const section of sections) observer.observe(section);
-    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -135,32 +92,16 @@ export function SiteHeader() {
 
             <span
               aria-hidden="true"
-              className="am-trace-y hidden h-8 md:block"
+              className="am-trace-y hidden h-8 xl:block"
             />
 
             <nav
               aria-label="Primary"
-              className="hidden items-center gap-8 md:flex"
+              className="hidden items-center gap-7 xl:flex"
             >
               {navItems.map((item) => {
-                const isCurrent =
-                  pathname === item.href ||
-                  (item.href === "/dashboard" &&
-                    pathname.startsWith("/dashboard"));
-                return item.anchor ? (
-                  <a
-                    key={item.href}
-                    href={item.href}
-                    aria-current={
-                      pathname === "/" && current === item.anchor
-                        ? "true"
-                        : undefined
-                    }
-                    className="am-ui am-nav-link rounded-edge py-2 text-sand/80 transition-colors hover:text-canvas"
-                  >
-                    {item.label}
-                  </a>
-                ) : (
+                const isCurrent = pathname === item.href;
+                return (
                   <Link
                     key={item.href}
                     href={item.href}
@@ -193,7 +134,7 @@ export function SiteHeader() {
               href={GITHUB_URL}
               target="_blank"
               rel="noreferrer noopener"
-              className="am-ui hidden min-h-[40px] items-center gap-2 rounded-edge border border-line-muted px-4 text-sand/80 transition-colors hover:border-gold hover:text-gold sm:inline-flex"
+              className="am-ui hidden min-h-[40px] items-center gap-2 rounded-edge border border-line-muted px-4 text-sand/80 transition-colors hover:border-gold hover:text-gold xl:inline-flex"
             >
               <GitHubGlyph />
               <span>GitHub</span>
@@ -207,7 +148,7 @@ export function SiteHeader() {
               onClick={() => setOpen((value) => !value)}
               aria-expanded={open}
               aria-controls="mobile-nav"
-              className="am-ui inline-flex min-h-[40px] items-center rounded-edge border border-line-muted px-4 text-sand/80 transition-colors hover:border-gold hover:text-gold md:hidden"
+              className="am-ui inline-flex min-h-[40px] items-center rounded-edge border border-line-muted px-4 text-sand/80 transition-colors hover:border-gold hover:text-gold xl:hidden"
             >
               {open ? "Close" : "Menu"}
             </button>
@@ -219,55 +160,37 @@ export function SiteHeader() {
         <div
           id="mobile-nav"
           hidden={!open}
-          className="border-t border-line-muted bg-ink md:hidden"
+          className="border-t border-line-muted bg-ink xl:hidden"
         >
           <nav aria-label="Primary, mobile" className="px-5 py-3 sm:px-8">
             <ul className="flex flex-col">
               {navItems.map((item) => {
-                const isCurrent =
-                  pathname === item.href ||
-                  (item.href === "/dashboard" &&
-                    pathname.startsWith("/dashboard"));
+                const isCurrent = pathname === item.href;
                 return (
                   <li
                     key={item.href}
                     className="border-b border-line-muted last:border-b-0"
                   >
-                    {item.anchor ? (
-                      <a
-                        href={item.href}
-                        onClick={() => setOpen(false)}
-                        aria-current={
-                          pathname === "/" && current === item.anchor
-                            ? "true"
-                            : undefined
-                        }
-                        className="am-ui block min-h-[44px] py-3.5 text-sand/80 transition-colors aria-[current]:text-gold hover:text-canvas"
-                      >
-                        {item.label}
-                      </a>
-                    ) : (
-                      <Link
-                        href={item.href}
-                        onClick={() => setOpen(false)}
-                        aria-current={isCurrent ? "page" : undefined}
-                        className="am-ui flex min-h-[44px] items-center gap-2 py-3.5 font-medium text-gold transition-colors hover:text-sand"
-                      >
-                        <span
-                          aria-hidden="true"
-                          className={`inline-block h-1.5 w-1.5 rounded-full ${
-                            isCurrent
-                              ? "bg-gold shadow-[0_0_6px_#D08D2E]"
-                              : "bg-gold/60"
-                          }`}
-                        />
-                        {item.label}
-                      </Link>
-                    )}
+                    <Link
+                      href={item.href}
+                      onClick={() => setOpen(false)}
+                      aria-current={isCurrent ? "page" : undefined}
+                      className="am-ui flex min-h-[44px] items-center gap-2 py-3.5 font-medium text-gold transition-colors hover:text-sand"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`inline-block h-1.5 w-1.5 rounded-full ${
+                          isCurrent
+                            ? "bg-gold shadow-[0_0_6px_#D08D2E]"
+                            : "bg-gold/60"
+                        }`}
+                      />
+                      {item.label}
+                    </Link>
                   </li>
                 );
               })}
-              <li className="border-t border-line-muted sm:hidden">
+              <li className="border-t border-line-muted xl:hidden">
                 <a
                   href={GITHUB_URL}
                   target="_blank"

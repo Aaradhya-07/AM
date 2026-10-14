@@ -8,9 +8,9 @@ import { PlaygroundClient } from "./PlaygroundClient";
 import { loadPlaygroundModel } from "./sample";
 
 export const metadata: Metadata = {
-  title: "Hardware sizing and contract checks · ANVILMARK playground",
+  title: "Explore the Atlas Example · ANVILMARK",
   description:
-    "Size a declared deployment, export its assumptions, and explore real Atlas code-to-contract checks.",
+    "Explore a synthetic Atlas project with hardware sizing and real code-to-contract checks, then start your own contract.",
 };
 
 export default function PlaygroundPage() {
@@ -32,18 +32,19 @@ export default function PlaygroundPage() {
                   <span aria-hidden="true">←</span> Back to Home
                 </Link>
                 <span className="text-line-muted">/</span>
-                <span className="text-sand/90">Playground</span>
+                <span className="text-sand/90">Atlas example</span>
               </div>
               <p className="text-[11px] font-medium uppercase tracking-brand text-gold">
-                Sizing and contract workspace
+                Optional example · synthetic data
               </p>
               <h1 className="mt-3 font-brand text-3xl font-light leading-tight text-canvas sm:text-4xl">
-                Size the deployment. Check the implementation.
+                Explore the Atlas workflow
               </h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-sand/80">
-                Explore memory requirements and the evidence still needed for a
-                deployment. Then change the Atlas model or redaction path and
-                run the actual conformance checker.
+                Size a declared deployment, then change Atlas&apos;s model or
+                redaction path and run the conformance checker. Use this
+                synthetic example to learn how checks, evidence, and review fit
+                together.
               </p>
             </div>
             {result.ok ? (
@@ -61,12 +62,31 @@ export default function PlaygroundPage() {
           role="note"
           className="sticky top-[var(--am-header-h)] z-20 border-b border-gold/30 bg-[#1e1708] px-5 py-2 text-center text-xs font-medium text-goldsoft sm:px-8"
         >
-          Interactive synthetic Atlas example — runs actual @anvilmark/scanner
+          Optional synthetic Atlas example — runs actual @anvilmark/scanner
           &amp; @anvilmark/conformance engine in a bounded worker.
         </div>
 
         <div className="overflow-x-hidden">
           <PlaygroundClient />
+        </div>
+
+        <div className="mx-auto max-w-[108rem] px-5 pb-10 sm:px-8">
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded border border-line-muted bg-surface p-5">
+            <p className="max-w-2xl text-sm text-sand/75">
+              Ready to use your own workload and constraints? Create a draft
+              contract, then run the local check and open its exported bundle on
+              the Review bundle page.
+            </p>
+            <Link
+              href="/start"
+              className="inline-flex min-h-11 items-center text-sm font-medium text-gold hover:underline"
+            >
+              Start with your project{" "}
+              <span aria-hidden="true" className="ml-2">
+                →
+              </span>
+            </Link>
+          </div>
         </div>
 
         {result.ok ? (
