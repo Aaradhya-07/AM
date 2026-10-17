@@ -44,7 +44,7 @@ Inputs
 Exit codes
   conformance         0 compliant (all rules passed or not applicable)
                       1 conformance violation (one or more rules failed)
-                      2 unknown/inconclusive or error
+                      2 unknown/inconclusive, no rules, or error
   conformance --check 0 stored report is current and fresh
                       1 missing, stale, invalid, or tampered report
                       2 usage or internal error`;
@@ -169,6 +169,8 @@ function renderReport(report: ConformanceReport): string {
       "Overall Status: ANALYSIS ERROR (no conformance verdict)",
       ...report.analysis_errors.map((e) => `  - ${e}`),
     );
+  } else if (report.summary.total === 0) {
+    out.push("Overall Status: NOT EVALUATED (no conformance rules configured)");
   } else if (report.summary.compliant) {
     out.push("Overall Status: COMPLIANT");
   } else if (report.summary.fail > 0) {
@@ -269,6 +271,9 @@ export async function conformanceCommand(
   }
   if (runOutcome.report.summary.unknown > 0) {
     return EXIT.usage; // Exit 2: unknown
+  }
+  if (runOutcome.report.summary.total === 0) {
+    return EXIT.usage; // Exit 2: no rules to evaluate
   }
   return EXIT.ok; // Exit 0: compliant
 }

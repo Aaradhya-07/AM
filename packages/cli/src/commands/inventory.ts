@@ -79,6 +79,18 @@ const REASON_LABELS: Readonly<Record<string, string>> = {
 const plural = (count: number, word: string) =>
   `${count} ${word}${count === 1 ? "" : "s"}`;
 
+const MISSING_DEPENDENCY_GUIDANCE =
+  "Some AI dependencies are not installed. This can hide provider calls; install this app's locked dependencies and rerun. ANVILMARK never installs or executes them automatically.";
+
+function needsDependencyGuidance(inventory: AiInventory): boolean {
+  return (
+    inventory.dependencies.some((entry) => entry.installed_version === null) &&
+    inventory.uncertainty.locations.some(
+      (entry) => entry.reason === "unresolved_import",
+    )
+  );
+}
+
 function pad(rows: readonly (readonly string[])[]): string[] {
   const widths = rows.reduce<number[]>(
     (acc, row) =>
@@ -178,6 +190,8 @@ export function renderInventoryText(
       ),
     );
   }
+  if (needsDependencyGuidance(inventory))
+    out.push("", MISSING_DEPENDENCY_GUIDANCE);
   if (inventory.environment_variables.length > 0) {
     out.push(
       "",
@@ -327,6 +341,8 @@ export function renderInventoryMarkdown(
         ]),
       ),
     );
+  if (needsDependencyGuidance(inventory))
+    out.push("", MISSING_DEPENDENCY_GUIDANCE);
   if (inventory.environment_variables.length > 0)
     out.push(
       "",

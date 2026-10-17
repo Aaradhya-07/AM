@@ -52,6 +52,7 @@ describe("anvilmark inventory", () => {
     expect(out).toContain("Call sites");
     expect(out).toContain("chat.completions.create [inference]");
     expect(out).toContain("AI dependencies");
+    expect(out).not.toContain("Some AI dependencies are not installed");
     // No project was created, and the repository is untouched.
     expect(await readTree(app)).toEqual(before);
     expect(
@@ -77,6 +78,19 @@ describe("anvilmark inventory", () => {
     expect(await cli(["inventory", "app", "--markdown"], markdown)).toBe(0);
     expect(markdown.out()).toContain("# AI usage inventory: app");
     expect(markdown.out()).toContain("| Destination | Calls |");
+  });
+
+  it("explains when missing SDK packages can hide calls", async () => {
+    const base = await tempDir("anvilmark-inventory-");
+    const app = join(base, "app");
+    await cp(join(FIXTURES, "repositories", "atlas-support"), app, {
+      recursive: true,
+    });
+    const io = scriptedIo({ cwd: app });
+    expect(await cli(["inventory"], io), io.err()).toBe(0);
+    expect(io.out()).toContain("Some AI dependencies are not installed");
+    expect(io.out()).toContain("install this app's locked dependencies");
+    expect(io.out()).toContain("unresolved_import");
   });
 
   it("refuses a path that is not a directory, and refuses both output formats at once", async () => {

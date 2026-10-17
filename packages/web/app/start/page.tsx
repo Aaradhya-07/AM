@@ -149,8 +149,8 @@ export default function StartPage() {
               </li>
             </ol>
             <p className="mt-5 text-xs leading-5 text-sand/60">
-              The browser comparison does not approve a model. Review and
-              approve decisions locally before a current conformance check.
+              The browser comparison does not select a model. Review and sign
+              off on decisions locally before a current conformance check.
             </p>
           </section>
 
@@ -160,7 +160,7 @@ export default function StartPage() {
             </h2>
             <p className="mt-2 max-w-3xl text-sm text-sand/70">
               The hosted browser creates a downloadable draft. Import it into a
-              local project, add evidence, and approve decisions there. The
+              local project, add evidence, and sign off on decisions there. The
               project MCP server reads that same local project for a coding
               agent; the hosted website does not connect to a local stdio MCP
               server.

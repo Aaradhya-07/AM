@@ -30,11 +30,20 @@ a decision — the models and providers a workload is approved to use, and the
 data that may never leave — and then checks an implementation against it:
 
 ```bash
-anvilmark init           # create .anvilmark/ in your project
+anvilmark start          # inventory this repository, then create a local draft
 anvilmark scan draft-config > .anvilmark/scanner.yaml   # draft the declarations
 anvilmark scan           # observations, data flows, unknowns; no verdicts
 anvilmark conformance    # deterministic pass / fail / unknown with evidence
 ```
+
+In a terminal, `start` asks for one application description. For unattended
+use, pass `--idea "What this app does"`; without it, plain `start` stays read-only.
+It does not infer requirements or approve a decision from repository code.
+Run `anvilmark start --connect-codex` to add this repository's project MCP
+server to Codex's `.codex/config.toml`. Trust the project and restart Codex;
+draft-writing tools are configured to prompt for approval. Reconnect after
+moving the repository or package installation because the file uses local
+absolute paths.
 
 A verdict is `unknown` whenever the evidence cannot settle it. That is the
 point: a scanner that cannot see a call must not report it as compliant.
@@ -67,9 +76,10 @@ needs a matching measured evaluation.
 
 ## MCP
 
-Two read-only MCP servers ship with the package: `anvilmark-project-mcp`
-(project context and conformance for your agent) and `anvilmark-mcp`. Sizing
-and local-probe tools are opt-in startup flags.
+The package ships `anvilmark-project-mcp` (project context and conformance)
+and `anvilmark-mcp` (historical scaffold). The project server's default tools
+are read-only. `--agent-assessment` enables cited draft tools; sizing and
+local-probe tools are separate opt-in startup flags.
 
 ## Scope and limits
 

@@ -10,8 +10,9 @@ import { createProjectServer } from "./project-tools.js";
 
 const USAGE = `Usage: anvilmark-project-mcp --project-dir DIR [--projection remote-default|local-disclosed] [--as-of TIMESTAMP]
 
-A read-only MCP server over stdio for the ANVILMARK project in DIR (the directory
-containing .anvilmark/). Tools: get_project_summary, get_constraints,
+A project MCP server over stdio for DIR. The eight default tools are read-only.
+The directory may be an existing repository before an ANVILMARK project exists.
+Default tools: get_project_summary, get_constraints,
 get_workload_decision, get_architecture_context, list_evidence_gaps,
 run_conformance, check_proposed_change, get_conformance_result.
 
@@ -21,6 +22,9 @@ a local server does not by itself authorize a client to send them to a remote mo
 --as-of fixes the instant evidence freshness is evaluated; by default each call
 uses the current time and reports it as as_of.
 --hardware-sizing adds pure catalog and estimate tools.
+--agent-assessment adds draft_decision_brief, propose_decision_options,
+compare_decision_options and research_candidate_model. Research fetches a
+fixed public source and saves a local catalog snapshot.
 --hardware-probe adds bounded local inventory and fixed loopback discovery;
 these opt-in tools disclose machine facts and run read-only collectors. No SSH tool is exposed.`;
 
@@ -35,6 +39,7 @@ try {
     options: {
       "project-dir": { type: "string" },
       "hardware-sizing": { type: "boolean" },
+      "agent-assessment": { type: "boolean" },
       "hardware-probe": { type: "boolean" },
       projection: { type: "string" },
       "as-of": { type: "string" },
@@ -75,6 +80,7 @@ const server = createProjectServer({
   root,
   projection,
   hardwareSizing: values["hardware-sizing"] === true,
+  agentAssessment: values["agent-assessment"] === true,
   hardwareProbe: values["hardware-probe"] === true,
   ...(asOf === undefined ? {} : { asOf }),
   clock: () => new Date().toISOString(),
@@ -84,5 +90,5 @@ const server = createProjectServer({
 });
 await server.connect(new StdioServerTransport());
 process.stderr.write(
-  `anvilmark-project-mcp: serving ${root} read-only (${projection})\n`,
+  `anvilmark-project-mcp: serving ${root} ${values["agent-assessment"] === true ? "with agent assessment" : "read-only"} (${projection})\n`,
 );

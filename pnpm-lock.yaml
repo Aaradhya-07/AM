@@ -137,6 +137,9 @@ importers:
       '@anvilmark/hardware-sizing':
         specifier: workspace:*
         version: link:../hardware-sizing
+      '@anvilmark/model-catalog':
+        specifier: workspace:*
+        version: link:../model-catalog
       '@anvilmark/project-contract':
         specifier: workspace:*
         version: link:../project-contract

@@ -112,6 +112,16 @@ anvilmark() { node "$ANVILMARK_CHECKOUT/packages/cli/bin/anvilmark.mjs" "$@"; }
 anvilmark help
 ```
 
+From your existing TypeScript/JavaScript application repository, run
+`anvilmark start`. It shows a read-only, source-linked inventory, then asks
+for one application description before creating a local draft. Rerunning it
+shows the current project status. For a noninteractive run, use
+`anvilmark start --idea "What this app does"`; without `--idea`, plain `start`
+writes nothing. No account or GitHub link is needed for this first result.
+For Codex, `anvilmark start --connect-codex` adds the project server to this
+repository's `.codex/config.toml`. Trust the project and restart Codex to load
+it. Codex will prompt before the agent's draft-writing tools run.
+
 Your contract must declare the intended repository/current decision and your
 scanner declarations must describe your own code. The workshop's templates are
 only training fixtures; do not run them as an inference application or install

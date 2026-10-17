@@ -1,4 +1,15 @@
 import { registerHardwareTools } from "./hardware-tools.js";
+import { DecisionBriefInputSchema, draftDecisionBrief } from "./assessment.js";
+import {
+  CompareDecisionOptionsInputSchema,
+  ProposeDecisionOptionsInputSchema,
+  compareDecisionOptions,
+  proposeDecisionOptions,
+} from "./decision-options.js";
+import {
+  ResearchCandidateModelInputSchema,
+  researchCandidateModel,
+} from "./model-research.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -33,21 +44,23 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod/v4";
 
 /**
- * The vNext, read-only ANVILMARK project server.
+ * The vNext ANVILMARK project server.
  *
  * Separate from the historical audit scaffold in `server.ts`, whose tools run
  * over the 0.1.0 `@anvilmark/contract` fixtures and are not project-contract
  * tools. Every call loads the contract afresh and returns a projected response
  * with its source marker. Conformance tools also rescan the locally selected
  * source in memory; saved artifacts establish selection, not freshness. No
- * tool writes, records decisions/exceptions, imports proposals, runs remote
- * provider evaluations or generates files.
+ * default tool writes, records decisions/exceptions, imports proposals, runs
+ * remote provider evaluations or generates files. The opt-in assessment tools
+ * can record drafts and suggested candidates.
  */
 
 export const PROJECT_SERVER_NAME = "anvilmark-project";
 export const PROJECT_SERVER_VERSION = "0.1.0-draft.2";
 
 export interface ProjectServerOptions {
+  readonly agentAssessment?: boolean;
   readonly hardwareSizing?: boolean;
   readonly hardwareProbe?: boolean;
   /** Directory containing `.anvilmark/`. */
@@ -361,6 +374,182 @@ export function createProjectServer(options: ProjectServerOptions): McpServer {
       },
       async (args: Record<string, unknown>) =>
         toResult(await answerProjectTool(options, tool.name, args ?? {})),
+    );
+  }
+  if (options.agentAssessment) {
+    server.registerTool(
+      "draft_decision_brief",
+      {
+        title: "Draft an ANVILMARK decision brief",
+        description:
+          "Records one draft workload, source-cited agent-proposed constraints and open questions in the local project. Exact quotes are checked against the prompt or local Markdown/text files. Conflicting claims become questions. Never selects a candidate or records a final decision.",
+        inputSchema: DecisionBriefInputSchema,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: false,
+        },
+      },
+      async (args) => {
+        try {
+          const result = await draftDecisionBrief(options.root, args, options);
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+            structuredContent: result as unknown as Record<string, unknown>,
+          };
+        } catch (error) {
+          const message = describeError(error);
+          options.diagnostics?.(`draft_decision_brief: ${message}`);
+          const result = {
+            ok: false,
+            tool: "draft_decision_brief",
+            error: {
+              code: "draft_refused",
+              message:
+                "The decision brief could not be saved. Check the local server diagnostics and correct the input; no project decision was recorded.",
+            },
+          };
+          return {
+            content: [{ type: "text", text: JSON.stringify(result) }],
+            structuredContent: result,
+            isError: true,
+          };
+        }
+      },
+    );
+    server.registerTool(
+      "propose_decision_options",
+      {
+        title: "Propose ANVILMARK decision options",
+        description:
+          "Adds agent-suggested options to the current draft. Each starts discovered, with no measured quality, cost, latency or evidence. Never selects an option or records a decision.",
+        inputSchema: ProposeDecisionOptionsInputSchema,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: false,
+        },
+      },
+      async (args) => {
+        try {
+          const result = await proposeDecisionOptions(
+            options.root,
+            args,
+            options,
+          );
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+            structuredContent: result as unknown as Record<string, unknown>,
+          };
+        } catch (error) {
+          options.diagnostics?.(
+            `propose_decision_options: ${describeError(error)}`,
+          );
+          const result = {
+            ok: false,
+            tool: "propose_decision_options",
+            error: {
+              code: "proposal_refused",
+              message:
+                "The options could not be saved. Check the local server diagnostics; no project decision was recorded.",
+            },
+          };
+          return {
+            content: [{ type: "text", text: JSON.stringify(result) }],
+            structuredContent: result,
+            isError: true,
+          };
+        }
+      },
+    );
+    server.registerTool(
+      "compare_decision_options",
+      {
+        title: "Compare ANVILMARK decision options",
+        description:
+          "Reads current candidates and evaluates each constraint as satisfied, failed, unknown or not scored using the existing evidence rules. Returns evidence gaps and a source marker; never selects an option.",
+        inputSchema: CompareDecisionOptionsInputSchema,
+        annotations: READ_ONLY,
+      },
+      async (args) => {
+        try {
+          const result = await compareDecisionOptions(
+            options.root,
+            args,
+            options,
+          );
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+            structuredContent: result as unknown as Record<string, unknown>,
+          };
+        } catch (error) {
+          options.diagnostics?.(
+            `compare_decision_options: ${describeError(error)}`,
+          );
+          const result = {
+            ok: false,
+            tool: "compare_decision_options",
+            error: {
+              code: "comparison_unavailable",
+              message:
+                "The options could not be compared. Check the local server diagnostics.",
+            },
+          };
+          return {
+            content: [{ type: "text", text: JSON.stringify(result) }],
+            structuredContent: result,
+            isError: true,
+          };
+        }
+      },
+    );
+    server.registerTool(
+      "research_candidate_model",
+      {
+        title: "Research a candidate model",
+        description:
+          "Fetches published Hugging Face evaluations for a candidate whose model family is an exact namespace/name ID, saves a dated source snapshot in the local catalog, and returns source-linked results. Public scores never clear a workload quality gate.",
+        inputSchema: ResearchCandidateModelInputSchema,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
+      },
+      async (args) => {
+        try {
+          const result = await researchCandidateModel(
+            options.root,
+            args,
+            options,
+          );
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+            structuredContent: result as unknown as Record<string, unknown>,
+          };
+        } catch (error) {
+          options.diagnostics?.(
+            `research_candidate_model: ${describeError(error)}`,
+          );
+          const result = {
+            ok: false,
+            tool: "research_candidate_model",
+            error: {
+              code: "research_unavailable",
+              message:
+                "The model could not be researched. Check the local server diagnostics; no workload quality result was recorded.",
+            },
+          };
+          return {
+            content: [{ type: "text", text: JSON.stringify(result) }],
+            structuredContent: result,
+            isError: true,
+          };
+        }
+      },
     );
   }
   registerHardwareTools(server, options);

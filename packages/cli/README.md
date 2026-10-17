@@ -42,21 +42,89 @@ declined. A refused, failed or cancelled command writes nothing to the contract.
 
 ## Commands
 
-| Area           | Commands                                                                                                |
-| -------------- | ------------------------------------------------------------------------------------------------------- |
-| Start          | `init`, `status`, `validate`, `history`                                                                 |
-| Describe       | `elicit`, `intent`, `workload`, `constraint`, `priority`, `hardware`, `budget`, `candidate`, `evidence` |
-| Intelligence   | `intelligence list\|select`, `propose preview\|send\|export\|import`                                    |
-| Model research | `quality benchmarks\|leaderboard\|model\|catalog`, `quality cache refresh\|show\|history`               |
-| Decide         | `compare`, `decision draft\|propose\|revise\|reject`, `review`, `approve`, `approval status`            |
-| Architecture   | `architecture show\|validate\|node\|relationship\|bind\|unbind\|views`, `generate [--check]`            |
-| Repository     | `inventory`, `scan [--check]`, `scan show`, `scan draft-config`                                         |
-| Conformance    | `rule list\|add\|remove`, `conformance [--check]` (`check` is an alias)                                 |
-| Cloud Sync     | `login [--token TOKEN] [--whoami] [--logout]`, `push [--yes] [--dry-run] [--json]`                      |
+| Area              | Commands                                                                                                |
+| ----------------- | ------------------------------------------------------------------------------------------------------- |
+| Start             | `start`, `init`, `status`, `validate`, `history`                                                        |
+| Development pilot | `development plan\|approve\|recommend\|run\|review\|report`                                             |
+| Describe          | `elicit`, `intent`, `workload`, `constraint`, `priority`, `hardware`, `budget`, `candidate`, `evidence` |
+| Intelligence      | `intelligence list\|select`, `propose preview\|send\|export\|import`                                    |
+| Model research    | `quality benchmarks\|leaderboard\|model\|catalog`, `quality cache refresh\|show\|history`               |
+| Decide            | `compare`, `decision draft\|propose\|revise\|reject`, `review`, `approve`, `approval status`            |
+| Architecture      | `architecture show\|validate\|node\|relationship\|bind\|unbind\|views`, `generate [--check]`            |
+| Repository        | `inventory`, `scan [--check]`, `scan show`, `scan draft-config`                                         |
+| Conformance       | `rule list\|add\|remove`, `conformance [--check]` (`check` is an alias)                                 |
+| Cloud Sync        | `login [--token TOKEN] [--whoami] [--logout]`, `push [--yes] [--dry-run] [--json]`                      |
 
 `status`, `history`, `compare`, `review`, `approval status`, `intelligence list`,
 `propose preview`, `architecture show|validate`, `generate`, `scan`, `rule list`,
 `inventory`, and `push` accept `--json` for tools and agents. `approve` does not.
+
+### Start in an existing repository
+
+From an existing TypeScript/JavaScript application repository:
+
+```sh
+anvilmark start
+```
+
+This single local command inventories known AI calls with source locations. In
+an interactive terminal it then asks for one description of what the app does
+and creates a draft `.anvilmark/project.yaml` referencing that repository. For
+an unattended run, pass `--idea "What this app does"`; without a terminal or an
+idea, plain `start` only shows the inventory and writes nothing. Rerun `start` to see the
+inventory and current project status. `start ../app` selects a different
+repository. From a subdirectory, it finds the Git root or an existing project
+inside it; without Git, it uses the nearest package directory. An explicit
+path selects that directory directly. It requires no Anvilmark account,
+GitHub authorization, or model key and makes no network request.
+
+To connect Codex for this repository, run `anvilmark start --connect-codex`.
+This adds an `anvilmark-project` entry to `.codex/config.toml` using the
+installed project MCP server. Existing Codex settings are preserved; an
+existing or edited Anvilmark entry is left for you to resolve. Trust the
+project in Codex and restart it to load the connection. The connected agent
+can draft cited decisions, with Codex set to prompt before writing tools run.
+This connection can be created before the local project draft exists.
+The configuration contains local absolute paths, so reconnect after moving
+the repository or installation. No browser sign-in or GitHub link is needed.
+
+The description is a user statement. The inventory is an observation; it does
+not automatically become a workload, hard rule, approved decision, or
+conformance pass. Continue with `anvilmark elicit` to describe the workload
+and constraints. See `anvilmark start --help` for the exact options.
+
+### Development-model pilot
+
+`anvilmark development` is the first local slice of the primary workflow for
+models used **to build** software. It saves an architecture-and-task plan,
+compares permitted Codex CLI model configurations, records a run's structured
+event metadata and Git change, runs named checks, and supports interactive
+acceptance or rejection of the exact result. Its record lives under
+`.anvilmark/development/`; it does not change the existing application-model
+contract. See the
+[worked fixture](../../examples/development-pilot/README.md) for a runnable
+task and the plan format.
+
+Add `task.profile` with kind, languages, and risk, then run `development
+recommend` before work. On Node.js 24 or newer it builds a local SQLite index
+from archived plans and run/review records. After a reviewed run, rerun
+`recommend` to see outcomes for the same architecture part, profile, and
+agent/model setup.
+For explicit public research mapping, add a candidate `research_mapping` with
+`source_key`, `source_model_id`, `identity_note`, and `relevance_note`; pass an
+existing local model-catalog database with `--catalog-db FILE`. The command
+shows the source snapshot, age, and exact matching observations. Public scores
+remain research signals and never clear a coding-task quality gate. No model
+identity is inferred from a similar name.
+`recommend --json` exposes the comparison to other interfaces. The first-run
+choice is provisional; a sample cost per accepted task is shown only when
+comparable accepted API-rate runs exist. Those costs use declared rates, not
+provider bills. Subscription runs report token use and leave incremental cash
+cost unknown. API runs with cached input need an explicit
+`cached_input_usd_per_million` rate or their cash estimate remains unknown. A
+configured model is not proof of the served model. A later code
+or plan change makes a current accepted-run standing stale, while its historical
+review remains part of the local evidence record.
 
 ### Public model quality research (`quality`)
 
@@ -791,16 +859,17 @@ changing the contract or saved scan. `--json` emits the full local report,
 including source evidence; treat it as local data. `--evaluated-at TIMESTAMP`
 sets provenance, not the input identity or approval authority.
 
-| Normal run exit | Meaning                                                                      |
-| --------------- | ---------------------------------------------------------------------------- |
-| 0               | Every configured rule passes or is not applicable within the declared scope. |
-| 1               | At least one proven violation, even if other paths remain unknown.           |
-| 2               | Unknown coverage, an analysis error, invalid arguments or unreadable inputs. |
+| Normal run exit | Meaning                                                                                           |
+| --------------- | ------------------------------------------------------------------------------------------------- |
+| 0               | Every configured rule passes or is not applicable within the declared scope.                      |
+| 1               | At least one proven violation, even if other paths remain unknown.                                |
+| 2               | Unknown coverage, no configured rules, an analysis error, invalid arguments or unreadable inputs. |
 
 `--check` also rescans current inputs but writes nothing. Exit 0 means the saved
 report is current; that report may contain violations or unknowns. Exit 1 means
 missing, stale, invalid or tampered output; exit 2 means the check could not run.
 Use a normal conformance run as the compliance gate.
+An empty rule set is **not evaluated** and cannot produce a compliant exit.
 
 Explicit repository/configuration options establish the selection. Otherwise a
 configuration root takes precedence over an unambiguous saved selection, with

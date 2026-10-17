@@ -1,10 +1,10 @@
 # ANVILMARK Canonical Product Brief
 
-Date: **August 17, 2026**  
+Date: **August 17, 2026; direction updated October 17, 2026**
 Status: **Current product and engineering direction**  
 Audience: **The three ANVILMARK developers and any Claude Code, Codex, or other agent working in this repository**
 
-This is the single starting document for ANVILMARK. It consolidates the product intent, competitive research, corrected interpretation of the earlier closure, technical boundary, implementation strategy, and immediate next steps.
+This is the single starting document for ANVILMARK. The development-model direction below supersedes the earlier application-model emphasis in the historical sections of this brief. Those sections describe existing capabilities and research, not the priority for new work.
 
 If another document conflicts with this brief, use this brief for current product direction. The documents under [`docs/research/`](docs/research/README.md) remain valuable dated evidence, but their instruction to stop all work was made under a commercial-startup decision framework and is historical for the present project.
 
@@ -32,18 +32,30 @@ ANVILMARK will **not provide, train, host, or subsidize an intelligence model**.
 - a routing service selected by the user;
 - a local model runtime such as Ollama or vLLM.
 
-ANVILMARK provides everything around that intelligence that is needed to make architecture and AI-system decisions more structured, evidence-backed, portable, and verifiable.
+ANVILMARK connects architecture, coding tasks, model choice, agent runs, review, and cost evidence in one local development record. Its first decision is which available agent and model setup should build a particular part of the project under the user's restrictions. Decisions about models called by the finished application remain a separate, supported subject.
 
 The working definition is:
 
-> **ANVILMARK is a free, local-first, vendor-neutral decision and conformance layer that uses the user's chosen intelligence to turn an idea or repository plus explicit constraints into an evidence-backed architecture, model, and deployment contract—and then checks whether the implemented system still satisfies that contract.**
+> **ANVILMARK is a local-first development decision record: it connects an idea or repository to an architecture, recommends an eligible coding-agent setup for each task using dated evidence and project outcomes, and records the resulting changes, checks, reviews, and cost.**
 
 Competitive research found two facts that must be held together:
 
 1. **There is no empty capability category.** Existing products solve nearly every individual component.
 2. **No single public product found completes the entire intended lifecycle.** A capable user can assemble approximately 70–80% of the outcome by combining several products, but the result is fragmented and does not provide one durable decision and conformance object.
 
-The opportunity is therefore not to invent another model, coding agent, router, observability platform, diagram generator, or model leaderboard. It is to provide the connective decision layer across them.
+The opportunity is the connective decision layer across the development cycle, with restrictions and cost per accepted work visible at each step.
+
+### Current primary workflow and build order
+
+1. Capture an idea or repository, restrictions, and architecture decisions.
+2. Define a bounded development task, comparable task profile, and acceptance checks before work begins.
+3. Filter available agent/model setups by hard restrictions. Compare relevant public evidence and reviewed local outcomes, showing source, date, billing basis, and uncertainty. A public benchmark is a first-run signal, not proof for this project.
+4. Let the person approve the plan; let the chosen coding agent do the work. Record configured and tool-reported model identities separately, along with usage, code changes, and checks.
+5. Record acceptance or rejection by a person, retries, rework, and observed or estimated cost. Reuse comparable outcomes in the next selection. Measure cost per accepted task only when the billing and review evidence support it.
+
+The initial evidence database is local and metadata-only. Its task-to-outcome links are explicit; matching model names across sources does not establish identity. Public model facts retain their source rights and freshness. Private project runs stay local unless the user later chooses to share them. The existing application-model contract remains intact; its `model` field must never be silently reinterpreted as a coding-agent model.
+
+The first implementation milestone is one reviewed recommendation loop in a real repository, followed by comparable runs for two setups. The [development workflow plan](docs/vnext/10-node-development-provenance-plan.md) and [pilot observation](docs/vnext/development-pilot-observation-2026-10-16.md) record the current implementation and its limits. No quality or money-saving claim is established by the first pilot.
 
 ---
 
@@ -100,7 +112,7 @@ The early product does not need to calculate every term perfectly. It must disti
 
 ---
 
-## 3. The two primary user scenarios
+## 3. Existing application-model scenarios (secondary workflow)
 
 ### Scenario A: Start with an idea
 
@@ -601,15 +613,13 @@ The old `packages/contract` contract `0.1.0` remains unchanged as a historical i
 
 ## 16. Immediate next steps
 
-1. **Begin Milestone 1.** Create `packages/project-contract` at `0.1.0-draft.1` without modifying or migrating the historical `packages/contract` schema. The ratification gate closed on August 20, 2026.
-2. **Make the Atlas contract executable.** Validate the draft fixture, reference integrity, evidence floors, soft directions, priority order, secret rejection, and stable serialization.
-3. **Build the evidence and intelligence boundaries.** Keep promptfoo and llmfit optional; accept Claude Code, Codex, APIs, and local models through the same validated proposal interface.
-4. **Add the explicit approval flow.** Use an interactive local CLI over the resolved content hash; expose no MCP or noninteractive approval operation in the first slice.
-5. **Generate architecture views.** Produce deterministic Mermaid and CALM 1.2 exports from the authoritative ANVILMARK contract.
-6. **Implement the TypeScript/JavaScript detector.** Use the TypeScript compiler API with `allowJs`, source-linked findings, provider sinks, sanitizer handling, and explicit unknowns.
-7. **Build the three conformance fixtures.** A compliant case passes, a direct violation fails provider and raw-data-flow rules, and a dynamic case returns `unknown` where unresolved.
-8. **Run the complete local demonstration.** Feed the approved contract to both Claude Code and Codex and verify the same conformance result without hosted ANVILMARK intelligence.
-9. **Reassess after the prototype.** Continue only if the unified loop is materially clearer or faster than manually using the substitute stack.
+1. **Complete one real development task loop.** Select a repository, architecture part, task, restrictions, acceptance checks, and supported coding agent. Obtain exact plan approval before the run, then capture the run and review the result.
+2. **Compare setups on frozen tasks.** Repeat with at least one alternative setup on comparable starting code. Record failed attempts and rework as well as accepted work. Keep API rate estimates separate from provider bills and subscription allowance use.
+3. **Extend the evidence mapping.** Add reviewed links from coding evaluations and provider facts to exact agent/model setups and task profiles, with source rights, dates, and identity ambiguity visible. Do not merge models by name alone.
+4. **Validate the selector.** Measure whether its choices improve accepted work and effective cost against an agreed baseline. Keep automated routing and savings claims behind that evidence gate.
+5. **Unify the user view.** Show architecture, task decisions, recommendations, run evidence, checks, review, and cost in one project flow after the local path works with a real user.
+
+The August–September application-contract milestones were completed as described in the repository history. Their remaining real-project acceptance work belongs to the separate application-model workflow.
 
 ---
 
@@ -624,7 +634,7 @@ When working on ANVILMARK:
 5. prefer deterministic discovery and validation for factual claims;
 6. attach provenance and freshness to external evidence;
 7. preserve user control over final architecture decisions;
-8. do not expand into routing, observability, deployment, or model hosting without an explicit team decision;
+8. keep coding-model selection reviewable; do not claim automatic routing, quality, or savings before comparable outcomes support it;
 9. preserve historical `packages/contract` at `0.1.0` and implement the separately named `packages/project-contract`, ratified at `0.1.0-draft.1` and implemented at `0.1.0-draft.4` through amendments 1–4 and 6–7;
 10. verify changes with tests and document assumptions and unresolved decisions.
 

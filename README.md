@@ -1,10 +1,15 @@
 # Anvilmark
 
-Anvilmark is being shaped as a free, local-first, vendor-neutral decision and conformance layer around user-supplied intelligence. It is intended to turn an idea or repository plus explicit constraints into an evidence-backed architecture, model, and deployment contract, provide that contract to Claude Code, Codex, or another user-selected agent, and verify the resulting implementation.
+Anvilmark is a local-first record for AI-assisted software development. It connects architecture decisions and coding tasks to restriction-aware agent/model choices, then records runs, checks, reviews, and cost evidence so later choices can improve. The user supplies the coding agent and models. The existing application-model decision and conformance tools remain available as a separate workflow.
 
 Read [`ANVILMARK-CANONICAL-BRIEF.md`](ANVILMARK-CANONICAL-BRIEF.md) first. It is the current product and engineering direction.
 
 For current feature status, phase gates, and the website/MCP path, see the [project tracker](PROJECT-TRACKER.md).
+
+The experimental [development-model pilot](examples/development-pilot/README.md)
+records a task plan, model comparison, Codex CLI run, checks, and review in one
+local path. Its [development plan](docs/vnext/10-node-development-provenance-plan.md)
+sets out the primary direction and the evidence still needed for reliable selection.
 
 ## Packages
 
@@ -17,7 +22,7 @@ For current feature status, phase gates, and the website/MCP path, see the [proj
 - `packages/context` — shared project facts, deterministic Mermaid/CALM/agent context, safe projections and freshness checks.
 - `packages/contract` — frozen Zod schemas, inferred TypeScript types, and validated fixture loading.
 - `packages/engine` — the recommendation-engine boundary, rule stubs, and pricing-provider stub.
-- `packages/mcp` — the read-only project server with five context and three conformance tools, plus the preserved historical audit server with three placeholder tools.
+- `packages/mcp` — the project server with eight default read-only tools and opt-in agent draft, option proposal, public model research, and comparison tools, plus the preserved historical audit server with three placeholder tools.
 - `packages/web` — hardware sizing playground, real Atlas code-to-contract checks, and Studio review-bundle inspection.
 - `fixtures` — realistic `AuditResult` examples shared by tests, the engine stub, MCP, and web.
 - `docs` — product context and briefs.

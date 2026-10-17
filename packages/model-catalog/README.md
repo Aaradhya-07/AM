@@ -4,6 +4,8 @@ This package persists source snapshots from Anvilmark's Hugging Face and Artific
 
 The catalog is a source history for model research. Public benchmark and index values do not satisfy a contract's workload quality gate. Model IDs remain scoped to their source; no name-based merge is inferred between Hugging Face and Artificial Analysis.
 
+The separate `DevelopmentEvidenceCatalog` stores a metadata-only index of coding-agent run outcomes in `.anvilmark/development/development-evidence.sqlite`. The development CLI rebuilds that index from archived task plans, runs, and exact reviews. It matches architecture part, task kind, language set, and risk alongside configured agent/model identity. A plan can explicitly reference a source-scoped model ID in this public catalog; `development recommend --catalog-db FILE` shows the mapped source observations without treating them as a coding-task quality gate. A configured model remains distinct from a tool-reported served model.
+
 ## Runtime
 
 The package can be imported on the project's existing Node 20 baseline. Opening its SQLite store requires Node 24 or newer and reports a clear error on older versions. It uses Node's built-in `node:sqlite`, so no database server or native dependency is needed. A future deployed service can use these source snapshots as an ingestion boundary without putting database concerns in the contract engine.

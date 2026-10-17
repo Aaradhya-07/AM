@@ -401,6 +401,29 @@ function deniedValues(contract: ProjectContract): string[] {
   return [...new Set(values)].filter((value) => value.length >= 8);
 }
 
+/** Apply the same disclosure checks to a derived tool response. */
+export function assertProjectionSafe(
+  contract: ProjectContract,
+  value: unknown,
+  projection: ProjectionName,
+): void {
+  if (projection === "remote-default") {
+    const serialized = JSON.stringify(value);
+    const leaked = deniedValues(contract).filter((entry) =>
+      serialized.includes(entry),
+    );
+    if (leaked.length > 0)
+      throw new Error(
+        `refusing to produce remote-default facts: ${leaked.length} local-only value(s) would be included`,
+      );
+  }
+  const secrets = findSecrets(value);
+  if (secrets.length > 0)
+    throw new Error(
+      `refusing to produce ${projection} facts: secret-shaped values at ${secrets.map((entry) => entry.path).join(", ")}`,
+    );
+}
+
 function sortById<T extends { readonly id: string }>(items: readonly T[]): T[] {
   return [...items].sort((left, right) => compareCodeUnits(left.id, right.id));
 }
@@ -1361,26 +1384,6 @@ export function buildProjectFacts(
     },
   };
 
-  if (!local) {
-    // Construction above names every field; this is a second, independent
-    // check that no known local value reached the remote projection through
-    // free text written by another component.
-    const serialized = JSON.stringify(facts);
-    const leaked = deniedValues(contract).filter((value) =>
-      serialized.includes(value),
-    );
-    if (leaked.length > 0) {
-      throw new Error(
-        `refusing to produce remote-default facts: ${leaked.length} local-only value(s) would be included`,
-      );
-    }
-  }
-
-  const secrets = findSecrets(facts);
-  if (secrets.length > 0) {
-    throw new Error(
-      `refusing to produce ${projection} facts: secret-shaped values at ${secrets.map((entry) => entry.path).join(", ")}`,
-    );
-  }
+  assertProjectionSafe(contract, facts, projection);
   return facts;
 }

@@ -30,6 +30,9 @@
     },
     {
       "path": "../conformance"
+    },
+    {
+      "path": "../model-catalog"
     }
   ]
 }

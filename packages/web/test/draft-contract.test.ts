@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { validateProjectContract } from "@anvilmark/project-contract";
 
-import { createDraftContract, demoExample } from "../lib/draft-contract";
+import {
+  createDraftContract,
+  demoExample,
+  emptyDraft,
+} from "../lib/draft-contract";
 import {
   MODEL_STARTERS,
   candidateFromStarter,
@@ -10,6 +14,16 @@ import {
 } from "../lib/model-starters";
 
 describe("browser draft contract", () => {
+  it("starts with a blank project and optional example", () => {
+    expect(emptyDraft.name).toBe("");
+    expect(emptyDraft.idea).toBe("");
+    expect(emptyDraft.candidates.map((candidate) => candidate.model)).toEqual([
+      "",
+      "",
+    ]);
+    expect(demoExample.name).toBe("Support Triage");
+  });
+
   it("exports a full-validator-compatible draft with explicit unknowns", () => {
     const draft = createDraftContract(demoExample, "2026-10-14T00:00:00.000Z");
     const result = validateProjectContract(draft);
@@ -48,6 +62,14 @@ describe("browser draft contract", () => {
     const result = validateProjectContract(draft);
     expect(result.ok, result.ok ? "" : JSON.stringify(result.issues)).toBe(
       true,
+    );
+    expect(draft.workloads).toHaveLength(2);
+    expect(draft.workloads[0]).toMatchObject({
+      input_classification: "customer_ticket",
+      output_classification: "redacted_customer_ticket",
+    });
+    expect(draft.workloads[1]?.input_classification).toBe(
+      "redacted_customer_ticket",
     );
     expect(
       draft.architecture.nodes.find((node) => node.id === "redactor")

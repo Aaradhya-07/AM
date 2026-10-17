@@ -457,7 +457,7 @@ export function DemoClient() {
           <p className="mb-5 text-sm leading-6 text-sand/70">
             Select sourced starting points or enter your own model. The notes
             describe published capabilities. They are not scores for your
-            workload or a recommendation to approve a model.
+            workload or a recommendation to select a model.
           </p>
           <div className="space-y-5">
             {draft.candidates.map((candidate, index) => (
@@ -634,7 +634,7 @@ export function DemoClient() {
           <p className="mt-3 text-sm leading-6 text-sand/65">
             These paths are recorded from your inputs. You can inspect published
             Hugging Face evaluations for an exact Hub model ID. Such scores do
-            not test your workload; there is no winner or approval here.
+            not test your workload; there is no winner or signed decision here.
           </p>
           {!hasCandidate && (
             <p className="mt-5 rounded border border-line-muted bg-ink/60 p-4 text-sm text-sand/75">
@@ -800,7 +800,7 @@ export function DemoClient() {
           </button>
           <p className="mt-3 text-xs leading-5 text-sand/55">
             Generated and validated in this browser. The file is schema draft.5
-            JSON; it has no approved decision.
+            JSON; it has no signed decision.
           </p>
         </section>
         {exported && (
@@ -813,7 +813,7 @@ export function DemoClient() {
               </code>
               , then{" "}
               <code className="font-mono text-gold">anvilmark compare</code>.
-              Review evidence before proposing and approving a decision.
+              Review evidence before proposing and signing off on a decision.
             </p>
             <Link
               href="/start"

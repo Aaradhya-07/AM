@@ -9,7 +9,7 @@ node scripts/setup.mjs
 
 Standard output carries MCP messages only; diagnostics go to standard error.
 
-## Project server (Milestones 4–6, read-only)
+## Project server (read-only by default)
 
 `bin/anvilmark-project-mcp.mjs` (bin `anvilmark-project-mcp`) answers questions about
 one ANVILMARK project from its `.anvilmark/project.yaml`:
@@ -89,6 +89,64 @@ projection also removes CPU model text, detailed diagnostics, and local model
 names from discovery results. Local-disclosed returns the sanitized local listing.
 Enabling a local collector is an explicit disclosure choice; merely running an MCP
 server does not make every local fact suitable for a remote client.
+
+### Agent decision flow (opt-in)
+
+Start the project server with `--agent-assessment` to add four tools:
+
+| Tool                       | Action                                                                                                                  |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `draft_decision_brief`     | Creates or extends a draft workload, source-cited proposed constraints, and questions. Writes one state revision.       |
+| `propose_decision_options` | Adds agent-suggested candidates to the same draft. Writes one state revision.                                           |
+| `compare_decision_options` | Reads current candidate constraint standings and evidence gaps. Optional `workload` filter.                             |
+| `research_candidate_model` | Fetches published evaluations for one candidate's exact Hugging Face model ID and saves a dated local catalog snapshot. |
+
+The draft, proposal, and research tools are marked as writes. Research also
+uses a fixed public HTTPS source. None selects an option, creates a decision,
+signs off, or changes an existing signed decision. Comparison is read-only.
+The eight default tools retain their read-only behavior.
+
+The agent supplies the person's prompt, one proposed workload, and any
+structured constraints with exact excerpts from the prompt or a local Markdown
+or text decision record. The server checks excerpts against local bytes,
+records file and excerpt hashes in local history, labels recorded constraints
+`agent_proposed`, and turns incompatible submitted claims about the same subject
+into open questions. The agent must submit each relevant claim; this tool does
+not infer contradictions from prose on its own. A matching excerpt establishes
+provenance of the words, not the currency or correctness of the decision.
+Documents must be inside the selected
+repository and at most 128 KiB. The remote-default response omits source paths.
+
+Candidate suggestions use the existing intelligence proposal validator. The
+agent supplies a workload id, component kind, model family and optional
+version, deployment mode and rationale for each candidate. Each is recorded as
+`discovered` with a floating model reference and no measurements, estimates,
+or constraint results. Comparison uses the existing evidence rules and returns
+per-candidate satisfied, failed, unknown and not-scored constraint ids, plus
+required evidence codes and floors. A local deployment is not treated as
+automatically satisfying a data-boundary rule. The compact response omits
+source paths, raw evidence values, and free-text reasons; the remote-default
+projection is checked against known local-only values and secret-shaped data.
+
+For a candidate whose model family is the exact Hugging Face `namespace/name`
+ID, `research_candidate_model` fetches its published evaluation list through
+the bounded adapter and saves it to `.anvilmark/model-catalog.sqlite`. Later
+comparisons read that snapshot, report its source URL, retrieval time, hash,
+freshness, score verification, and up to 20 evaluation rows. The score
+direction is unknown in this feed. A model family name without an exact Hub ID
+is `unmapped`; a candidate with no saved snapshot is `missing`. Snapshot
+storage requires Node.js 24 or newer. This path makes no cross-source name
+match, benchmark-to-workload match, or project quality claim. Public results
+stay separate from the contract's evidence records.
+
+For Codex, add `--agent-assessment` after `<PROJECT_DIR>` in the configuration
+below. The first call can initialize the project draft, so `<PROJECT_DIR>` needs
+to exist but does not need `.anvilmark/` yet. Ask the agent to read relevant ADRs,
+then call `draft_decision_brief` with exact citations. If the MCP client prompts
+before a write tool, review the proposed call. Then call
+`propose_decision_options`, optionally `research_candidate_model` for exact
+Hub IDs, then `compare_decision_options`. Human review and code checking still
+use the existing local workflow.
 
 ### Claude Code
 

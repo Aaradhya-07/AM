@@ -165,6 +165,9 @@ export function summarizeResults(
     unknown: count("unknown"),
     not_applicable: count("not_applicable"),
     compliant:
-      errors.length === 0 && count("fail") === 0 && count("unknown") === 0,
+      results.length > 0 &&
+      errors.length === 0 &&
+      count("fail") === 0 &&
+      count("unknown") === 0,
   };
 }

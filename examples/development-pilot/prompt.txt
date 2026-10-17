@@ -1,0 +1,1 @@
+Fix label.mjs so that node check.mjs passes. Change only label.mjs. Run the check and report the result.

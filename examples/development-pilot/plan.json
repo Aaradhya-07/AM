@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "architecture": {
+    "id": "arch.label-normalization",
+    "summary": "Normalize a user label before storing or comparing it."
+  },
+  "task": {
+    "id": "task.repeated-punctuation",
+    "summary": "Collapse repeated punctuation to one separator in normalized labels.",
+    "profile": { "kind": "bug", "languages": ["javascript"], "risk": "low" },
+    "checks": [
+      {
+        "name": "label-test",
+        "argv": ["node", "check.mjs"]
+      }
+    ]
+  },
+  "restrictions": {
+    "allowed_models": ["gpt-6-luna", "gpt-6-sol"],
+    "max_estimated_usd": null
+  },
+  "candidates": [
+    {
+      "id": "fast",
+      "agent": "codex_cli",
+      "model": "gpt-6-luna",
+      "expected_input_tokens": 20000,
+      "expected_output_tokens": 1000,
+      "billing": { "mode": "subscription" },
+      "quality_evidence": "none",
+      "evidence_note": "No comparable project-task evaluation has been recorded."
+    },
+    {
+      "id": "strong",
+      "agent": "codex_cli",
+      "model": "gpt-6-sol",
+      "expected_input_tokens": 30000,
+      "expected_output_tokens": 1500,
+      "billing": { "mode": "subscription" },
+      "quality_evidence": "none",
+      "evidence_note": "No comparable project-task evaluation has been recorded."
+    }
+  ]
+}

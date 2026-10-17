@@ -19,6 +19,11 @@ import {
   conformanceCommand,
 } from "./commands/conformance.js";
 import { SCAN_USAGE, scanCommand } from "./commands/scan.js";
+import { START_USAGE, startCommand } from "./commands/start.js";
+import {
+  DEVELOPMENT_USAGE,
+  developmentCommand,
+} from "./commands/development.js";
 import { CLI_VERSION } from "./version.js";
 import { exportCommand } from "./commands/export.js";
 import { INVENTORY_USAGE, inventoryCommand } from "./commands/inventory.js";
@@ -61,6 +66,8 @@ Research and inventory (no project needed)
   quality         inspect public benchmarks and a model catalog
 
 Start
+  start           inspect an existing repository and create or resume a local draft
+  development     connect architecture, coding-model choice, agent run and checks
   init            create .anvilmark/ from an idea, a repository reference, or a contract file
   status          what is recorded, what is unknown, what is not yet provided
   validate        validate the project contract (or any file with --file)
@@ -132,6 +139,7 @@ const GROUPED = new Set([
   "login",
   "push",
   "quality",
+  "development",
 ]);
 
 /**
@@ -173,6 +181,10 @@ export async function run(
 
   try {
     switch (command) {
+      case "start":
+        return await startCommand(context);
+      case "development":
+        return await developmentCommand(context, sub);
       case "init":
         return await initCommand(context);
       case "status":
@@ -254,4 +266,6 @@ export {
   QUALITY_USAGE,
   RULE_USAGE,
   SCAN_USAGE,
+  START_USAGE,
+  DEVELOPMENT_USAGE,
 };

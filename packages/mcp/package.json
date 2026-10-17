@@ -29,6 +29,7 @@
     "@anvilmark/contract": "workspace:*",
     "@anvilmark/engine": "workspace:*",
     "@anvilmark/hardware-sizing": "workspace:*",
+    "@anvilmark/model-catalog": "workspace:*",
     "@anvilmark/project-contract": "workspace:*",
     "@modelcontextprotocol/server": "^2.0.0",
     "zod": "^4.2.0"

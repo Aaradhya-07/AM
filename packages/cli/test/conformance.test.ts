@@ -2,6 +2,11 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ConformanceReportSchema, readReport } from "@anvilmark/conformance";
+import {
+  parseProjectContract,
+  toNormalizedYaml,
+  unwrap,
+} from "@anvilmark/project-contract";
 import { CONFORMANCE_OUTPUT_PATH } from "../src/index.js";
 import { cleanup, cli, scriptedIo } from "./helpers.js";
 import {
@@ -61,6 +66,30 @@ describe("CLI Conformance Command", () => {
     const checkCode = await cli(["conformance", "--check"], checkIo);
     expect(checkCode).toBe(0);
     expect(checkIo.out()).toContain("CURRENT");
+  });
+
+  it("does not report compliance when no rules are configured", async () => {
+    const contract = unwrap(
+      parseProjectContract(await approvedRemoteContract(), "yaml"),
+    );
+    contract.conformance_rules = [];
+    const { projectDir, appDir } = await setupWorkspace(
+      "handoff-approved-sanitized",
+      toNormalizedYaml(contract),
+    );
+    const io = scriptedIo({ cwd: projectDir });
+    expect(
+      await cli(["conformance", "--repository", appDir], io),
+      io.out() + io.err(),
+    ).toBe(2);
+    expect(io.out()).toContain(
+      "NOT EVALUATED (no conformance rules configured)",
+    );
+    const report = readReport(
+      await readFile(join(projectDir, CONFORMANCE_OUTPUT_PATH), "utf8"),
+    );
+    expect(report.summary.total).toBe(0);
+    expect(report.summary.compliant).toBe(false);
   });
 
   it("evaluates direct violation repository to fail with exit code 1", async () => {
