@@ -1,0 +1,54 @@
+{
+  "format": "anvilmark-development-catalog/1",
+  "configurations": [
+    {
+      "format": "anvilmark-development-configuration/1",
+      "id": "synthetic-codex-example-eu",
+      "agent": "codex_cli",
+      "model": "example-model",
+      "deployment_id": "example-account/eu-deployment",
+      "provider": {
+        "value": "Example Provider",
+        "source": {
+          "kind": "operator_attestation",
+          "ref": "SYNTHETIC EXAMPLE — replace with reviewed deployment evidence",
+          "observed_at": "2026-10-20T00:00:00.000Z",
+          "expires_at": "2026-11-20T00:00:00.000Z"
+        }
+      },
+      "data_regions": {
+        "value": ["eu-west-1"],
+        "source": {
+          "kind": "operator_attestation",
+          "ref": "SYNTHETIC EXAMPLE — replace with processing terms",
+          "observed_at": "2026-10-20T00:00:00.000Z",
+          "expires_at": "2026-11-20T00:00:00.000Z"
+        }
+      },
+      "billing": {
+        "value": {
+          "mode": "api_estimate",
+          "input_usd_per_million": 1,
+          "output_usd_per_million": 2
+        },
+        "source": {
+          "kind": "operator_attestation",
+          "ref": "SYNTHETIC EXAMPLE — replace with account billing rates",
+          "observed_at": "2026-10-20T00:00:00.000Z",
+          "expires_at": "2026-11-20T00:00:00.000Z"
+        }
+      },
+      "capabilities": {
+        "tools": {
+          "value": true,
+          "source": {
+            "kind": "local_observation",
+            "ref": "SYNTHETIC EXAMPLE — replace with a dated tool-use check",
+            "observed_at": "2026-10-20T00:00:00.000Z",
+            "expires_at": "2026-11-20T00:00:00.000Z"
+          }
+        }
+      }
+    }
+  ]
+}

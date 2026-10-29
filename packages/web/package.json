@@ -4,8 +4,12 @@
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "build": "pnpm --filter '@anvilmark/web^...' --if-present build && next build --webpack",
+    "catalog:refresh": "node scripts/refresh-model-catalog.mjs",
     "dev": "next dev --webpack",
     "start": "next start",
     "test": "vitest run",
@@ -32,6 +36,7 @@
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.4.0",
     "happy-dom": "^20.14.5",
+    "hyparquet": "^1.31.5",
     "postcss": "^8.5.0",
     "tailwindcss": "^3.4.0"
   }

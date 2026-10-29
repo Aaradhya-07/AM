@@ -1,0 +1,48 @@
+name: Refresh model catalog
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.16.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - name: Install the catalog importer
+        run: pnpm install --frozen-lockfile
+      - name: Refresh the public model registry snapshot
+        run: node packages/web/scripts/refresh-model-catalog.mjs
+      - name: Propose changed catalog data
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- packages/web/data/models.sqlite; then
+            echo "The upstream registry has not changed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          base="$(gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name')"
+          git fetch origin codex/model-catalog-refresh:refs/remotes/origin/codex/model-catalog-refresh || true
+          git checkout -B codex/model-catalog-refresh
+          git add packages/web/data/models.sqlite
+          git commit -m "Refresh public model catalog"
+          git push --force-with-lease origin codex/model-catalog-refresh
+          if [ "$(gh pr list --head codex/model-catalog-refresh --state open --json number --jq 'length')" = "0" ]; then
+            gh pr create --base "$base" --head codex/model-catalog-refresh \
+              --title "Refresh public model catalog" \
+              --body "Updates the LiteLLM, Models.dev, and Arena catalog snapshot. Review source changes, benchmark provenance, Arena attribution, and pricing before merging."
+          fi

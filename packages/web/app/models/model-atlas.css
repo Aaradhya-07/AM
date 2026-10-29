@@ -1,0 +1,39 @@
+.model-atlas {
+  color-scheme: light;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.model-atlas h1,
+.model-atlas h2,
+.model-atlas h3,
+.model-atlas h4 {
+  color: inherit;
+  font-family: inherit;
+  text-wrap: initial;
+}
+
+.model-atlas section[id] {
+  scroll-margin-top: 1rem;
+}
+
+.model-atlas :focus-visible {
+  border-radius: 0.25rem;
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.model-atlas-skip {
+  left: -9999px;
+  position: absolute;
+  top: 0;
+  z-index: 100;
+}
+
+.model-atlas-skip:focus-visible {
+  left: 1rem;
+  top: 1rem;
+  border-radius: 0.25rem;
+  background: #fff;
+  color: #0f172a;
+  padding: 0.75rem 1rem;
+}

@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "id": "2026-10-17T15-13-25-462Z-2a6021a1",
+  "plan_hash": "9459678cbd3be3765861faf3d45a2ad935acd80983361da49c521e57ece79c84",
+  "approval_at_start": "current",
+  "approval_actor_at_start": "agent_test_operator",
+  "architecture_id": "development-selection",
+  "task_id": "provider-restriction-evidence",
+  "candidate_id": "codex-luna",
+  "configured_model": "gpt-6-luna",
+  "model_events": [],
+  "model_identity": "configured_only",
+  "codex_thread_id": null,
+  "prompt_sha256": "746a2b5b451ba636c4b5a81ea38e1bae9d0d29234b6f586d638e11f7d486a4ed",
+  "started_at": "2026-10-17T15:13:25.462Z",
+  "finished_at": "2026-10-17T15:13:27.804Z",
+  "agent_exit_code": 1,
+  "agent_error": "-17T15:13:25.778204Z  WARN codex_rollout::state_db: failed to initialize state runtime: failed to initialize state runtime at /home/aaradhya07/.codex: failed to open memories DB at /home/aaradhya07/.codex/memories_1.sqlite: error returned from database: (code: 14) unable to open database file: error returned from database: (code: 14) unable to open database file: (code: 14) unable to open database file\nError: failed to initialize in-process app-server client: Read-only file system (os error 30)",
+  "event_count": 0,
+  "event_parse_errors": 0,
+  "event_stream_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "usage": {
+    "input_tokens": 0,
+    "cached_input_tokens": 0,
+    "output_tokens": 0,
+    "reasoning_output_tokens": 0
+  },
+  "billing": "subscription_allowance",
+  "estimated_usd_from_observed_tokens": null,
+  "base_commit": "882a1514d578e883d682f6fec8047113cf965395",
+  "baseline_clean": true,
+  "changed_paths": [],
+  "change_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+  "checks": [
+    {
+      "name": "development-tests",
+      "argv": [
+        "node_modules/.bin/vitest",
+        "run",
+        "packages/cli/test/development.test.ts"
+      ],
+      "exit_code": 1,
+      "duration_ms": 1885
+    },
+    {
+      "name": "cli-build",
+      "argv": [
+        "node_modules/.bin/tsc",
+        "-b",
+        "packages/cli",
+        "--pretty",
+        "false"
+      ],
+      "exit_code": 0,
+      "duration_ms": 86
+    }
+  ]
+}

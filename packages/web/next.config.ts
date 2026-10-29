@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
     "@anvilmark/conformance",
   ],
   allowedDevOrigins: [
+    "127.0.0.1",
+    "localhost",
     "*.preview.emergentagent.com",
     "*.preview.emergentcf.cloud",
     "*.cluster-5.preview.emergentcf.cloud",
@@ -30,6 +32,9 @@ const nextConfig: NextConfig = {
   // pnpm's real package path because TypeScript resolves its lib directory
   // from its real location, and node_modules/typescript is a traced symlink.
   outputFileTracingIncludes: {
+    "/models": ["./data/models.sqlite"],
+    "/api/models": ["./data/models.sqlite"],
+    "/api/arena": ["./data/models.sqlite"],
     "/api/playground/check": [
       "../../node_modules/.pnpm/typescript@*/node_modules/typescript/lib/lib*.d.ts",
     ],

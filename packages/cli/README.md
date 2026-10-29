@@ -45,7 +45,7 @@ declined. A refused, failed or cancelled command writes nothing to the contract.
 | Area              | Commands                                                                                                |
 | ----------------- | ------------------------------------------------------------------------------------------------------- |
 | Start             | `start`, `init`, `status`, `validate`, `history`                                                        |
-| Development pilot | `development plan\|approve\|recommend\|run\|review\|report`                                             |
+| Development pilot | `development catalog\|plan\|approve\|recommend\|run\|review\|report`                                    |
 | Describe          | `elicit`, `intent`, `workload`, `constraint`, `priority`, `hardware`, `budget`, `candidate`, `evidence` |
 | Intelligence      | `intelligence list\|select`, `propose preview\|send\|export\|import`                                    |
 | Model research    | `quality benchmarks\|leaderboard\|model\|catalog`, `quality cache refresh\|show\|history`               |
@@ -105,6 +105,43 @@ contract. See the
 [worked fixture](../../examples/development-pilot/README.md) for a runnable
 task and the plan format.
 
+For exact model offers, import a reviewed configuration file with
+`development catalog import --file configurations.json --json`. The local
+SQLite database at `.anvilmark/development/configurations.sqlite` keeps every
+version of each agent, model, and deployment combination. `catalog list --json`,
+`catalog show --id ID --json`, and `catalog history --id ID --json` display
+records, source references, and freshness. Each provider, complete
+processing-region set, billing mode and rate, and capability has its own
+observation and expiry. An import records a source claim; Anvilmark does not
+independently verify it. Open a local `development catalog list --json` export
+at `/models` to explore the configurations visually. The file stays in the
+browser and is never sent to the website server. A plan candidate uses
+`catalog_ref: {"configuration_id":"ID","snapshot_sha256":"HASH"}`
+with the hash returned by import. It may omit its inline `billing`; if present,
+catalog billing takes precedence. Provider and region declarations on that
+candidate likewise do not override the catalog. Required capabilities go in
+`restrictions.required_capabilities`. Multiple candidates may use the same
+model through different deployments; run the intended one with
+`development run --candidate ID --prompt-file FILE`. `--model` remains available
+when the name identifies exactly one candidate.
+
+Missing, expired, future-dated, research-only, or superseded catalog facts
+leave the affected hard restriction unresolved and block a run. Provider,
+processing-region, and billing gates require a provider document or operator
+attestation; a local observation can establish a capability. A newer import
+supersedes the pinned snapshot, so replan and approve the updated candidate.
+An exact configuration is also part of the local outcome matching key; results
+from another deployment or snapshot are not pooled. Legacy plans without a
+catalog reference continue to use their inline declarations. See the
+[synthetic import format](../../examples/development-pilot/configurations.sample.json).
+
+For a mechanics-only pilot, `development approve --agent-test` and
+`development review --run ID --agent-test` record `agent_test_operator` in the
+approval and review files. The run also records who approved its plan at the
+start. `development report` labels these reviews, and `development recommend`
+excludes their runs from accepted model outcomes. Human review remains a
+separate step before interpreting task quality.
+
 Add `task.profile` with kind, languages, and risk, then run `development
 recommend` before work. On Node.js 24 or newer it builds a local SQLite index
 from archived plans and run/review records. After a reviewed run, rerun
@@ -125,6 +162,71 @@ cost unknown. API runs with cached input need an explicit
 configured model is not proof of the served model. A later code
 or plan change makes a current accepted-run standing stale, while its historical
 review remains part of the local evidence record.
+
+For a fixed-model comparison, a plan may declare
+`"evaluation":{"baseline_candidate_id":"fast","max_acceptance_drop":0}`.
+The baseline must be one of its candidates. `recommend` then reports a matched
+cohort: the same archived plan, Git base commit, and prompt, with exactly one
+human-reviewed run per eligible setup and a distinct task ID. It reports
+accepted/rejected/failed counts, cached and other tokens, elapsed time, and
+declared-rate API cost on that common cohort. It excludes repeated task IDs
+from the cohort rather than counting the same task as independent evidence.
+The older exact-profile counts remain descriptive and are never used alone to
+name a cost winner.
+
+With fewer than 30 matched tasks, unverified served-model identity, incomplete
+API-rate estimates, or no eligible baseline, the matched decision abstains.
+Otherwise, a fixed-seed paired bootstrap compares each setup with the declared
+baseline. A cheaper setup is named only as a **shadow-trial candidate** when
+the 95% sample interval for its accepted-task-rate difference clears the
+plan's maximum allowed drop and the interval for estimated cost per accepted
+task is below zero. These are exploratory sample intervals, not a guaranteed
+quality floor or a measured provider-bill saving. Confirm on new held-out tasks
+before changing the default; `development run` still requires a person's
+explicit candidate choice.
+
+Optional hard provider and processing-region rules belong in the development
+plan's `restrictions` object. Each rule and candidate fact carries its own
+source label:
+
+```json
+{
+  "restrictions": {
+    "allowed_models": ["model-a", "model-b"],
+    "max_estimated_usd": null,
+    "provider": {
+      "allowed": ["Provider A"],
+      "excluded": ["Provider B"],
+      "source": "operator provider policy"
+    },
+    "data_region": {
+      "allowed": ["eu-west-1"],
+      "source": "operator residency policy"
+    }
+  },
+  "candidates": [
+    {
+      "provider_evidence": {
+        "value": "Provider A",
+        "source": "provider service terms"
+      },
+      "data_region_evidence": {
+        "values": ["eu-west-1"],
+        "source": "provider processing terms"
+      }
+    }
+  ]
+}
+```
+
+The candidate fragment above omits its other required fields. Region values
+must enumerate every region where task data may be processed. The CLI compares
+these declared facts with the rules and shows both source labels in plan,
+recommendation, and report output. It does not independently verify provider
+terms or infer a provider or processing region from a model name. Missing
+candidate evidence for an active rule produces `unknown`; failed rules produce
+`excluded`. Only `eligible` candidates can be run. Plans without these rules
+keep their existing behavior and approval hash.
 
 ### Public model quality research (`quality`)
 

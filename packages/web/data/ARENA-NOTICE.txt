@@ -1,0 +1,11 @@
+Arena leaderboard dataset
+Creator: Arena (lmarena-ai)
+Source: https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+License text: https://creativecommons.org/licenses/by/4.0/
+
+Anvilmark adapts the dataset's latest published Parquet splits into a
+versioned SQLite snapshot. It preserves leaderboard configuration, category,
+published date, score, confidence interval, sample count, and source metadata.
+The presentation and schema have been changed. Arena has not endorsed this
+adaptation.

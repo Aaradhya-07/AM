@@ -1,0 +1,40 @@
+[
+  {
+    "id": "label-punctuation-bug",
+    "summary": "Fix label normalization so repeated punctuation collapses to one separator. Change only the normalizer and run its existing check.",
+    "architecture_summary": "A small label-normalization utility.",
+    "expected": { "kind": "bug", "risk": "low" },
+    "label_source": "illustrative"
+  },
+  {
+    "id": "provider-restrictions-feature",
+    "summary": "Add source-labeled provider and data-region restrictions to development-model candidates. Unresolved hard restrictions must block a run.",
+    "architecture_summary": "Model selection and run authorization in Anvilmark.",
+    "expected": { "kind": "feature", "risk": "medium" },
+    "label_source": "illustrative"
+  },
+  {
+    "id": "architecture-boundaries",
+    "summary": "Define the components, interfaces, and data flow for a new local development-run record before implementation begins.",
+    "expected": { "kind": "architecture", "risk": "medium" },
+    "label_source": "illustrative"
+  },
+  {
+    "id": "split-parser-refactor",
+    "summary": "Split the existing parser into smaller functions while keeping its public behavior and file format the same.",
+    "expected": { "kind": "refactor", "risk": "medium" },
+    "label_source": "illustrative"
+  },
+  {
+    "id": "boundary-tests",
+    "summary": "Add tests for allowed, excluded, and unknown provider restriction standings; production behavior is already implemented.",
+    "expected": { "kind": "test", "risk": "medium" },
+    "label_source": "illustrative"
+  },
+  {
+    "id": "review-run",
+    "summary": "Review a proposed code change for security and data-integrity issues and report actionable findings without editing files.",
+    "expected": { "kind": "review", "risk": "high" },
+    "label_source": "illustrative"
+  }
+]

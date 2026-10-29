@@ -1,0 +1,564 @@
+diff --git a/packages/cli/README.md b/packages/cli/README.md
+index 3e9ae14..57d4882 100644
+--- a/packages/cli/README.md
++++ b/packages/cli/README.md
+@@ -126,6 +126,49 @@ configured model is not proof of the served model. A later code
+ or plan change makes a current accepted-run standing stale, while its historical
+ review remains part of the local evidence record.
+ 
++Optional hard provider and processing-region rules belong in the development
++plan's `restrictions` object. Each rule and candidate fact carries its own
++source label:
++
++```json
++{
++  "restrictions": {
++    "allowed_models": ["model-a", "model-b"],
++    "max_estimated_usd": null,
++    "provider": {
++      "allowed": ["Provider A"],
++      "excluded": ["Provider B"],
++      "source": "operator provider policy"
++    },
++    "data_region": {
++      "allowed": ["eu-west-1"],
++      "source": "operator residency policy"
++    }
++  },
++  "candidates": [
++    {
++      "provider_evidence": {
++        "value": "Provider A",
++        "source": "provider service terms"
++      },
++      "data_region_evidence": {
++        "values": ["eu-west-1"],
++        "source": "provider processing terms"
++      }
++    }
++  ]
++}
++```
++
++The candidate fragment above omits its other required fields. Region values
++must enumerate every region where task data may be processed. The CLI compares
++these declared facts with the rules and shows both source labels in plan,
++recommendation, and report output. It does not independently verify provider
++terms or infer a provider or processing region from a model name. Missing
++candidate evidence for an active rule produces `unknown`; failed rules produce
++`excluded`. Only `eligible` candidates can be run. Plans without these rules
++keep their existing behavior and approval hash.
++
+ ### Public model quality research (`quality`)
+ 
+ ```bash
+diff --git a/packages/cli/src/commands/development.ts b/packages/cli/src/commands/development.ts
+index 30b6129..7e9eb44 100644
+--- a/packages/cli/src/commands/development.ts
++++ b/packages/cli/src/commands/development.ts
+@@ -64,6 +64,20 @@ const TaskProfile = z.strictObject({
+   languages: z.array(Nonempty).min(1),
+   risk: z.enum(["low", "medium", "high"]),
+ });
++const SourcedValue = z.strictObject({ value: Nonempty, source: Nonempty });
++const SourcedRegions = z.strictObject({
++  values: z.array(Nonempty).min(1),
++  source: Nonempty,
++});
++const ProviderRestriction = z
++  .strictObject({
++    allowed: z.array(Nonempty).min(1).optional(),
++    excluded: z.array(Nonempty).min(1).optional(),
++    source: Nonempty,
++  })
++  .refine((value) => value.allowed || value.excluded, {
++    message: "provider restriction needs allowed or excluded providers",
++  });
+ const Candidate = z.strictObject({
+   id: Id,
+   agent: z.literal("codex_cli"),
+@@ -82,6 +96,8 @@ const Candidate = z.strictObject({
+   ]),
+   quality_evidence: z.enum(["none", "public", "project_task"]),
+   evidence_note: Nonempty,
++  provider_evidence: SourcedValue.optional(),
++  data_region_evidence: SourcedRegions.optional(),
+   research_mapping: z
+     .strictObject({
+       source_key: Nonempty,
+@@ -103,11 +119,25 @@ const Plan = z.strictObject({
+   restrictions: z.strictObject({
+     allowed_models: z.array(Nonempty).min(1),
+     max_estimated_usd: z.number().nonnegative().nullable(),
++    provider: ProviderRestriction.optional(),
++    data_region: z
++      .strictObject({ allowed: z.array(Nonempty).min(1), source: Nonempty })
++      .optional(),
+   }),
+   candidates: z.array(Candidate).min(2),
+ });
+ type DevelopmentPlan = z.infer<typeof Plan>;
+ type DevelopmentCandidate = DevelopmentPlan["candidates"][number];
++type RestrictionStanding = {
++  restriction:
++    "provider_allowlist" | "provider_exclusion" | "data_region_allowlist";
++  standing: "satisfied" | "failed" | "unknown";
++  rule_values: string[];
++  restriction_source: string;
++  evidence_source: string | null;
++  observed: string | string[] | null;
++  reason: string;
++};
+ 
+ interface Approval {
+   readonly plan_hash: string;
+@@ -265,8 +295,7 @@ async function currentApproval(
+     ) as Approval;
+     return approval.plan_hash === hash ? approval : null;
+   } catch (error) {
+-    if ((error as NodeJS.ErrnoException).code === "ENOENT")
+-      return null;
++    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+     throw error;
+   }
+ }
+@@ -311,6 +340,92 @@ function observedApiEstimate(
+   );
+ }
+ 
++function restrictionStandings(
++  plan: DevelopmentPlan,
++  candidate: DevelopmentCandidate,
++): RestrictionStanding[] {
++  const standings: RestrictionStanding[] = [];
++  const same = (left: string, right: string) =>
++    left.toLowerCase() === right.toLowerCase();
++  const providerRule = plan.restrictions.provider;
++  if (providerRule) {
++    const evidence = candidate.provider_evidence;
++    const provider = evidence?.value ?? null;
++    if (providerRule.allowed) {
++      const standing =
++        provider === null
++          ? "unknown"
++          : providerRule.allowed.some((value) => same(value, provider))
++            ? "satisfied"
++            : "failed";
++      standings.push({
++        restriction: "provider_allowlist",
++        standing,
++        rule_values: providerRule.allowed,
++        restriction_source: providerRule.source,
++        evidence_source: evidence?.source ?? null,
++        observed: provider,
++        reason:
++          standing === "unknown"
++            ? "provider evidence is missing"
++            : standing === "failed"
++              ? "provider is outside the allowed set"
++              : "provider is allowed",
++      });
++    }
++    if (providerRule.excluded) {
++      const standing =
++        provider === null
++          ? "unknown"
++          : providerRule.excluded.some((value) => same(value, provider))
++            ? "failed"
++            : "satisfied";
++      standings.push({
++        restriction: "provider_exclusion",
++        standing,
++        rule_values: providerRule.excluded,
++        restriction_source: providerRule.source,
++        evidence_source: evidence?.source ?? null,
++        observed: provider,
++        reason:
++          standing === "unknown"
++            ? "provider evidence is missing"
++            : standing === "failed"
++              ? "provider is excluded"
++              : "provider is not excluded",
++      });
++    }
++  }
++  const regionRule = plan.restrictions.data_region;
++  if (regionRule) {
++    const evidence = candidate.data_region_evidence;
++    const regions = evidence?.values ?? null;
++    const standing =
++      regions === null
++        ? "unknown"
++        : regions.every((region) =>
++              regionRule.allowed.some((allowed) => same(allowed, region)),
++            )
++          ? "satisfied"
++          : "failed";
++    standings.push({
++      restriction: "data_region_allowlist",
++      standing,
++      rule_values: regionRule.allowed,
++      restriction_source: regionRule.source,
++      evidence_source: evidence?.source ?? null,
++      observed: regions,
++      reason:
++        standing === "unknown"
++          ? "data-region evidence is missing"
++          : standing === "failed"
++            ? "a processing region is outside the allowed set"
++            : "all declared processing regions are allowed",
++    });
++  }
++  return standings;
++}
++
+ function comparison(plan: DevelopmentPlan): Array<{
+   id: string;
+   model: string;
+@@ -319,9 +434,11 @@ function comparison(plan: DevelopmentPlan): Array<{
+   expected_tokens: number;
+   projected_usd: number | null;
+   quality_evidence: string;
++  restriction_standings: RestrictionStanding[];
+ }> {
+   return plan.candidates.map((candidate) => {
+     const projected = estimate(candidate);
++    const restriction_standings = restrictionStandings(plan, candidate);
+     const allowed = plan.restrictions.allowed_models.includes(candidate.model);
+     const overBudget =
+       projected !== null &&
+@@ -329,28 +446,39 @@ function comparison(plan: DevelopmentPlan): Array<{
+       projected > plan.restrictions.max_estimated_usd;
+     const budgetUnknown =
+       projected === null && plan.restrictions.max_estimated_usd !== null;
++    const failedRestriction = restriction_standings.find(
++      (entry) => entry.standing === "failed",
++    );
++    const unknownRestriction = restriction_standings.find(
++      (entry) => entry.standing === "unknown",
++    );
+     return {
+       id: candidate.id,
+       model: candidate.model,
+       standing:
+-        !allowed || overBudget
++        !allowed || overBudget || failedRestriction
+           ? "excluded"
+-          : budgetUnknown
++          : budgetUnknown || unknownRestriction
+             ? "unknown"
+             : "eligible",
+       reason: !allowed
+         ? "model excluded by plan"
+         : overBudget
+           ? "projected API cost exceeds plan limit"
+-          : budgetUnknown
+-            ? "cash budget cannot be checked against subscription billing"
+-            : candidate.billing.mode === "subscription"
+-              ? "allowed; incremental cash cost unknown under subscription"
+-              : "allowed; API cost is an estimate from declared usage and rates",
++          : failedRestriction
++            ? failedRestriction.reason
++            : budgetUnknown
++              ? "cash budget cannot be checked against subscription billing"
++              : unknownRestriction
++                ? unknownRestriction.reason
++                : candidate.billing.mode === "subscription"
++                  ? "allowed; incremental cash cost unknown under subscription"
++                  : "allowed; API cost is an estimate from declared usage and rates",
+       expected_tokens:
+         candidate.expected_input_tokens + candidate.expected_output_tokens,
+       projected_usd: projected,
+       quality_evidence: candidate.quality_evidence,
++      restriction_standings,
+     };
+   });
+ }
+@@ -379,6 +507,23 @@ function suggestion(plan: DevelopmentPlan): string {
+   return "Eligible options have different billing bases; this pilot cannot rank their total cash cost or task quality.";
+ }
+ 
++function printRestrictionStandings(
++  context: CommandContext,
++  standings: readonly RestrictionStanding[],
++): void {
++  for (const entry of standings) {
++    const observed =
++      entry.observed === null
++        ? "missing"
++        : Array.isArray(entry.observed)
++          ? entry.observed.join(", ")
++          : entry.observed;
++    context.io.stdout(
++      `    ${entry.restriction}: ${entry.standing}; rule ${entry.rule_values.join(", ")} (source: ${entry.restriction_source}); observed ${observed} (evidence: ${entry.evidence_source ?? "missing"}). ${entry.reason}.\n`,
++    );
++  }
++}
++
+ function printPlan(
+   context: CommandContext,
+   plan: DevelopmentPlan,
+@@ -397,6 +542,7 @@ function printPlan(
+     context.io.stdout(
+       `  ${option.id}: ${option.model}; ${option.standing}; ${option.expected_tokens} expected tokens; ${cost}; quality evidence ${option.quality_evidence}. ${option.reason}\n`,
+     );
++    printRestrictionStandings(context, option.restriction_standings);
+   }
+   context.io.stdout(`${suggestion(plan)}\n`);
+ }
+@@ -943,7 +1089,9 @@ export async function developmentCommand(
+       approved_at: context.io.clock(),
+       actor: agentTest ? "agent_test_operator" : "interactive_local_operator",
+     } satisfies Approval);
+-    context.io.stdout(`${agentTest ? "Test approved" : "Approved"} plan ${hash.slice(0, 12)}.\n`);
++    context.io.stdout(
++      `${agentTest ? "Test approved" : "Approved"} plan ${hash.slice(0, 12)}.\n`,
++    );
+     return EXIT.ok;
+   }
+   if (sub === "recommend") {
+@@ -974,6 +1122,7 @@ export async function developmentCommand(
+           context.io.stdout(
+             `  ${option.id}: ${option.standing}; ${sample.accepted} accepted, ${sample.rejected} rejected, ${sample.failed} failed, ${sample.unreviewed} awaiting review; ${sample.configured_only} configured-only model identities; ${sample.sample_cost_per_accepted === null ? "sample cash cost per accepted unknown" : `$${sample.sample_cost_per_accepted.toFixed(4)} estimated sample cost per accepted`}; public mapping ${mapped?.standing ?? "unmapped"} (${mapped?.observations.length ?? 0} source observations).\n`,
+           );
++          printRestrictionStandings(context, option.restriction_standings);
+           if (mapped?.snapshot && mapped.mapping)
+             context.io.stdout(
+               `    Public source: ${mapped.snapshot.source_url} fetched ${mapped.snapshot.fetched_at}; rights ${mapped.snapshot.usage_rights ?? "source-specific"}. Identity: ${mapped.mapping.identity_note} Relevance: ${mapped.mapping.relevance_note}\n`,
+@@ -1214,16 +1363,16 @@ export async function developmentCommand(
+             ? review.decision === "rejected"
+               ? "agent_test_rejected"
+               : "agent_test_accepted"
+-          : review.decision === "rejected" &&
+-              review.run_hash === digest(JSON.stringify(run))
+-            ? "rejected"
+-            : review.run_hash === digest(JSON.stringify(run)) &&
+-                run.plan_hash === hash &&
+-                approval === "current" &&
+-                currentCommit === run.base_commit &&
+-                currentChange?.hash === run.change_sha256
+-              ? "accepted_current"
+-              : "accepted_stale";
++            : review.decision === "rejected" &&
++                review.run_hash === digest(JSON.stringify(run))
++              ? "rejected"
++              : review.run_hash === digest(JSON.stringify(run)) &&
++                  run.plan_hash === hash &&
++                  approval === "current" &&
++                  currentCommit === run.base_commit &&
++                  currentChange?.hash === run.change_sha256
++                ? "accepted_current"
++                : "accepted_stale";
+       return { ...run, review_status };
+     });
+     if (flag(parsed, "json")) {
+diff --git a/packages/cli/test/development.test.ts b/packages/cli/test/development.test.ts
+index d14df4b..9868a03 100644
+--- a/packages/cli/test/development.test.ts
++++ b/packages/cli/test/development.test.ts
+@@ -157,7 +157,10 @@ describe("development pilot", () => {
+     ).toBe(0);
+     expect(approved.out()).toContain("Test approved plan");
+     const approval = JSON.parse(
+-      await readFile(join(root, ".anvilmark/development/approval.json"), "utf8"),
++      await readFile(
++        join(root, ".anvilmark/development/approval.json"),
++        "utf8",
++      ),
+     );
+     expect(approval.actor).toBe("agent_test_operator");
+   });
+@@ -225,6 +228,193 @@ describe("development pilot", () => {
+     expect(result.out()).toContain("No eligible candidate");
+   });
+ 
++  it("uses sourced provider and data-region facts for allowed, excluded, and unknown standings", async () => {
++    const { root } = await repository();
++    const base = structuredClone(plan);
++    const restricted = {
++      ...base,
++      restrictions: {
++        ...base.restrictions,
++        provider: {
++          allowed: ["Example Provider"],
++          excluded: ["Blocked Provider"],
++          source: "operator provider policy",
++        },
++        data_region: {
++          allowed: ["eu-west-1"],
++          source: "operator residency policy",
++        },
++      },
++      candidates: [
++        {
++          ...base.candidates[0],
++          provider_evidence: {
++            value: "Example Provider",
++            source: "service contract A",
++          },
++          data_region_evidence: {
++            values: ["eu-west-1"],
++            source: "service contract A, processing terms",
++          },
++        },
++        {
++          ...base.candidates[1],
++          provider_evidence: {
++            value: "Blocked Provider",
++            source: "service contract B",
++          },
++          data_region_evidence: {
++            values: ["eu-west-1"],
++            source: "service contract B, processing terms",
++          },
++        },
++        {
++          ...base.candidates[0],
++          id: "outside-region",
++          model: "third-model",
++          provider_evidence: {
++            value: "Example Provider",
++            source: "service contract C",
++          },
++          data_region_evidence: {
++            values: ["eu-west-1", "us-east-1"],
++            source: "service contract C, processing terms",
++          },
++        },
++        {
++          ...base.candidates[0],
++          id: "region-unknown",
++          model: "fourth-model",
++          provider_evidence: {
++            value: "Example Provider",
++            source: "service contract D",
++          },
++        },
++        {
++          ...base.candidates[0],
++          id: "provider-unknown",
++          model: "fifth-model",
++          data_region_evidence: {
++            values: ["eu-west-1"],
++            source: "service contract E, processing terms",
++          },
++        },
++      ],
++    };
++    restricted.restrictions.allowed_models.push(
++      "third-model",
++      "fourth-model",
++      "fifth-model",
++    );
++    await writeFile(
++      join(root, ".anvilmark/input-plan.json"),
++      JSON.stringify(restricted),
++    );
++    const planned = scriptedIo({ cwd: root });
++    expect(
++      await cli(
++        ["development", "plan", "--file", ".anvilmark/input-plan.json"],
++        planned,
++      ),
++      planned.err(),
++    ).toBe(0);
++    expect(planned.out()).toContain("source: operator residency policy");
++    expect(planned.out()).toContain("evidence: service contract A");
++    expect(planned.out()).toContain("data-region evidence is missing");
++
++    const report = scriptedIo({ cwd: root });
++    expect(await cli(["development", "report", "--json"], report)).toBe(0);
++    const options = JSON.parse(report.out()).comparison;
++    expect(options.map((item: { standing: string }) => item.standing)).toEqual([
++      "eligible",
++      "excluded",
++      "excluded",
++      "unknown",
++      "unknown",
++    ]);
++    expect(options[0].restriction_standings).toMatchObject([
++      {
++        restriction: "provider_allowlist",
++        standing: "satisfied",
++        restriction_source: "operator provider policy",
++        evidence_source: "service contract A",
++      },
++      {
++        restriction: "provider_exclusion",
++        standing: "satisfied",
++      },
++      {
++        restriction: "data_region_allowlist",
++        standing: "satisfied",
++        restriction_source: "operator residency policy",
++        evidence_source: "service contract A, processing terms",
++      },
++    ]);
++    expect(options[1].restriction_standings[1].standing).toBe("failed");
++    expect(options[2].restriction_standings[2].standing).toBe("failed");
++    expect(options[3].restriction_standings[2]).toMatchObject({
++      standing: "unknown",
++      evidence_source: null,
++      observed: null,
++    });
++    expect(options[4].restriction_standings[0].standing).toBe("unknown");
++
++    for (const model of ["gpt-6-sol", "fourth-model", "fifth-model"]) {
++      const run = scriptedIo({ cwd: root });
++      expect(
++        await cli(
++          [
++            "development",
++            "run",
++            "--model",
++            model,
++            "--prompt-file",
++            "unused.txt",
++          ],
++          run,
++        ),
++      ).toBe(1);
++      expect(run.err()).toContain("unresolved hard restriction");
++    }
++  });
++
++  it("requires a source label for each provider restriction and candidate fact", async () => {
++    const { root } = await repository();
++    const restricted = {
++      ...structuredClone(plan),
++      restrictions: {
++        ...plan.restrictions,
++        provider: { allowed: ["Example Provider"], source: "" },
++      },
++    };
++    await writeFile(
++      join(root, ".anvilmark/input-plan.json"),
++      JSON.stringify(restricted),
++    );
++    const result = scriptedIo({ cwd: root });
++    expect(
++      await cli(
++        ["development", "plan", "--file", ".anvilmark/input-plan.json"],
++        result,
++      ),
++    ).toBe(1);
++    expect(result.err()).toContain("source");
++    restricted.restrictions.provider.source = "operator policy";
++    Object.assign(restricted.candidates[0]!, {
++      provider_evidence: { value: "Example Provider", source: "" },
++    });
++    await writeFile(
++      join(root, ".anvilmark/input-plan.json"),
++      JSON.stringify(restricted),
++    );
++    expect(
++      await cli(
++        ["development", "plan", "--file", ".anvilmark/input-plan.json"],
++        scriptedIo({ cwd: root }),
++      ),
++    ).toBe(1);
++  });
++
+   it("refuses a development storage symlink", async () => {
+     const root = await tempDir();
+     const outside = await tempDir();

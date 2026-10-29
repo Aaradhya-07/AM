@@ -1,0 +1,23 @@
+{
+  "kind": {
+    "type": "choice",
+    "instructions": "Which Anvilmark coding-task kind best describes the work requested in task_summary? Use the primary deliverable.",
+    "criteria": {
+      "architecture": "Design component boundaries, interfaces, or system structure.",
+      "bug": "Correct existing behavior that fails or behaves incorrectly.",
+      "feature": "Add a new capability or observable behavior.",
+      "refactor": "Change internal structure while preserving intended behavior.",
+      "test": "Add or improve checks that verify behavior; tests are the main deliverable.",
+      "review": "Inspect existing work and report findings; no implementation is requested."
+    }
+  },
+  "risk": {
+    "type": "choice",
+    "instructions": "Based only on the described scope, what is the risk if this coding task is implemented incorrectly? Choose medium when the description lacks enough detail to justify low or high.",
+    "criteria": {
+      "low": "Narrow, easily reversible change with limited impact and a clear check.",
+      "medium": "Several components or users may be affected, or impact is not fully specified.",
+      "high": "Security, privacy, money, data integrity, production availability, or difficult rollback may be affected."
+    }
+  }
+}

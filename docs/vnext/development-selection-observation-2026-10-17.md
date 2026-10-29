@@ -18,10 +18,21 @@
 
 These checks establish storage, mapping, and decision-loop mechanics. They do not establish that Anvilmark improves coding quality or reduces cash spending. The test agent and outcomes are synthetic; the API rates in that test are declarations.
 
-## First real pilot prepared
+## First real pilot executed
 
-The proposed first task is [provider and data-region restriction evidence](../../examples/development-pilot/anvilmark-provider-restrictions.plan.json) in Anvilmark itself, with an [agent prompt](../../examples/development-pilot/anvilmark-provider-restrictions.prompt.txt). It has two Codex CLI model options, a bounded TypeScript feature scope, and named checks. Both options use subscription billing, so the pilot can assess completion and allowance use but cannot establish cash savings. The exact plan must be reviewed by the project owner before running; the current checkout contains pre-existing uncommitted work and needs an isolated clean baseline. The owner must also review each resulting change. No real pilot run or human acceptance is claimed here.
+The project owner authorized an agent test approver. The [provider and data-region restriction task](../../examples/development-pilot/anvilmark-provider-restrictions.plan.json) ran in two isolated checkouts from the same frozen Git baseline with the same [prompt](../../examples/development-pilot/anvilmark-provider-restrictions.prompt.txt). Approval and reviews are recorded as `agent_test_operator`, never as human acceptance, and `development recommend` excludes these runs from local outcome rankings. The [run records, reviews, and patches](../../examples/development-pilot/observations/2026-10-17/) preserve the local pilot evidence.
+
+| Configured model | Result                                                  |                      Input tokens (cached) | Output tokens |                          Elapsed | Named checks                           |
+| ---------------- | ------------------------------------------------------- | -----------------------------------------: | ------------: | -------------------------------: | -------------------------------------- |
+| `gpt-6-luna`     | One environment startup failure, then a completed patch | 1,464,871 (1,394,432) on the completed run |        17,119 | 178 seconds on the completed run | Development tests and CLI build passed |
+| `gpt-6-sol`      | Completed patch                                         |                          931,749 (873,088) |        11,729 |                      146 seconds | Development tests and CLI build passed |
+
+The initial Luna failure had zero model tokens and no code change because this environment denied Codex access to its local state database. After allowing the required local access, it completed. The Sol patch became the workspace implementation because it checks every declared processing region and supports both provider allow and exclusion rules. Both patches have an agent test acceptance. The current workspace has not received a human acceptance decision.
+
+The Codex event stream provided token counts but no served-model event, so both identities remain `configured_only`. The two subscription runs have unknown marginal cash cost. These are single attempts on one task with different generated patches, so their token and time differences do not establish a reliable model ranking or cost reduction. Cached input is included in the reported input total. The new restriction fields carry source labels supplied in the plan; Anvilmark does not independently verify those sources or their completeness.
+
+The [research decision record](development-selection-research-decisions-2026-10-17.md) maps primary papers to the architecture and limits. Their findings motivated repository-level checks and a fixed-model baseline, but none validates Anvilmark's selector on its users' tasks.
 
 ## Next evidence gate
 
-Run the prepared task from the same clean baseline in separate checkouts if both options are available. Record the tool-reported or configured-only identity, checks, human acceptance/rejection, retries, and usage. Then test an API-billed or invoice-backed comparison if a cash-saving claim is desired. Source-backed provider policies, client-mode compatibility, model-switch coverage, calibrated success probability, and a unified website view remain open.
+Freeze a larger, independently reviewed set of representative architecture and coding tasks. Compare fixed cheap, fixed strong, verified-handoff, and selector policies on matched repository baselines, including retries and preparation costs. Obtain human-reviewed acceptance and an API-billed or invoice-backed comparison before claiming savings. Provider-source verification, client-mode compatibility, model-switch coverage, calibrated success probability, and a unified website view remain open.

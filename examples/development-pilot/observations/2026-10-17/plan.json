@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "architecture": {
+    "id": "development-selection",
+    "summary": "Select a coding-agent setup for a reviewed architecture task while preserving restrictions and evidence provenance."
+  },
+  "task": {
+    "id": "provider-restriction-evidence",
+    "summary": "Add source-labeled provider and data-region restrictions to development-model candidates; unresolved hard restrictions must block a run.",
+    "profile": {
+      "kind": "feature",
+      "languages": [
+        "typescript"
+      ],
+      "risk": "medium"
+    },
+    "checks": [
+      {
+        "name": "development-tests",
+        "argv": [
+          "node_modules/.bin/vitest",
+          "run",
+          "packages/cli/test/development.test.ts"
+        ]
+      },
+      {
+        "name": "cli-build",
+        "argv": [
+          "node_modules/.bin/tsc",
+          "-b",
+          "packages/cli",
+          "--pretty",
+          "false"
+        ]
+      }
+    ]
+  },
+  "restrictions": {
+    "allowed_models": [
+      "gpt-6-luna",
+      "gpt-6-sol"
+    ],
+    "max_estimated_usd": null
+  },
+  "candidates": [
+    {
+      "id": "codex-luna",
+      "agent": "codex_cli",
+      "model": "gpt-6-luna",
+      "expected_input_tokens": 60000,
+      "expected_output_tokens": 4000,
+      "billing": {
+        "mode": "subscription"
+      },
+      "quality_evidence": "none",
+      "evidence_note": "No reviewed comparable Anvilmark run; token expectation is a planning assumption."
+    },
+    {
+      "id": "codex-sol",
+      "agent": "codex_cli",
+      "model": "gpt-6-sol",
+      "expected_input_tokens": 60000,
+      "expected_output_tokens": 4000,
+      "billing": {
+        "mode": "subscription"
+      },
+      "quality_evidence": "none",
+      "evidence_note": "No reviewed comparable Anvilmark run; token expectation is a planning assumption."
+    }
+  ]
+}

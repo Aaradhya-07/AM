@@ -1,0 +1,379 @@
+diff --git a/examples/development-pilot/README.md b/examples/development-pilot/README.md
+index 901f601..7839034 100644
+--- a/examples/development-pilot/README.md
++++ b/examples/development-pilot/README.md
+@@ -33,3 +33,13 @@ shown as `configured_only` unless the event stream itself reports the model.
+ For a subscription, tokens describe allowance use; incremental cash cost is
+ unknown. The provisional lowest-token option is a starting point, not a
+ quality-gated recommendation.
++
++Plans may add hard provider and data-region policies under `restrictions`, for
++example `provider: { "allowed": ["OpenAI"], "source": "organization policy" }`
++and `data_region: { "allowed": ["eu-west"], "source": "residency policy" }`.
++Each candidate can report `provider_evidence` and `data_region_evidence` as
++`{ "value": "...", "source": "..." }`. When either configured policy has no
++candidate evidence, that policy and the candidate stand unknown, and
++`development run` refuses the candidate. The source labels identify the policy
++and evidence used in the comparison; they do not establish facts beyond those
++sources.
+diff --git a/packages/cli/src/commands/development.ts b/packages/cli/src/commands/development.ts
+index 30b6129..758c506 100644
+--- a/packages/cli/src/commands/development.ts
++++ b/packages/cli/src/commands/development.ts
+@@ -64,6 +64,14 @@ const TaskProfile = z.strictObject({
+   languages: z.array(Nonempty).min(1),
+   risk: z.enum(["low", "medium", "high"]),
+ });
++const CandidateEvidence = z.strictObject({
++  value: Nonempty,
++  source: Nonempty,
++});
++const SourcedRestriction = z.strictObject({
++  allowed: z.array(Nonempty).min(1),
++  source: Nonempty,
++});
+ const Candidate = z.strictObject({
+   id: Id,
+   agent: z.literal("codex_cli"),
+@@ -82,6 +90,8 @@ const Candidate = z.strictObject({
+   ]),
+   quality_evidence: z.enum(["none", "public", "project_task"]),
+   evidence_note: Nonempty,
++  provider_evidence: CandidateEvidence.optional(),
++  data_region_evidence: CandidateEvidence.optional(),
+   research_mapping: z
+     .strictObject({
+       source_key: Nonempty,
+@@ -103,6 +113,8 @@ const Plan = z.strictObject({
+   restrictions: z.strictObject({
+     allowed_models: z.array(Nonempty).min(1),
+     max_estimated_usd: z.number().nonnegative().nullable(),
++    provider: SourcedRestriction.optional(),
++    data_region: SourcedRestriction.optional(),
+   }),
+   candidates: z.array(Candidate).min(2),
+ });
+@@ -265,8 +277,7 @@ async function currentApproval(
+     ) as Approval;
+     return approval.plan_hash === hash ? approval : null;
+   } catch (error) {
+-    if ((error as NodeJS.ErrnoException).code === "ENOENT")
+-      return null;
++    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+     throw error;
+   }
+ }
+@@ -319,42 +330,123 @@ function comparison(plan: DevelopmentPlan): Array<{
+   expected_tokens: number;
+   projected_usd: number | null;
+   quality_evidence: string;
++  provider: RestrictionStanding;
++  data_region: RestrictionStanding;
+ }> {
+   return plan.candidates.map((candidate) => {
+     const projected = estimate(candidate);
+     const allowed = plan.restrictions.allowed_models.includes(candidate.model);
++    const provider = restrictionStanding(
++      plan.restrictions.provider,
++      candidate.provider_evidence,
++    );
++    const dataRegion = restrictionStanding(
++      plan.restrictions.data_region,
++      candidate.data_region_evidence,
++    );
+     const overBudget =
+       projected !== null &&
+       plan.restrictions.max_estimated_usd !== null &&
+       projected > plan.restrictions.max_estimated_usd;
+     const budgetUnknown =
+       projected === null && plan.restrictions.max_estimated_usd !== null;
++    const reason = [
++      !allowed ? "model excluded by plan" : null,
++      overBudget ? "projected API cost exceeds plan limit" : null,
++      provider.status === "excluded" ? provider.reason : null,
++      dataRegion.status === "excluded" ? dataRegion.reason : null,
++      provider.status === "unknown" ? provider.reason : null,
++      dataRegion.status === "unknown" ? dataRegion.reason : null,
++      budgetUnknown
++        ? "cash budget cannot be checked against subscription billing"
++        : null,
++    ].filter((item): item is string => item !== null);
++    const excluded =
++      !allowed ||
++      overBudget ||
++      provider.status === "excluded" ||
++      dataRegion.status === "excluded";
++    const unknown =
++      provider.status === "unknown" ||
++      dataRegion.status === "unknown" ||
++      budgetUnknown;
+     return {
+       id: candidate.id,
+       model: candidate.model,
+-      standing:
+-        !allowed || overBudget
+-          ? "excluded"
+-          : budgetUnknown
+-            ? "unknown"
+-            : "eligible",
+-      reason: !allowed
+-        ? "model excluded by plan"
+-        : overBudget
+-          ? "projected API cost exceeds plan limit"
+-          : budgetUnknown
+-            ? "cash budget cannot be checked against subscription billing"
+-            : candidate.billing.mode === "subscription"
+-              ? "allowed; incremental cash cost unknown under subscription"
+-              : "allowed; API cost is an estimate from declared usage and rates",
++      standing: excluded ? "excluded" : unknown ? "unknown" : "eligible",
++      reason:
++        reason.join("; ") ||
++        (candidate.billing.mode === "subscription"
++          ? "allowed; incremental cash cost unknown under subscription"
++          : "allowed; API cost is an estimate from declared usage and rates"),
+       expected_tokens:
+         candidate.expected_input_tokens + candidate.expected_output_tokens,
+       projected_usd: projected,
+       quality_evidence: candidate.quality_evidence,
++      provider,
++      data_region: dataRegion,
+     };
+   });
+ }
+ 
++type RestrictionEvidence = z.infer<typeof CandidateEvidence> | undefined;
++type SourcedRestrictionValue = z.infer<typeof SourcedRestriction> | undefined;
++type RestrictionStanding = {
++  status: "not_configured" | "allowed" | "excluded" | "unknown";
++  value: string | null;
++  evidence_source: string | null;
++  restriction_source: string | null;
++  reason: string;
++};
++
++function restrictionSummary(
++  name: string,
++  standing: RestrictionStanding,
++): string {
++  if (standing.status === "not_configured") return `${name} not configured`;
++  const sources = [
++    standing.evidence_source ? `evidence: ${standing.evidence_source}` : null,
++    standing.restriction_source
++      ? `restriction: ${standing.restriction_source}`
++      : null,
++  ].filter((item): item is string => item !== null);
++  return `${name} ${standing.status} (${standing.value ?? "value unknown"}${sources.length ? `; ${sources.join("; ")}` : ""})`;
++}
++
++function restrictionStanding(
++  restriction: SourcedRestrictionValue,
++  evidence: RestrictionEvidence,
++): RestrictionStanding {
++  if (!restriction)
++    return {
++      status: "not_configured",
++      value: evidence?.value ?? null,
++      evidence_source: evidence?.source ?? null,
++      restriction_source: null,
++      reason: "no restriction configured",
++    };
++  if (!evidence)
++    return {
++      status: "unknown",
++      value: null,
++      evidence_source: null,
++      restriction_source: restriction.source,
++      reason: `hard restriction cannot be checked; candidate evidence missing (restriction source: ${restriction.source})`,
++    };
++  const match = restriction.allowed.some(
++    (value) => value.toLowerCase() === evidence.value.toLowerCase(),
++  );
++  return {
++    status: match ? "allowed" : "excluded",
++    value: evidence.value,
++    evidence_source: evidence.source,
++    restriction_source: restriction.source,
++    reason: match
++      ? `allowed by restriction source ${restriction.source}; candidate evidence source ${evidence.source}`
++      : `value ${evidence.value} is outside the hard restriction (restriction source: ${restriction.source}; candidate evidence source: ${evidence.source})`,
++  };
++}
++
+ function suggestion(plan: DevelopmentPlan): string {
+   const eligible = comparison(plan).filter(
+     (candidate) => candidate.standing === "eligible",
+@@ -395,7 +487,7 @@ function printPlan(
+         ? "cash cost unknown"
+         : `$${option.projected_usd.toFixed(4)} projected`;
+     context.io.stdout(
+-      `  ${option.id}: ${option.model}; ${option.standing}; ${option.expected_tokens} expected tokens; ${cost}; quality evidence ${option.quality_evidence}. ${option.reason}\n`,
++      `  ${option.id}: ${option.model}; ${option.standing}; ${option.expected_tokens} expected tokens; ${cost}; quality evidence ${option.quality_evidence}; ${restrictionSummary("provider", option.provider)}; ${restrictionSummary("data region", option.data_region)}. ${option.reason}\n`,
+     );
+   }
+   context.io.stdout(`${suggestion(plan)}\n`);
+@@ -943,7 +1035,9 @@ export async function developmentCommand(
+       approved_at: context.io.clock(),
+       actor: agentTest ? "agent_test_operator" : "interactive_local_operator",
+     } satisfies Approval);
+-    context.io.stdout(`${agentTest ? "Test approved" : "Approved"} plan ${hash.slice(0, 12)}.\n`);
++    context.io.stdout(
++      `${agentTest ? "Test approved" : "Approved"} plan ${hash.slice(0, 12)}.\n`,
++    );
+     return EXIT.ok;
+   }
+   if (sub === "recommend") {
+@@ -972,7 +1066,7 @@ export async function developmentCommand(
+             (item) => item.candidate_id === option.id,
+           );
+           context.io.stdout(
+-            `  ${option.id}: ${option.standing}; ${sample.accepted} accepted, ${sample.rejected} rejected, ${sample.failed} failed, ${sample.unreviewed} awaiting review; ${sample.configured_only} configured-only model identities; ${sample.sample_cost_per_accepted === null ? "sample cash cost per accepted unknown" : `$${sample.sample_cost_per_accepted.toFixed(4)} estimated sample cost per accepted`}; public mapping ${mapped?.standing ?? "unmapped"} (${mapped?.observations.length ?? 0} source observations).\n`,
++            `  ${option.id}: ${option.standing}; ${sample.accepted} accepted, ${sample.rejected} rejected, ${sample.failed} failed, ${sample.unreviewed} awaiting review; ${sample.configured_only} configured-only model identities; ${restrictionSummary("provider", option.provider)}; ${restrictionSummary("data region", option.data_region)}; ${sample.sample_cost_per_accepted === null ? "sample cash cost per accepted unknown" : `$${sample.sample_cost_per_accepted.toFixed(4)} estimated sample cost per accepted`}; public mapping ${mapped?.standing ?? "unmapped"} (${mapped?.observations.length ?? 0} source observations).\n`,
+           );
+           if (mapped?.snapshot && mapped.mapping)
+             context.io.stdout(
+@@ -1214,16 +1308,16 @@ export async function developmentCommand(
+             ? review.decision === "rejected"
+               ? "agent_test_rejected"
+               : "agent_test_accepted"
+-          : review.decision === "rejected" &&
+-              review.run_hash === digest(JSON.stringify(run))
+-            ? "rejected"
+-            : review.run_hash === digest(JSON.stringify(run)) &&
+-                run.plan_hash === hash &&
+-                approval === "current" &&
+-                currentCommit === run.base_commit &&
+-                currentChange?.hash === run.change_sha256
+-              ? "accepted_current"
+-              : "accepted_stale";
++            : review.decision === "rejected" &&
++                review.run_hash === digest(JSON.stringify(run))
++              ? "rejected"
++              : review.run_hash === digest(JSON.stringify(run)) &&
++                  run.plan_hash === hash &&
++                  approval === "current" &&
++                  currentCommit === run.base_commit &&
++                  currentChange?.hash === run.change_sha256
++                ? "accepted_current"
++                : "accepted_stale";
+       return { ...run, review_status };
+     });
+     if (flag(parsed, "json")) {
+diff --git a/packages/cli/test/development.test.ts b/packages/cli/test/development.test.ts
+index d14df4b..ed87336 100644
+--- a/packages/cli/test/development.test.ts
++++ b/packages/cli/test/development.test.ts
+@@ -157,7 +157,10 @@ describe("development pilot", () => {
+     ).toBe(0);
+     expect(approved.out()).toContain("Test approved plan");
+     const approval = JSON.parse(
+-      await readFile(join(root, ".anvilmark/development/approval.json"), "utf8"),
++      await readFile(
++        join(root, ".anvilmark/development/approval.json"),
++        "utf8",
++      ),
+     );
+     expect(approval.actor).toBe("agent_test_operator");
+   });
+@@ -225,6 +228,102 @@ describe("development pilot", () => {
+     expect(result.out()).toContain("No eligible candidate");
+   });
+ 
++  it("checks source-labeled provider and region restrictions and blocks unknown runs", async () => {
++    const { root } = await repository();
++    const restricted = structuredClone(plan) as unknown as {
++      restrictions: {
++        allowed_models: string[];
++        max_estimated_usd: number | null;
++        provider?: { allowed: string[]; source: string };
++        data_region?: { allowed: string[]; source: string };
++      };
++      candidates: Array<{
++        id: string;
++        model: string;
++        provider_evidence?: { value: string; source: string };
++        data_region_evidence?: { value: string; source: string };
++      }>;
++    };
++    restricted.restrictions.provider = {
++      allowed: ["OpenAI"],
++      source: "organization provider policy",
++    };
++    restricted.restrictions.data_region = {
++      allowed: ["eu-west"],
++      source: "organization residency policy",
++    };
++    Object.assign(restricted.candidates[0]!, {
++      provider_evidence: {
++        value: "openai",
++        source: "Codex service documentation",
++      },
++      data_region_evidence: {
++        value: "EU-WEST",
++        source: "configured endpoint record",
++      },
++    });
++    Object.assign(restricted.candidates[1]!, {
++      provider_evidence: {
++        value: "Other Provider",
++        source: "candidate declaration",
++      },
++      data_region_evidence: {
++        value: "us-east",
++        source: "candidate declaration",
++      },
++    });
++    restricted.restrictions.allowed_models.push("gpt-6-mini");
++    restricted.candidates.push({
++      ...restricted.candidates[0]!,
++      id: "unknown",
++      model: "gpt-6-mini",
++      provider_evidence: undefined,
++      data_region_evidence: undefined,
++    });
++    await writeFile(
++      join(root, ".anvilmark/input-plan.json"),
++      JSON.stringify(restricted),
++    );
++
++    const planned = scriptedIo({ cwd: root });
++    expect(
++      await cli(
++        ["development", "plan", "--file", ".anvilmark/input-plan.json"],
++        planned,
++      ),
++      planned.err(),
++    ).toBe(0);
++    expect(planned.out()).toContain("fast: gpt-6-luna; eligible");
++    expect(planned.out()).toContain("provider allowed");
++    expect(planned.out()).toContain("organization provider policy");
++    expect(planned.out()).toContain("data region allowed");
++    expect(planned.out()).toContain("strong: gpt-6-sol; excluded");
++    expect(planned.out()).toContain("provider excluded");
++    expect(planned.out()).toContain("data region excluded");
++    expect(planned.out()).toContain("unknown: gpt-6-mini; unknown");
++    expect(planned.out()).toContain("provider unknown");
++    expect(planned.out()).toContain("data region unknown");
++
++    const run = scriptedIo({ cwd: root });
++    expect(
++      await cli(
++        [
++          "development",
++          "run",
++          "--model",
++          "gpt-6-mini",
++          "--prompt-file",
++          "prompt.txt",
++        ],
++        run,
++      ),
++    ).toBe(1);
++    expect(run.err()).toContain("unresolved hard restriction");
++    await expect(
++      readdir(join(root, ".anvilmark/development/runs")),
++    ).rejects.toMatchObject({ code: "ENOENT" });
++  });
++
+   it("refuses a development storage symlink", async () => {
+     const root = await tempDir();
+     const outside = await tempDir();

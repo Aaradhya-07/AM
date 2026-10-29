@@ -7,6 +7,7 @@ const LINKS: Array<{ href: string; label: string; external?: boolean }> = [
   { href: "/", label: "Home" },
   { href: "/start", label: "Getting started" },
   { href: "/demo", label: "Create contract" },
+  { href: "/models", label: "Model catalog" },
   { href: "/studio", label: "Review bundle" },
   { href: GITHUB_URL, label: "Repository", external: true },
   { href: BRIEF_URL, label: "Canonical brief", external: true },
