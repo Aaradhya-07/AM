@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile, realpath } from "node:fs/promises";
 import { basename, resolve } from "node:path";
+import { z } from "zod";
 
 export interface HandoffFile {
   path: string;
@@ -9,12 +10,17 @@ export interface HandoffFile {
   selection: "prompt_path" | "path_terms" | "plan_check";
 }
 
-export interface HandoffCheck {
-  name: string;
-  argv: string[];
-  exit_code: number | null;
-  duration_ms: number;
-}
+export const CheckResultSchema = z.strictObject({
+  name: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/),
+  argv: z.array(z.string().trim().min(1)).min(1),
+  exit_code: z.number().int().nullable(),
+  duration_ms: z.number().nonnegative(),
+  finished_at: z.string().trim().min(1).optional(),
+  output_tail: z
+    .strictObject({ stdout: z.string(), stderr: z.string() })
+    .optional(),
+});
+type HandoffCheck = z.infer<typeof CheckResultSchema>;
 
 export interface DevelopmentHandoff {
   schema_version: 1;

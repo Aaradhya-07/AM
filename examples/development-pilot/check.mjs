@@ -1,17 +1,15 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
 import { normalizeLabel } from "./label.mjs";
 
-const cases = [
-  ["Hello World", "hello-world"],
-  ["Hello... World", "hello-world"],
-  ["  Hello  World  ", "hello-world"],
-];
+test("normalizes a plain label", () => {
+  assert.equal(normalizeLabel("Hello World"), "hello-world");
+});
 
-for (const [input, expected] of cases) {
-  const actual = normalizeLabel(input);
-  if (actual !== expected) {
-    console.error(
-      `${JSON.stringify(input)}: expected ${expected}, got ${actual}`,
-    );
-    process.exitCode = 1;
-  }
-}
+test("collapses repeated punctuation", () => {
+  assert.equal(normalizeLabel("Hello... World"), "hello-world");
+});
+
+test("trims surrounding separators and collapses spaces", () => {
+  assert.equal(normalizeLabel("  Hello  World  "), "hello-world");
+});

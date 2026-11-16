@@ -20,10 +20,11 @@ const checkout = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cli = join(checkout, "packages/cli/bin/anvilmark.mjs");
 const fixture = join(checkout, "examples/development-pilot");
 const args = new Set(process.argv.slice(2));
-const help = `Usage: bash scripts/development-tour.sh [--auto] [--keep] [--help]
+const help = `Usage: bash scripts/development-tour.sh [--auto] [--keep] [--human-review] [--help]
 
 Enter advances through each explained command; q quits. --auto runs without
 pauses for a rehearsal. --keep preserves the temporary demo repository.
+--human-review lets a presenter review the patch and record a terminal sign-off.
 The offline run uses a stand-in agent and agent-test records. It does not
 consume a model, spend API money, or create human approval evidence.`;
 
@@ -31,12 +32,19 @@ if (args.has("--help")) {
   console.log(help);
   process.exit(0);
 }
-if ([...args].some((arg) => !["--auto", "--keep"].includes(arg))) {
+if (
+  [...args].some((arg) => !["--auto", "--keep", "--human-review"].includes(arg))
+) {
   console.error(help);
   process.exit(2);
 }
 const auto = args.has("--auto");
 const keep = args.has("--keep");
+const humanReview = args.has("--human-review");
+if (humanReview && (auto || !process.stdout.isTTY)) {
+  console.error("--human-review requires the guided terminal tour.");
+  process.exit(2);
+}
 if (!auto && !process.stdin.isTTY) {
   console.error("Open this tour in a terminal, or use --auto for a rehearsal.");
   process.exit(2);
@@ -88,6 +96,7 @@ try {
       cwd: options.cwd ?? checkout,
       env: { ...process.env, FORCE_COLOR: "0", ...options.env },
       encoding: "utf8",
+      ...(options.interactive ? { stdio: "inherit" } : {}),
       maxBuffer: 8 * 1024 * 1024,
       timeout: options.timeout ?? 120_000,
     });
@@ -126,79 +135,6 @@ try {
   console.log(`Demo workspace: ${project}`);
 
   await next(
-    "Understand the current repository",
-    "The first report maps declared components, source areas, working style, goal-related file leads, and recorded coding-agent provenance. Historical model authorship stays unknown when there is no session evidence. This is a focused view of the CLI's JSON output.",
-  );
-  command(
-    process.execPath,
-    [
-      short(cli),
-      "development",
-      "landscape",
-      "--goal",
-      "Improve development model selection",
-      "--json",
-    ],
-    {
-      render: (output) => {
-        const report = JSON.parse(output);
-        console.log(
-          `Commit: ${report.repository.commit.slice(0, 12)}; tracked files: ${report.repository.tracked_file_count}`,
-        );
-        console.log(
-          "Languages:",
-          JSON.stringify(report.working_style.languages_by_tracked_extension),
-        );
-        console.log("Components and stated purposes:");
-        for (const component of report.design.components.filter((item) =>
-          [
-            "anvilmark",
-            "@anvilmark/cli",
-            "@anvilmark/project-contract",
-            "@anvilmark/model-catalog",
-            "@anvilmark/scanner",
-            "@anvilmark/conformance",
-          ].includes(item.name),
-        )) {
-          console.log(
-            `- ${component.name} (${component.source}): ${component.declared_purpose?.text ?? "purpose not documented"}`,
-          );
-        }
-        console.log(
-          `Declared component links: ${report.design.declared_dependencies.length}`,
-        );
-        for (const edge of report.design.declared_dependencies
-          .filter((item) => item.from === "@anvilmark/cli")
-          .slice(0, 6))
-          console.log(`- ${edge.from} → ${edge.to} (${edge.source})`);
-        console.log("Goal-related file leads:");
-        for (const lead of report.change_readiness.file_leads)
-          console.log(`- ${lead.path} (${lead.reason})`);
-        console.log(
-          `Test examples: ${report.working_style.test_file_examples.slice(0, 3).join(", ")}`,
-        );
-        console.log(
-          `Config examples: ${report.working_style.configuration_files.slice(0, 3).join(", ")}`,
-        );
-        console.log(
-          `Root scripts: ${report.working_style.package_scripts.find((item) => item.source === "package.json")?.names.join(", ") ?? "none"}`,
-        );
-        console.log(
-          `Recorded Anvilmark coding runs: ${report.development_provenance.recorded_runs}`,
-        );
-        for (const run of report.development_provenance.recent_runs.slice(0, 3))
-          console.log(`- Recent captured run: ${JSON.stringify(run)}`);
-        console.log(
-          `Historical authoring model: ${report.development_provenance.historical_authoring_model}`,
-        );
-        console.log(
-          "The full report is available by removing --json from the command above.",
-        );
-      },
-    },
-  );
-
-  await next(
     "Prepare a tiny coding task",
     "We copy a three-file example into a new Git repository. Its check fails at the baseline, so later output can show exactly what changed. The source checkout stays untouched.",
   );
@@ -206,6 +142,14 @@ try {
   for (const name of ["label.mjs", "check.mjs", "prompt.txt"])
     copyFileSync(join(fixture, name), join(project, name));
   const plan = JSON.parse(readFileSync(join(fixture, "plan.json"), "utf8"));
+  plan.architecture.allowed_changed_paths = ["label.mjs"];
+  plan.task.checks = [
+    {
+      name: "label-test",
+      argv: ["node", "--test", "--test-reporter=tap", "check.mjs"],
+      capture_output: true,
+    },
+  ];
   plan.phase = {
     id: "phase.label-normalization",
     outcome: "Repeated punctuation is normalized correctly",
@@ -214,7 +158,18 @@ try {
     non_goals: ["No UI or storage changes"],
     depends_on: [],
     integration_checks: [
-      { name: "syntax-check", argv: ["node", "--check", "label.mjs"] },
+      {
+        name: "bundle",
+        argv: [
+          join(checkout, "node_modules/.bin/esbuild"),
+          "label.mjs",
+          "--bundle",
+          "--platform=node",
+          "--format=esm",
+          "--outfile=.anvilmark/build/label.mjs",
+        ],
+        capture_output: true,
+      },
     ],
     max_attempts: 1,
     escalation:
@@ -243,25 +198,12 @@ try {
     "plan.json",
   ]);
   command("git", ["-C", project, "commit", "-qm", "Freeze demo baseline"]);
-  command("node", ["check.mjs"], { cwd: project, expected: "nonzero" });
 
   await next(
-    "Review the proposed phase contract",
-    "The plan freezes the task, accepted model choices, checks, and a bounded phase. Its attempt limit prevents endless automatic correction cycles; a failed attempt requires a new approved plan.",
-  );
-  command("cat", ["plan.json"], { cwd: project });
-  await next(
-    "Save the exact plan",
-    "Anvilmark validates the plan and stores it with a content hash. Changing the plan later invalidates its approval.",
+    "Freeze the plan",
+    "The approved architecture permits changes only to label.mjs. The test and bundle commands are part of the frozen plan.",
   );
   dev("plan", ["--file", "plan.json"]);
-
-  await next(
-    "Compare eligible setups",
-    "The recommendation checks restrictions and comparable reviewed outcomes. These example models have no quality evidence, so the declared strong baseline remains the starting point; token guesses do not pick a cheap winner.",
-  );
-  dev("recommend");
-
   await next(
     "Verify the agent handoff",
     "The scout fixes the Git base commit, hashes file leads, and runs the baseline check in a separate checkout. A failed check is an observation, not a diagnosis.",
@@ -278,12 +220,12 @@ try {
 
   writeFileSync(
     standIn,
-    `#!/usr/bin/env node\nimport { writeFileSync } from "node:fs";\nwriteFileSync("label.mjs", 'export function normalizeLabel(input) {\\n  return input.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");\\n}\\n');\nconsole.log(JSON.stringify({ type: "turn.completed" }));\n`,
+    `#!/usr/bin/env node\nimport { writeFileSync } from "node:fs";\nwriteFileSync("label.mjs", 'export function normalizeLabel(input) {\\n  return input.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");\\n}\\n');\n`,
   );
   chmodSync(standIn, 0o755);
   await next(
     "Run the handed-off task and checks",
-    "A clearly labeled stand-in agent makes the small edit. Anvilmark verifies the handoff before running it, then runs both the task check and phase integration check. No real model or token usage is claimed.",
+    "A clearly labeled stand-in agent makes the small edit. Anvilmark verifies the handoff before running it, then runs both the task check and phase integration check. Node runs the actual tests and esbuild writes the actual bundle. The stand-in does not call a model.",
   );
   const runOutput = dev(
     "run",
@@ -301,50 +243,56 @@ try {
   if (!runId) throw new Error("Could not read the run ID.");
 
   await next(
-    "Inspect the observed change",
-    "The file diff and recorded checks are what a person reviews. A passing check does not itself establish that the change is a good architecture choice.",
+    "Review the patch independently",
+    "Read the patch, check that the export is preserved, and compare it with the frozen tests. The timeline also includes a separately executed Git diff hygiene check.",
   );
-  command("git", ["-C", project, "diff", "--", "label.mjs"]);
-  dev("report");
-
-  await next(
-    "Record a test-only review",
-    "This confirms the mechanical review path. It is labeled agent-test and is excluded from model-quality comparisons. Real acceptance requires a person to inspect the exact run and type its run hash.",
+  command("git", ["-C", project, "--no-pager", "diff", "--", "label.mjs"]);
+  if (humanReview) {
+    input.close();
+    input = null;
+    dev("review", ["--run", runId], { interactive: true });
+  } else {
+    dev("review", [
+      "--run",
+      runId,
+      "--agent-test",
+      "--reason",
+      "Rehearsal only. The terminal review path is available with --human-review.",
+    ]);
+    await next(
+      "Read the linked evidence",
+      "The timeline links the isolated baseline, exact code change, real test and build results, architecture boundary, and review record.",
+    );
+  }
+  dev("timeline", ["--run", runId]);
+  const timeline = JSON.parse(
+    dev("timeline", ["--run", runId, "--json"], { render: () => {} }),
   );
-  dev("review", ["--run", runId, "--agent-test"]);
-  dev("report");
-
-  await next(
-    "Show the closure gate",
-    "We deliberately try to close the phase. Anvilmark rejects a test-only review; only a human-accepted, fully checked, committed result can close a phase and unlock dependent work.",
-  );
-  dev("close", ["--run", runId], { expected: "nonzero" });
-
-  await next(
-    "Check what the comparison learned",
-    "A simulated run cannot improve a model ranking. The report continues to state the evidence gap instead of treating this one toy success as a proven winner.",
-  );
-  dev("recommend");
-
-  console.log(
-    "\nTour complete. For real work, replace the test approval and stand-in run with:",
-  );
-  console.log(
-    "  anvilmark development approve                 # person types plan hash",
-  );
-  console.log(
-    "  anvilmark development run --candidate ID --prompt-file FILE --handoff ID",
-  );
-  console.log(
-    "  anvilmark development review --run ID          # person reviews exact result",
-  );
-  console.log("  git add ... && git commit -m 'Complete phase'");
-  console.log(
-    "  anvilmark development close --run ID           # verifies committed result",
-  );
-  console.log(
-    "This test run reports configured-only model identity and unknown cash cost.",
-  );
+  for (const [stage, name, exit] of [
+    ["baseline-check", "label-test", 1],
+    ["run-check", "label-test", 0],
+    ["run-check", "bundle", 0],
+    ["independent-diff-check", "tracked-diff-hygiene", 0],
+  ]) {
+    if (
+      !timeline.events.some(
+        (event) =>
+          event.stage === stage &&
+          event.check?.name === name &&
+          event.check.exit_code === exit,
+      )
+    )
+      throw new Error(`Missing expected evidence for ${stage} / ${name}.`);
+  }
+  if (
+    !timeline.events.some(
+      (event) =>
+        event.stage === "architecture-boundary" &&
+        event.architecture.violations.length === 0,
+    )
+  )
+    throw new Error("No passing architecture boundary was recorded.");
+  console.log("\nTour complete.");
   if (keep) console.log(`Preserved demo repository: ${project}`);
 } catch (error) {
   if (error.message === "tour_quit") console.log("\nTour stopped.");

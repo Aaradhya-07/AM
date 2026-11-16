@@ -45,6 +45,7 @@ import {
   renderDevelopmentLandscape,
 } from "./development-landscape.js";
 import {
+  CheckResultSchema,
   handoffFilesStillMatch,
   renderVerifiedHandoff,
   verifiedHandoffFiles,
@@ -55,7 +56,7 @@ import {
   type SelectionEvidenceRecord,
 } from "./development-selection.js";
 
-export const DEVELOPMENT_USAGE = `anvilmark development <landscape|catalog|plan|approve|recommend|scout|run|review|close|report> [options]
+export const DEVELOPMENT_USAGE = `anvilmark development <landscape|catalog|plan|approve|recommend|scout|run|review|timeline|close|report> [options]
 
   landscape [--goal TEXT] [--json]
                              inspect repository design, working style, and recorded AI development
@@ -71,18 +72,20 @@ export const DEVELOPMENT_USAGE = `anvilmark development <landscape|catalog|plan|
                              run an exact setup, collect metadata and check the result
   run --model ID --prompt-file FILE [--handoff ID]
                              use a model name when it identifies one candidate
-  review --run ID [--decision reject --reason TEXT] [--agent-test]
+  review --run ID [--decision accept|reject] [--reason TEXT] [--agent-test]
                              review the exact run; agent-test is excluded from outcome evidence
+  timeline --run ID [--json] show linked run evidence in observed order
   close --run ID             seal a reviewed phase against its exact committed result
   report                     show the connected plan, comparison and recorded runs
 
-Options: --project-dir DIR (-C), --json (catalog, recommend, report), --help`;
+Options: --project-dir DIR (-C), --json (catalog, recommend, scout, timeline, report), --help`;
 
 const Id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/);
 const Nonempty = z.string().trim().min(1);
 const Check = z.strictObject({
   name: Id,
   argv: z.array(Nonempty).min(1),
+  capture_output: z.boolean().optional(),
 });
 const PhaseContract = z.strictObject({
   id: Id,
@@ -164,7 +167,25 @@ const Candidate = z
   });
 const Plan = z.strictObject({
   schema_version: z.literal(1),
-  architecture: z.strictObject({ id: Id, summary: Nonempty }),
+  architecture: z.strictObject({
+    id: Id,
+    summary: Nonempty,
+    allowed_changed_paths: z
+      .array(
+        Nonempty.refine(
+          (path) =>
+            !path.includes("\0") &&
+            !path.includes("\\") &&
+            path
+              .split("/")
+              .every((part) => part && part !== "." && part !== "..") &&
+            ![".anvilmark", ".git"].includes(path.split("/")[0] ?? ""),
+          "expected a repository-relative file path",
+        ),
+      )
+      .min(1)
+      .optional(),
+  }),
   task: z.strictObject({
     id: Id,
     summary: Nonempty,
@@ -208,14 +229,7 @@ const Handoff = z.strictObject({
       }),
     )
     .max(8),
-  baseline_checks: z.array(
-    z.strictObject({
-      name: Id,
-      argv: z.array(Nonempty).min(1),
-      exit_code: z.number().int().nullable(),
-      duration_ms: z.number().nonnegative(),
-    }),
-  ),
+  baseline_checks: z.array(CheckResultSchema),
   verification: z.literal(
     "tracked file hashes at a clean Git commit; declared checks in a detached worktree",
   ),
@@ -252,12 +266,7 @@ interface TokenUsage {
   output_tokens: number;
   reasoning_output_tokens: number;
 }
-interface CheckResult {
-  name: string;
-  argv: string[];
-  exit_code: number | null;
-  duration_ms: number;
-}
+type CheckResult = z.infer<typeof CheckResultSchema>;
 interface ApiCostComponents {
   uncached_input: number;
   cached_input: number;
@@ -306,6 +315,14 @@ interface DevelopmentRun {
     mode: number | null;
   }>;
   checks: CheckResult[];
+  approval_at?: string;
+  agent_finished_at?: string;
+  architecture_check?: {
+    finished_at: string;
+    allowed_changed_paths: string[];
+    violations: string[];
+  };
+  diff_check?: CheckResult;
 }
 const PhaseClosure = z.strictObject({
   format: z.literal("anvilmark-development-phase-closure/1"),
@@ -862,6 +879,10 @@ function printPlan(
     `Architecture: ${plan.architecture.id} — ${plan.architecture.summary}\n`,
   );
   context.io.stdout(`Task: ${plan.task.id} — ${plan.task.summary}\n`);
+  if (plan.architecture.allowed_changed_paths)
+    context.io.stdout(
+      `  Allowed changed files: ${JSON.stringify(plan.architecture.allowed_changed_paths)}.\n`,
+    );
   if (plan.phase) {
     context.io.stdout(`Phase: ${plan.phase.id} — ${plan.phase.outcome}\n`);
     context.io.stdout(`  Inputs: ${plan.phase.required_inputs.join("; ")}\n`);
@@ -904,7 +925,7 @@ async function commandOutput(
   args: string[],
   cwd: string,
   options: { maxOutputChars?: number; timeoutMs?: number } = {},
-): Promise<{ code: number | null; stdout: string }> {
+): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolveResult, reject) => {
     const child = spawn(program, args, {
       cwd,
@@ -936,7 +957,8 @@ async function commandOutput(
       if (timer) clearTimeout(timer);
       resolveResult({
         code,
-        stdout: code === 0 ? stdout : stderr.slice(0, 500),
+        stdout,
+        stderr,
       });
     });
   });
@@ -945,7 +967,7 @@ async function commandOutput(
 async function git(root: string, args: string[]): Promise<string> {
   const result = await commandOutput("git", args, root);
   if (result.code !== 0)
-    throw new Error(`Git observation failed: ${result.stdout.trim()}`);
+    throw new Error(`Git observation failed: ${result.stderr.trim()}`);
   return result.stdout;
 }
 
@@ -1082,25 +1104,40 @@ async function runCodex(
 async function runCheck(
   root: string,
   check: z.infer<typeof Check>,
+  clock: () => string,
   timeoutMs?: number,
 ): Promise<CheckResult> {
   const start = Date.now();
   let code: number | null = null;
+  let stdout = "";
+  let stderr = "";
   try {
-    code = (
-      await commandOutput(check.argv[0] ?? "", check.argv.slice(1), root, {
-        maxOutputChars: 500,
+    ({ code, stdout, stderr } = await commandOutput(
+      check.argv[0] ?? "",
+      check.argv.slice(1),
+      root,
+      {
+        maxOutputChars: 2_000,
         ...(timeoutMs === undefined ? {} : { timeoutMs }),
-      })
-    ).code;
-  } catch {
-    // Keep the failed check in the run record, including missing executables.
+      },
+    ));
+  } catch (error) {
+    stderr = error instanceof Error ? error.message : String(error);
   }
   return {
     name: check.name,
     argv: check.argv,
     exit_code: code,
     duration_ms: Date.now() - start,
+    finished_at: clock(),
+    ...(check.capture_output
+      ? {
+          output_tail: {
+            stdout: sanitizeText(stdout).text,
+            stderr: sanitizeText(stderr).text,
+          },
+        }
+      : {}),
   };
 }
 
@@ -1109,7 +1146,7 @@ async function scoutHandoff(
   plan: DevelopmentPlan,
   planHash: string,
   prompt: string,
-  now: string,
+  clock: () => string,
 ): Promise<{ id: string; handoff: DevelopmentHandoff }> {
   const repositoryRoot = (
     await git(root, ["rev-parse", "--show-toplevel"])
@@ -1138,7 +1175,7 @@ async function scoutHandoff(
       ...plan.task.checks,
       ...(plan.phase?.integration_checks ?? []),
     ])
-      checks.push(await runCheck(checkout, check, 120_000));
+      checks.push(await runCheck(checkout, check, clock, 120_000));
   } finally {
     await git(root, ["worktree", "remove", "--force", checkout]);
   }
@@ -1149,7 +1186,7 @@ async function scoutHandoff(
     task_id: plan.task.id,
     base_commit: baseCommit,
     source_prompt_sha256: digest(prompt),
-    created_at: now,
+    created_at: clock(),
     tracked_file_count: trackedPaths.length,
     files,
     baseline_checks: checks,
@@ -1162,13 +1199,9 @@ async function scoutHandoff(
   return { id, handoff };
 }
 
-async function loadVerifiedHandoff(
+async function readHandoff(
   root: string,
   id: string,
-  plan: DevelopmentPlan,
-  planHash: string,
-  baseCommit: string,
-  prompt: string,
 ): Promise<DevelopmentHandoff> {
   if (!/^[a-f0-9]{64}$/.test(id)) throw new Error("invalid handoff id");
   const handoffs = await lstat(handoffsDirectory(root));
@@ -1181,6 +1214,18 @@ async function loadVerifiedHandoff(
   const handoff = Handoff.parse(JSON.parse(await readFile(path, "utf8")));
   if (digest(JSON.stringify(handoff)) !== id)
     throw new Error("handoff content has changed");
+  return handoff;
+}
+
+async function loadVerifiedHandoff(
+  root: string,
+  id: string,
+  plan: DevelopmentPlan,
+  planHash: string,
+  baseCommit: string,
+  prompt: string,
+): Promise<DevelopmentHandoff> {
+  const handoff = await readHandoff(root, id);
   if (
     handoff.plan_hash !== planHash ||
     handoff.architecture_id !== plan.architecture.id ||
@@ -1993,11 +2038,7 @@ export async function developmentCommand(
     );
     const prompt = await readFile(promptPath, "utf8");
     if (!prompt.trim()) throw new Error("prompt file is empty");
-    const { id, handoff } = await scoutHandoff(
-      root,
-      plan,
-      hash,
-      prompt,
+    const { id, handoff } = await scoutHandoff(root, plan, hash, prompt, () =>
       context.io.clock(),
     );
     if (flag(parsed, "json")) writeJson(context.io, { id, ...handoff });
@@ -2091,15 +2132,86 @@ export async function developmentCommand(
       context.io.env.ANVILMARK_CODEX_EXECUTABLE ?? "codex",
     );
     const agentFinishedAt = Date.now();
+    const agentFinished = context.io.clock();
     const metadata = collectCodexMetadata(execution.lines);
+    const beforeChecks = await observedChange(root);
+    const allowed = plan.architecture.allowed_changed_paths;
+    const violations = allowed
+      ? beforeChecks.paths
+          .filter((path) => !allowed.includes(path))
+          .map((path) => `Change outside approved paths: ${path}`)
+      : [];
+    if (
+      allowed &&
+      (await git(root, ["rev-parse", "HEAD"])).trim() !== baseCommit
+    )
+      violations.push("The agent changed the baseline commit");
+
+    const beforeFiles = allowed
+      ? await resultFileStates(root, beforeChecks.paths)
+      : [];
+    if (allowed) {
+      for (const file of beforeFiles) {
+        if (file.standing !== "file")
+          violations.push(
+            `Expected a regular file at ${file.path}; found ${file.standing}`,
+          );
+      }
+    }
+
     const checks: CheckResult[] = [];
-    for (const check of [
-      ...plan.task.checks,
-      ...(plan.phase?.integration_checks ?? []),
-    ])
-      checks.push(await runCheck(root, check));
+    if (violations.length === 0) {
+      for (const check of [
+        ...plan.task.checks,
+        ...(plan.phase?.integration_checks ?? []),
+      ]) {
+        checks.push(await runCheck(root, check, () => context.io.clock()));
+        if (!allowed) continue;
+        const afterCheck = await observedChange(root);
+        if (
+          afterCheck.hash !== beforeChecks.hash ||
+          (await git(root, ["rev-parse", "HEAD"])).trim() !== baseCommit ||
+          JSON.stringify(await resultFileStates(root, afterCheck.paths)) !==
+            JSON.stringify(beforeFiles)
+        ) {
+          violations.push(
+            `Check changed the observed code state: ${check.name}`,
+          );
+          break;
+        }
+      }
+    }
     const changes = await observedChange(root);
     const resultFiles = await resultFileStates(root, changes.paths);
+    const architectureCheck = allowed
+      ? {
+          finished_at: context.io.clock(),
+          allowed_changed_paths: allowed,
+          violations,
+        }
+      : undefined;
+
+    const diffCheck = await runCheck(
+      root,
+      {
+        name: "tracked-diff-hygiene",
+        argv: [
+          "git",
+          "-c",
+          "core.whitespace=blank-at-eol,blank-at-eof,space-before-tab",
+          "diff",
+          "--no-ext-diff",
+          "--no-textconv",
+          "--check",
+          baseCommit,
+          "--",
+          ".",
+          ":(exclude).anvilmark",
+        ],
+        capture_output: true,
+      },
+      () => context.io.clock(),
+    );
     const bill = effectiveBilling(
       candidate,
       resolutions.get(candidate.id),
@@ -2169,13 +2281,17 @@ export async function developmentCommand(
       change_sha256: changes.hash,
       result_files: resultFiles,
       checks,
+      ...(approvalRecord ? { approval_at: approvalRecord.approved_at } : {}),
+      agent_finished_at: agentFinished,
+      ...(architectureCheck ? { architecture_check: architectureCheck } : {}),
+      diff_check: diffCheck,
     };
     await saveRun(root, run);
     context.io.stdout(
-      `Recorded run ${run.id}: ${run.changed_paths.length} changed paths, ${run.usage.input_tokens} input and ${run.usage.output_tokens} output tokens.\n`,
+      `Recorded run ${run.id}: ${run.changed_paths.length} changed paths, ${run.usage_reported_turns ? `${run.usage.input_tokens} input and ${run.usage.output_tokens} output tokens` : "token usage unreported"}.\n`,
     );
     context.io.stdout(
-      `Agent turns: ${run.turn_count}; cache input: ${run.usage.cached_input_tokens}; agent time: ${run.agent_duration_ms} ms; check time: ${run.checks.reduce((sum, check) => sum + check.duration_ms, 0)} ms${handoffId ? `; verified handoff ${handoffId}` : ""}.\n`,
+      `Agent turns observed: ${run.turn_count}; cache input: ${run.usage_reported_turns ? run.usage.cached_input_tokens : "unreported"}; agent time: ${run.agent_duration_ms} ms; check time: ${run.checks.reduce((sum, check) => sum + check.duration_ms, 0)} ms${handoffId ? `; verified handoff ${handoffId}` : ""}.\n`,
     );
     context.io.stdout(
       `Model identity: ${run.model_identity}; cash cost: ${run.estimated_usd_from_observed_tokens === null ? (bill.mode === "subscription" ? "unknown (subscription)" : !modelRateApplicable ? "unknown (reported model differs from configured rate)" : "unknown (cached-input usage or rate unavailable)") : `$${run.estimated_usd_from_observed_tokens.toFixed(4)} estimated from rates`}.\n`,
@@ -2191,11 +2307,142 @@ export async function developmentCommand(
       context.io.stdout(
         "No code change was observed; this coding task did not pass.\n",
       );
-    return run.agent_exit_code === 0 &&
+    if (architectureCheck)
+      context.io.stdout(
+        violations.length
+          ? `Architecture boundary failed: ${violations.map((item) => JSON.stringify(item)).join(", ")}.\n`
+          : "Architecture boundary passed.\n",
+      );
+    return violations.length === 0 &&
+      run.agent_exit_code === 0 &&
       run.changed_paths.length > 0 &&
       run.checks.every((check) => check.exit_code === 0)
       ? EXIT.ok
       : EXIT.failed;
+  }
+  if (sub === "timeline") {
+    const runId = requiredOption(parsed, "run", DEVELOPMENT_USAGE);
+    if (!Id.safeParse(runId).success)
+      throw new UsageError("invalid run id", DEVELOPMENT_USAGE);
+    const run = (await loadRuns(root)).find((entry) => entry.id === runId);
+    if (!run) throw new Error("run not found");
+    const review = await loadReview(root, run.id);
+    const matchingReview =
+      review?.run_hash === digest(JSON.stringify(run)) ? review : null;
+    const handoff = run.handoff_id
+      ? await readHandoff(root, run.handoff_id)
+      : null;
+    if (
+      handoff &&
+      (handoff.plan_hash !== run.plan_hash ||
+        handoff.base_commit !== run.base_commit)
+    )
+      throw new Error("handoff does not match the recorded run");
+
+    const events = [];
+    if (run.approval_at)
+      events.push({
+        at: run.approval_at,
+        stage: "plan-approved",
+        detail: run.approval_actor_at_start,
+      });
+    for (const check of handoff?.baseline_checks ?? [])
+      events.push({
+        at: check.finished_at ?? handoff?.created_at,
+        stage: "baseline-check",
+        check,
+      });
+    if (handoff)
+      events.push({
+        at: handoff.created_at,
+        stage: "handoff-saved",
+        detail: run.handoff_id,
+      });
+    // Approval and scouting can happen in either order.
+    events.sort((left, right) => (left.at ?? "").localeCompare(right.at ?? ""));
+    events.push({
+      at: run.started_at,
+      stage: "agent-started",
+      detail: run.candidate_id,
+    });
+    if (run.agent_finished_at)
+      events.push({
+        at: run.agent_finished_at,
+        stage: "agent-finished",
+        detail: `exit ${run.agent_exit_code ?? "error"}`,
+      });
+    for (const check of run.checks)
+      events.push({ at: check.finished_at, stage: "run-check", check });
+    if (run.architecture_check) {
+      const { finished_at, ...architecture } = run.architecture_check;
+      events.push({
+        at: finished_at,
+        stage: "architecture-boundary",
+        architecture,
+      });
+    }
+    if (run.diff_check)
+      events.push({
+        at: run.diff_check.finished_at,
+        stage: "independent-diff-check",
+        check: run.diff_check,
+      });
+    events.push({
+      at: run.finished_at,
+      stage: "run-recorded",
+      detail: run.changed_paths,
+    });
+    if (matchingReview)
+      events.push({
+        at: matchingReview.reviewed_at ?? matchingReview.accepted_at,
+        stage: "review-recorded",
+        detail: {
+          actor: matchingReview.actor,
+          decision: matchingReview.decision ?? "accepted",
+          reason: matchingReview.reason,
+        },
+      });
+
+    if (flag(parsed, "json")) {
+      writeJson(context.io, {
+        run_id: run.id,
+        plan_hash: run.plan_hash,
+        base_commit: run.base_commit,
+        change_sha256: run.change_sha256,
+        events,
+      });
+    } else {
+      context.io.stdout(
+        `Run ${run.id} · plan ${run.plan_hash.slice(0, 12)} · base ${run.base_commit.slice(0, 12)}\n`,
+      );
+      for (const event of events) {
+        const prefix = `${event.at ?? "time unavailable"}  ${event.stage}`;
+        if ("check" in event && event.check) {
+          const { check } = event;
+          context.io.stdout(
+            `${prefix}  ${check.name} · exit ${check.exit_code ?? "error"} · ${check.duration_ms} ms\n`,
+          );
+          context.io.stdout(`  argv ${JSON.stringify(check.argv)}\n`);
+          for (const stream of ["stdout", "stderr"] as const) {
+            const output = check.output_tail?.[stream];
+            if (output)
+              context.io.stdout(
+                `  ${stream} tail ${output.length > 650 ? "… " : ""}${JSON.stringify(output.slice(-650))}\n`,
+              );
+          }
+        } else if ("architecture" in event && event.architecture) {
+          const { allowed_changed_paths, violations } = event.architecture;
+          context.io.stdout(
+            `${prefix}  ${violations.length ? "failed" : "passed"} · allowed ${JSON.stringify(allowed_changed_paths)}\n`,
+          );
+          for (const violation of violations)
+            context.io.stdout(`  ${JSON.stringify(violation)}\n`);
+        } else {
+          context.io.stdout(`${prefix}  ${JSON.stringify(event.detail)}\n`);
+        }
+      }
+    }
+    return EXIT.ok;
   }
   if (sub === "review") {
     const runId = requiredOption(parsed, "run", DEVELOPMENT_USAGE);
@@ -2222,6 +2469,8 @@ export async function developmentCommand(
       (await approvalStanding(root, hash)) !== "current"
     )
       throw new Error("run has no current architecture approval");
+    if (decision === "accept" && run.architecture_check?.violations.length)
+      throw new Error("run failed its architecture boundary");
     if (
       decision === "accept" &&
       (run.agent_exit_code !== 0 ||
@@ -2253,6 +2502,13 @@ export async function developmentCommand(
       );
       if (answer?.trim() !== runHash.slice(0, 12))
         throw new Cancelled("Run was not reviewed.");
+      if (
+        (await loadPlan(root)).hash !== hash ||
+        (await approvalStanding(root, hash)) !== "current" ||
+        (await git(root, ["rev-parse", "HEAD"])).trim() !== run.base_commit ||
+        (await observedChange(root)).hash !== run.change_sha256
+      )
+        throw new Error("plan or repository changed during review");
     }
     await safeDirectory(root, reviewsDirectory(root));
     const reviewedAt = context.io.clock();
@@ -2262,7 +2518,7 @@ export async function developmentCommand(
       decision: decision === "accept" ? "accepted" : "rejected",
       reviewed_at: reviewedAt,
       ...(decision === "accept"
-        ? { accepted_at: reviewedAt }
+        ? { accepted_at: reviewedAt, ...(reason ? { reason } : {}) }
         : { reason: reason! }),
       actor: agentTest ? "agent_test_operator" : "interactive_local_operator",
     } satisfies RunReview);
@@ -2293,6 +2549,7 @@ export async function developmentCommand(
       run.agent_exit_code !== 0 ||
       run.changed_paths.length === 0 ||
       run.checks.some((check) => check.exit_code !== 0) ||
+      Boolean(run.architecture_check?.violations.length) ||
       !run.result_files ||
       run.result_files.some((file) => file.standing === "unsupported")
     )

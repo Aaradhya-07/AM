@@ -433,6 +433,20 @@ describe("development pilot", () => {
       "Fix label.mjs so check.mjs passes.\n",
     );
     const billedPlan = structuredClone(plan);
+    const boundedPlan = {
+      ...billedPlan,
+      architecture: {
+        ...billedPlan.architecture,
+        allowed_changed_paths: ["label.mjs"],
+      },
+      task: {
+        ...billedPlan.task,
+        checks: billedPlan.task.checks.map((check) => ({
+          ...check,
+          capture_output: true,
+        })),
+      },
+    };
     billedPlan.candidates[0]!.billing = {
       mode: "api_estimate",
       input_usd_per_million: 1,
@@ -442,7 +456,7 @@ describe("development pilot", () => {
     };
     await writeFile(
       join(root, ".anvilmark/input-plan.json"),
-      JSON.stringify(billedPlan),
+      JSON.stringify(boundedPlan),
     );
     execFileSync("git", ["init", "-q", root]);
     execFileSync("git", ["-C", root, "add", "label.mjs", "check.mjs"]);
@@ -525,6 +539,40 @@ describe("development pilot", () => {
         "utf8",
       ),
     );
+    const timeline = scriptedIo({ cwd: root });
+    expect(
+      await cli(
+        ["development", "timeline", "--run", run.id, "--json"],
+        timeline,
+      ),
+      timeline.err(),
+    ).toBe(0);
+    expect(JSON.parse(timeline.out()).events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stage: "baseline-check",
+          check: expect.objectContaining({
+            exit_code: 1,
+            output_tail: expect.any(Object),
+          }),
+        }),
+        expect.objectContaining({
+          stage: "run-check",
+          check: expect.objectContaining({ exit_code: 0 }),
+        }),
+        expect.objectContaining({
+          stage: "architecture-boundary",
+          architecture: {
+            allowed_changed_paths: ["label.mjs"],
+            violations: [],
+          },
+        }),
+        expect.objectContaining({
+          stage: "independent-diff-check",
+          check: expect.objectContaining({ exit_code: 0 }),
+        }),
+      ]),
+    );
     expect(run.handoff_id).toBe(handoff.id);
     expect(run.prompt_sha256).not.toBe(run.source_prompt_sha256);
     expect(run.turn_count).toBe(1);
@@ -600,6 +648,51 @@ describe("development pilot", () => {
       join(root, ".anvilmark/prompt.txt"),
       "Fix label.mjs so check.mjs passes.\n",
     );
+
+    // A rewritten check would pass, but an off-contract edit must stop verification.
+    const boundaryAgent = join(dir, "off-contract.mjs");
+    await writeFile(
+      boundaryAgent,
+      '#!/usr/bin/env node\nimport { writeFileSync } from "node:fs";\nwriteFileSync("check.mjs", "process.exit(0);  \\n");\n',
+      { mode: 0o755 },
+    );
+    const offContract = scriptedIo({
+      cwd: root,
+      env: { ANVILMARK_CODEX_EXECUTABLE: boundaryAgent },
+    });
+    expect(
+      await cli(
+        [
+          "development",
+          "run",
+          "--candidate",
+          "fast",
+          "--prompt-file",
+          ".anvilmark/prompt.txt",
+          "--handoff",
+          handoff.id,
+        ],
+        offContract,
+      ),
+      offContract.err(),
+    ).toBe(1);
+    expect(offContract.out()).toContain("Architecture boundary failed");
+    const rejectedRunId = offContract.out().match(/Recorded run ([^:]+):/)?.[1];
+    const rejectedRun = JSON.parse(
+      await readFile(
+        join(root, ".anvilmark/development/runs", `${rejectedRunId}.json`),
+        "utf8",
+      ),
+    );
+    expect(rejectedRun.checks).toEqual([]);
+    expect(rejectedRun.diff_check.exit_code).not.toBe(0);
+    expect(rejectedRun.diff_check.output_tail.stdout).toContain(
+      "trailing whitespace",
+    );
+    expect(rejectedRun.architecture_check.violations).toContain(
+      "Change outside approved paths: check.mjs",
+    );
+    execFileSync("git", ["-C", root, "restore", "check.mjs"]);
 
     const path = join(
       root,
