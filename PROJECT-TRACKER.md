@@ -1,6 +1,6 @@
 # Anvilmark project tracker
 
-Updated: 2026-10-17
+Updated: 2026-11-03
 Status: Active planning and implementation
 
 ## Product direction
@@ -13,8 +13,8 @@ On 2026-10-17 the development-model direction became the primary product directi
 
 The primary end-to-end path is:
 
-1. Start from an idea or an existing repository.
-2. Capture restrictions and architecture decisions; break the work into bounded tasks with acceptance checks.
+1. Start from an idea or an existing repository; for a repository, show its source-linked development landscape and the limits of historical AI provenance.
+2. Capture restrictions and architecture decisions; break large work into risk-first, integrated phase contracts with acceptance checks and correction limits.
 3. Compare eligible coding-agent setups using dated public evidence and comparable local outcomes; show unknowns and billing basis.
 4. Approve an exact task plan, run the chosen agent, and record the model identity reported by the tool, usage, code change, and checks.
 5. Review the result, record acceptance or rejection, and use that outcome in later comparisons.
@@ -24,17 +24,18 @@ The primary end-to-end path is:
 
 ## Current reality
 
-| Area                                 | Current state                                                                                                                                                         | Next gap                                                                                                     |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Project contract and approval        | Implemented in the local CLI                                                                                                                                          | Prove the full path with a real user project and actual approval                                             |
-| Development evidence and selection   | Experimental local task-profile and outcome index; `development recommend` compares eligible Codex CLI setups with exact-profile local runs                           | Real reviewed tasks, broader restrictions, source-backed public mappings, and calibrated forecasts           |
-| Idea and candidate workflow          | CLI input, handoff, compatible-endpoint adapter, and live Hugging Face/Artificial Analysis research commands exist                                                    | Normalized catalog, source-backed restrictions, and workload-specific evaluations                            |
-| Architecture and agent context       | Contract-backed views, eight read-only MCP tools, and opt-in source-cited draft, candidate proposal, public model research, and comparison tools exist                | Broader model mapping, agent-led architecture and review; record an implementation using the signed revision |
-| Repository discovery and conformance | Bounded TypeScript/JavaScript scanner and provider/data-flow checks exist                                                                                             | Broader coverage and evidence from real implementation changes                                               |
-| Hardware planning                    | Inventory and limited pinned-model sizing exist                                                                                                                       | Wider profiles and measured runtime evidence                                                                 |
-| Website                              | Guided draft editor with architecture paths, sourced model starters, and candidate comparison at `/demo`; Studio bundle viewer, playground, and early dashboard exist | Connect measured evidence and the approved local project workflow without misrepresenting unknowns           |
-| Hosted sync                          | CLI telemetry push and a runs API exist                                                                                                                               | Accurate status semantics, product-scope decision, and end-to-end validation                                 |
-| Distribution                         | Setup/workshop and npm packaging scripts exist                                                                                                                        | Clean install and release verification for the chosen delivery path                                          |
+| Area                                 | Current state                                                                                                                                                                       | Next gap                                                                                                     |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Project contract and approval        | Implemented in the local CLI                                                                                                                                                        | Prove the full path with a real user project and actual approval                                             |
+| Development landscape and phases     | Read-only Git/package/source-area report and local phase contracts, integration checks, attempt limits, human review, committed closure and dependency gates in the Codex CLI pilot | Semantic architecture review, external session evidence, real large-work pilot, and cross-agent support      |
+| Development evidence and selection   | Experimental local task-profile and outcome index; `development recommend` compares eligible Codex CLI setups with exact-profile local runs                                         | Real reviewed tasks, broader restrictions, source-backed public mappings, and calibrated forecasts           |
+| Idea and candidate workflow          | CLI input, handoff, compatible-endpoint adapter, and live Hugging Face/Artificial Analysis research commands exist                                                                  | Normalized catalog, source-backed restrictions, and workload-specific evaluations                            |
+| Architecture and agent context       | Contract-backed views, eight read-only MCP tools, and opt-in source-cited draft, candidate proposal, public model research, and comparison tools exist                              | Broader model mapping, agent-led architecture and review; record an implementation using the signed revision |
+| Repository discovery and conformance | Bounded TypeScript/JavaScript scanner and provider/data-flow checks exist                                                                                                           | Broader coverage and evidence from real implementation changes                                               |
+| Hardware planning                    | Inventory and limited pinned-model sizing exist                                                                                                                                     | Wider profiles and measured runtime evidence                                                                 |
+| Website                              | Guided draft editor with architecture paths, sourced model starters, and candidate comparison at `/demo`; Studio bundle viewer, playground, and early dashboard exist               | Connect measured evidence and the approved local project workflow without misrepresenting unknowns           |
+| Hosted sync                          | CLI telemetry push and a runs API exist                                                                                                                                             | Accurate status semantics, product-scope decision, and end-to-end validation                                 |
+| Distribution                         | Setup/workshop and npm packaging scripts exist                                                                                                                                      | Clean install and release verification for the chosen delivery path                                          |
 
 The historical `packages/engine` audit remains a fixture-backed scaffold. The project contract and conformance packages are the active core. Recorded benchmark evidence covers eight public TypeScript/JavaScript repositories; it is not a general accuracy guarantee. Milestone 7's real human approval and actual agent-consumption acceptance remain open.
 
@@ -52,7 +53,7 @@ Status key: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED`.
 
 ## Active item: development-model evidence and selection
 
-The development pilot now has a separate local SQLite outcome index keyed by architecture part, task kind, language set, risk, configured agent, and model. `anvilmark development recommend` applies the plan's current model and cash-budget restrictions, shows exact-profile accepted/rejected/failed run counts, and can show a descriptive sample cost per accepted task for comparable API-rate runs. A candidate may explicitly map a source-scoped public model ID to a dated model-catalog snapshot; this remains research evidence, not a task-quality gate. The outcome index is rebuilt from archived plans and run/review records; missing prior approval and invalid review hashes do not become accepted evidence. This is an experimental local decision aid, not a calibrated quality model or measured savings. The immediate gap is a real task with prior human plan approval and review, then comparable alternative runs.
+The development pilot now has a separate local SQLite outcome index keyed by architecture part, task kind, language set, risk, configured agent, and model. `anvilmark development recommend` applies the plan's current model and cash-budget restrictions, shows exact-profile accepted/rejected/failed run counts, and can show a descriptive sample cost per accepted task for comparable API-rate runs. With insufficient accepted outcomes, it retains an eligible declared baseline or abstains; low declared token use or API rates alone do not select a winner. A candidate may explicitly map a source-scoped public-model ID to a dated model-catalog snapshot; this remains research evidence, not a task-quality gate. The outcome index is rebuilt from archived plans and local run/review records; missing prior approval and invalid review hashes do not become accepted evidence. This is an experimental local decision aid, not a calibrated quality model or measured savings. The immediate gap is a real task with prior human plan approval and review, then comparable alternative runs.
 
 ## Existing application-model evidence
 

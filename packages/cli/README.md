@@ -105,6 +105,62 @@ contract. See the
 [worked fixture](../../examples/development-pilot/README.md) for a runnable
 task and the plan format.
 
+Start with `development landscape [--goal "requested outcome"] [--json]` in a
+Git repository. This read-only report lists tracked package components,
+source-cited purpose statements from local READMEs, their declared links,
+source areas, test and configuration examples, decision
+documents, and any local Anvilmark development runs with separate configured
+and tool-reported model identities. Goal-specific file leads are verified path
+matches, not a diagnosis. The report does not infer the coding model from code
+style, Git authors, installed AI SDKs, or application API calls. Historical
+model identity remains unknown when session evidence is absent. Package and
+path observations are a starting map; a person must review component roles
+and interfaces before treating them as architecture decisions.
+
+For large work, a plan may include a `phase` contract: `id`, `outcome`,
+`required_inputs`, `interface_commitments`, `non_goals`, `depends_on`,
+`integration_checks`, `max_attempts`, and `escalation`. The person approves
+the exact plan before a phase run. The run executes both task and integration
+checks. A phase stops at its attempt limit and needs a revised, reapproved
+plan to continue. After a person accepts the exact run, commit that result and
+use `development close --run ID`. Closure checks the commit's changed paths,
+file content and modes against the reviewed result; a later phase named in
+`depends_on` cannot run until the closure exists and its commit is in the
+current history. Repeated failures therefore require an explicit replan rather
+than an automatic retry. These phase controls are local Codex CLI pilot
+mechanics, not a guarantee of first-attempt success or a semantic architecture
+review.
+
+For example, add this object alongside `architecture`, `task`, `restrictions`
+and `candidates` in a development plan:
+
+```json
+{
+  "phase": {
+    "id": "phase.labels",
+    "outcome": "Labels can be normalized and stored through the public API",
+    "required_inputs": [
+      "Approved label format and current repository baseline"
+    ],
+    "interface_commitments": [
+      "The normalizeLabel export keeps its input and output types"
+    ],
+    "non_goals": ["No UI redesign"],
+    "depends_on": [],
+    "integration_checks": [
+      { "name": "api-integration", "argv": ["pnpm", "test:api"] }
+    ],
+    "max_attempts": 2,
+    "escalation": "Review the interface and choose a new plan or setup"
+  }
+}
+```
+
+When comparable accepted outcomes are absent, `development recommend` does not
+name the lowest-token or lowest-rate candidate as a winner. It retains an
+eligible baseline explicitly named in the plan, or reports that no first-run
+winner is established. The person still selects each run's candidate.
+
 For exact model offers, import a reviewed configuration file with
 `development catalog import --file configurations.json --json`. The local
 SQLite database at `.anvilmark/development/configurations.sqlite` keeps every
@@ -147,6 +203,30 @@ recommend` before work. On Node.js 24 or newer it builds a local SQLite index
 from archived plans and run/review records. After a reviewed run, rerun
 `recommend` to see outcomes for the same architecture part, profile, and
 agent/model setup.
+
+For a checked repository handoff, run `development scout --prompt-file FILE`
+from a clean Git checkout. It saves a content-addressed JSON record under
+`.anvilmark/development/handoffs/` and prints its ID. The record contains at
+most eight Git-tracked file leads with content hashes and the plan's baseline
+check exit codes. Checks run in a detached temporary Git worktree, leaving the
+working checkout untouched, with a two-minute limit per scout check. File
+selection is a deterministic path match to
+the task and prompt; no model-generated assertion or automatic diagnosis is
+treated as verified. A failed baseline check is evidence of a failing check,
+not proof of the stated root cause. Pass the ID with `development run
+--candidate ID --prompt-file FILE --handoff HANDOFF_ID`. The run rejects a
+handoff whose plan, commit, prompt, file hashes, or stored content changed. It
+records the hash of the full prompt actually sent, including the handoff.
+The handoff is optional; existing runs work without it.
+
+Run records now also separate cached input from other tokens, count completed
+agent turns and turns with usage reports, record agent and check time, and
+break an API-rate estimate into uncached input, cached input, and output cost.
+If a completed turn lacks usage, the event stream has parse errors, or the
+agent exits unsuccessfully, the API estimate is unknown. These numbers
+are local observations and declared-rate estimates, not provider-billed amounts
+or human review time.
+
 For explicit public research mapping, add a candidate `research_mapping` with
 `source_key`, `source_model_id`, `identity_note`, and `relevance_note`; pass an
 existing local model-catalog database with `--catalog-db FILE`. The command

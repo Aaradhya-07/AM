@@ -19,6 +19,7 @@
     "verify:mcp": "pnpm --filter @anvilmark/mcp verify:tools-list",
     "verify:mcp-project": "pnpm --filter @anvilmark/mcp verify:project-tools",
     "demo:atlas": "node scripts/demo-atlas.mjs",
+    "demo:development": "bash scripts/development-tour.sh",
     "dev:web": "pnpm --filter @anvilmark/web dev",
     "setup": "node scripts/setup.mjs",
     "doctor": "node scripts/doctor.mjs",

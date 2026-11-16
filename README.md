@@ -10,6 +10,16 @@ The experimental [development-model pilot](examples/development-pilot/README.md)
 records a task plan, model comparison, Codex CLI run, checks, and review in one
 local path. Its [development plan](docs/vnext/10-node-development-provenance-plan.md)
 sets out the primary direction and the evidence still needed for reliable selection.
+`anvilmark development landscape --goal "..."` gives a read-only first report of
+tracked repository structure, working conventions, and captured AI-development
+history; optional phase contracts add integration checks, attempt limits, and
+reviewed closure for large work. These are local CLI pilot capabilities.
+
+For a guided terminal demo, run `bash scripts/development-tour.sh` after setup.
+Press Enter to move through explained commands, or `q` to stop. The tour uses
+an isolated example and a clearly marked stand-in agent; its test-only run
+cannot count as model evidence or close a phase. `--auto` runs a rehearsal
+without pauses, and `--keep` preserves the temporary example for inspection.
 
 ## Packages
 

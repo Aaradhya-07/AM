@@ -1,9 +1,11 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
 import {
   lstat,
   mkdir,
   readFile,
+  readlink,
   readdir,
   realpath,
   rename,
@@ -11,6 +13,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { promisify } from "node:util";
 import { z } from "zod";
 import { sanitizeText } from "@anvilmark/adapters";
 import {
@@ -38,12 +41,24 @@ import {
 } from "./common.js";
 import { DevelopmentConfigurationImport } from "./development-configuration-schema.js";
 import {
+  developmentLandscape,
+  renderDevelopmentLandscape,
+} from "./development-landscape.js";
+import {
+  handoffFilesStillMatch,
+  renderVerifiedHandoff,
+  verifiedHandoffFiles,
+  type DevelopmentHandoff,
+} from "./development-handoff.js";
+import {
   matchedDevelopmentEvidence,
   type SelectionEvidenceRecord,
 } from "./development-selection.js";
 
-export const DEVELOPMENT_USAGE = `anvilmark development <catalog|plan|approve|recommend|run|review|report> [options]
+export const DEVELOPMENT_USAGE = `anvilmark development <landscape|catalog|plan|approve|recommend|scout|run|review|close|report> [options]
 
+  landscape [--goal TEXT] [--json]
+                             inspect repository design, working style, and recorded AI development
   catalog import --file FILE   append reviewed configuration snapshots to the local database
   catalog list|show|history --id ID
                              inspect exact offers, snapshot history, and fact freshness
@@ -51,12 +66,14 @@ export const DEVELOPMENT_USAGE = `anvilmark development <catalog|plan|approve|re
   approve [--agent-test]     approve the exact plan; agent-test is excluded from outcome evidence
   recommend [--catalog-db FILE]
                              compare eligible setups with mapped research and local outcomes
-  run --candidate ID --prompt-file FILE
+  scout --prompt-file FILE    verify tracked file leads and baseline checks in an isolated checkout
+  run --candidate ID --prompt-file FILE [--handoff ID]
                              run an exact setup, collect metadata and check the result
-  run --model ID --prompt-file FILE
+  run --model ID --prompt-file FILE [--handoff ID]
                              use a model name when it identifies one candidate
   review --run ID [--decision reject --reason TEXT] [--agent-test]
                              review the exact run; agent-test is excluded from outcome evidence
+  close --run ID             seal a reviewed phase against its exact committed result
   report                     show the connected plan, comparison and recorded runs
 
 Options: --project-dir DIR (-C), --json (catalog, recommend, report), --help`;
@@ -66,6 +83,17 @@ const Nonempty = z.string().trim().min(1);
 const Check = z.strictObject({
   name: Id,
   argv: z.array(Nonempty).min(1),
+});
+const PhaseContract = z.strictObject({
+  id: Id,
+  outcome: Nonempty,
+  required_inputs: z.array(Nonempty).min(1),
+  interface_commitments: z.array(Nonempty).min(1),
+  non_goals: z.array(Nonempty),
+  depends_on: z.array(Id),
+  integration_checks: z.array(Check).min(1),
+  max_attempts: z.number().int().min(1).max(20),
+  escalation: Nonempty,
 });
 const TaskProfile = z.strictObject({
   kind: z.enum([
@@ -143,6 +171,7 @@ const Plan = z.strictObject({
     profile: TaskProfile.optional(),
     checks: z.array(Check).min(1),
   }),
+  phase: PhaseContract.optional(),
   restrictions: z.strictObject({
     allowed_models: z.array(Nonempty).min(1),
     max_estimated_usd: z.number().nonnegative().nullable(),
@@ -159,6 +188,37 @@ const Plan = z.strictObject({
       max_acceptance_drop: z.number().min(0).max(1).optional(),
     })
     .optional(),
+});
+const Handoff = z.strictObject({
+  schema_version: z.literal(1),
+  plan_hash: z.string().regex(/^[a-f0-9]{64}$/),
+  architecture_id: Id,
+  task_id: Id,
+  base_commit: z.string().regex(/^[a-f0-9]{40,64}$/),
+  source_prompt_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  created_at: Nonempty,
+  tracked_file_count: z.number().int().nonnegative(),
+  files: z
+    .array(
+      z.strictObject({
+        path: Nonempty,
+        sha256: z.string().regex(/^[a-f0-9]{64}$/),
+        matched_terms: z.array(Nonempty),
+        selection: z.enum(["prompt_path", "path_terms", "plan_check"]),
+      }),
+    )
+    .max(8),
+  baseline_checks: z.array(
+    z.strictObject({
+      name: Id,
+      argv: z.array(Nonempty).min(1),
+      exit_code: z.number().int().nullable(),
+      duration_ms: z.number().nonnegative(),
+    }),
+  ),
+  verification: z.literal(
+    "tracked file hashes at a clean Git commit; declared checks in a detached worktree",
+  ),
 });
 type DevelopmentPlan = z.infer<typeof Plan>;
 type DevelopmentCandidate = DevelopmentPlan["candidates"][number];
@@ -198,6 +258,11 @@ interface CheckResult {
   exit_code: number | null;
   duration_ms: number;
 }
+interface ApiCostComponents {
+  uncached_input: number;
+  cached_input: number;
+  output: number;
+}
 interface DevelopmentRun {
   schema_version: 1;
   id: string;
@@ -214,6 +279,8 @@ interface DevelopmentRun {
     "tool_reported" | "tool_reported_multiple" | "configured_only";
   codex_thread_id: string | null;
   prompt_sha256: string;
+  source_prompt_sha256?: string;
+  handoff_id?: string | null;
   started_at: string;
   finished_at: string;
   agent_exit_code: number | null;
@@ -222,14 +289,33 @@ interface DevelopmentRun {
   event_parse_errors: number;
   event_stream_sha256: string;
   usage: TokenUsage;
+  turn_count?: number;
+  usage_reported_turns?: number;
+  agent_duration_ms?: number;
+  estimated_api_cost_components_usd?: ApiCostComponents | null;
   billing: "subscription_allowance" | "api_rate_estimate";
   estimated_usd_from_observed_tokens: number | null;
   base_commit: string;
   baseline_clean: boolean;
   changed_paths: string[];
   change_sha256: string;
+  result_files?: Array<{
+    path: string;
+    standing: "file" | "symlink" | "deleted" | "unsupported";
+    sha256: string | null;
+    mode: number | null;
+  }>;
   checks: CheckResult[];
 }
+const PhaseClosure = z.strictObject({
+  format: z.literal("anvilmark-development-phase-closure/1"),
+  phase_id: Id,
+  plan_hash: z.string().regex(/^[a-f0-9]{64}$/),
+  run_id: Id,
+  run_hash: z.string().regex(/^[a-f0-9]{64}$/),
+  commit: z.string().regex(/^[a-f0-9]{40,64}$/),
+  closed_at: Nonempty,
+});
 interface RunReview {
   readonly run_id: string;
   readonly run_hash: string;
@@ -248,6 +334,7 @@ const zeroUsage = (): TokenUsage => ({
 });
 const digest = (value: string | Buffer): string =>
   createHash("sha256").update(value).digest("hex");
+const execFileAsync = promisify(execFile);
 const directory = (root: string): string =>
   join(root, ".anvilmark", "development");
 const planFile = (root: string): string => join(directory(root), "plan.json");
@@ -257,6 +344,10 @@ const runsDirectory = (root: string): string => join(directory(root), "runs");
 const reviewsDirectory = (root: string): string =>
   join(directory(root), "reviews");
 const plansDirectory = (root: string): string => join(directory(root), "plans");
+const handoffsDirectory = (root: string): string =>
+  join(directory(root), "handoffs");
+const phasesDirectory = (root: string): string =>
+  join(directory(root), "phases");
 const evidenceFile = (root: string): string =>
   join(directory(root), "development-evidence.sqlite");
 const configurationFile = (root: string): string =>
@@ -460,11 +551,11 @@ function estimate(
   );
 }
 
-function observedApiEstimate(
+function observedApiComponents(
   bill: CandidateBilling | undefined,
   usage: TokenUsage,
   modelRateApplicable: boolean,
-): number | null {
+): ApiCostComponents | null {
   if (!bill || bill.mode === "subscription" || !modelRateApplicable)
     return null;
   if (usage.cached_input_tokens > usage.input_tokens) return null;
@@ -473,14 +564,17 @@ function observedApiEstimate(
     bill.cached_input_usd_per_million === undefined
   )
     return null;
-  return (
-    ((usage.input_tokens - usage.cached_input_tokens) *
-      bill.input_usd_per_million +
-      usage.cached_input_tokens *
-        (bill.cached_input_usd_per_million ?? bill.input_usd_per_million) +
-      usage.output_tokens * bill.output_usd_per_million) /
-    1_000_000
-  );
+  return {
+    uncached_input:
+      ((usage.input_tokens - usage.cached_input_tokens) *
+        bill.input_usd_per_million) /
+      1_000_000,
+    cached_input:
+      (usage.cached_input_tokens *
+        (bill.cached_input_usd_per_million ?? bill.input_usd_per_million)) /
+      1_000_000,
+    output: (usage.output_tokens * bill.output_usd_per_million) / 1_000_000,
+  };
 }
 
 function restrictionStandings(
@@ -730,22 +824,14 @@ function suggestion(
   );
   if (eligible.length === 0)
     return "No eligible candidate; revise restrictions or options.";
-  const byCost = eligible.filter(
-    (candidate) => candidate.projected_usd !== null,
+  const baseline = eligible.find(
+    (candidate) => candidate.id === plan.evaluation?.baseline_candidate_id,
   );
-  if (byCost.length === eligible.length) {
-    const lowest = [...byCost].sort(
-      (a, b) => (a.projected_usd ?? 0) - (b.projected_usd ?? 0),
-    )[0];
-    return `Provisional cost-first option: ${lowest?.id ?? "unknown"}; projected API cost uses declared usage and rates. Task quality is not verified by this pilot.`;
-  }
-  if (byCost.length === 0) {
-    const lowest = [...eligible].sort(
-      (a, b) => a.expected_tokens - b.expected_tokens,
-    )[0];
-    return `Provisional allowance-use starting point: ${lowest?.id ?? "unknown"}; expected tokens are declared, cash savings and task quality are unknown.`;
-  }
-  return "Eligible options have different billing bases; this pilot cannot rank their total cash cost or task quality.";
+  if (baseline)
+    return `Provisional fixed baseline: ${baseline.id}; keep this reviewed comparison point until comparable accepted tasks establish another choice. Declared token and rate estimates do not establish task quality or cash savings.`;
+  if (eligible.length === 1)
+    return `Only eligible candidate: ${eligible[0]!.id}; task quality and total accepted-work cost are not established.`;
+  return "No evidence-backed first-run winner. Review task risk and choose a fixed baseline; declared tokens or API rates alone do not predict accepted work or correction effort.";
 }
 
 function printRestrictionStandings(
@@ -776,6 +862,25 @@ function printPlan(
     `Architecture: ${plan.architecture.id} — ${plan.architecture.summary}\n`,
   );
   context.io.stdout(`Task: ${plan.task.id} — ${plan.task.summary}\n`);
+  if (plan.phase) {
+    context.io.stdout(`Phase: ${plan.phase.id} — ${plan.phase.outcome}\n`);
+    context.io.stdout(`  Inputs: ${plan.phase.required_inputs.join("; ")}\n`);
+    context.io.stdout(
+      `  Interfaces: ${plan.phase.interface_commitments.join("; ")}\n`,
+    );
+    context.io.stdout(
+      `  Non-goals: ${plan.phase.non_goals.join("; ") || "none"}\n`,
+    );
+    context.io.stdout(
+      `  Prerequisites: ${plan.phase.depends_on.join(", ") || "none"}\n`,
+    );
+    context.io.stdout(
+      `  Integration checks: ${plan.phase.integration_checks.map((check) => check.name).join(", ")}\n`,
+    );
+    context.io.stdout(
+      `  Attempt limit: ${plan.phase.max_attempts}; escalation: ${plan.phase.escalation}\n`,
+    );
+  }
   context.io.stdout(`Plan hash: ${hash}\n`);
   for (const option of comparison(plan, resolutions, now)) {
     const cost =
@@ -798,6 +903,7 @@ async function commandOutput(
   program: string,
   args: string[],
   cwd: string,
+  options: { maxOutputChars?: number; timeoutMs?: number } = {},
 ): Promise<{ code: number | null; stdout: string }> {
   return new Promise((resolveResult, reject) => {
     const child = spawn(program, args, {
@@ -806,21 +912,33 @@ async function commandOutput(
     });
     let stdout = "";
     let stderr = "";
+    const timer =
+      options.timeoutMs === undefined
+        ? null
+        : setTimeout(() => child.kill("SIGKILL"), options.timeoutMs);
+    const append = (previous: string, chunk: Buffer): string =>
+      (previous + chunk.toString("utf8")).slice(
+        -(options.maxOutputChars ?? Number.MAX_SAFE_INTEGER),
+      );
     child.stdout.on(
       "data",
-      (chunk: Buffer) => (stdout += chunk.toString("utf8")),
+      (chunk: Buffer) => (stdout = append(stdout, chunk)),
     );
     child.stderr.on(
       "data",
-      (chunk: Buffer) => (stderr += chunk.toString("utf8")),
+      (chunk: Buffer) => (stderr = append(stderr, chunk)),
     );
-    child.on("error", reject);
-    child.on("close", (code) =>
+    child.on("error", (error) => {
+      if (timer) clearTimeout(timer);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      if (timer) clearTimeout(timer);
       resolveResult({
         code,
         stdout: code === 0 ? stdout : stderr.slice(0, 500),
-      }),
-    );
+      });
+    });
   });
 }
 
@@ -837,12 +955,16 @@ export function collectCodexMetadata(lines: readonly string[]): {
   modelEvents: Array<{ event_index: number; model: string }>;
   eventCount: number;
   parseErrors: number;
+  turnCount: number;
+  usageReportedTurns: number;
   usage: TokenUsage;
 } {
   let threadId: string | null = null;
   const modelEvents: Array<{ event_index: number; model: string }> = [];
   let eventCount = 0;
   let parseErrors = 0;
+  let turnCount = 0;
+  let usageReportedTurns = 0;
   const usage = zeroUsage();
   for (const line of lines) {
     if (!line.trim()) continue;
@@ -865,12 +987,22 @@ export function collectCodexMetadata(lines: readonly string[]): {
       threadId = event.thread_id;
     if (event.type === "model.changed" && typeof event.model === "string")
       modelEvents.push({ event_index: eventCount, model: event.model });
+    if (event.type === "turn.completed") turnCount += 1;
     if (
       event.type === "turn.completed" &&
       event.usage !== null &&
       typeof event.usage === "object"
     ) {
       const values = event.usage as Record<string, unknown>;
+      if (
+        typeof values.input_tokens === "number" &&
+        Number.isSafeInteger(values.input_tokens) &&
+        values.input_tokens >= 0 &&
+        typeof values.output_tokens === "number" &&
+        Number.isSafeInteger(values.output_tokens) &&
+        values.output_tokens >= 0
+      )
+        usageReportedTurns += 1;
       for (const key of Object.keys(usage) as (keyof TokenUsage)[]) {
         const value = values[key];
         if (
@@ -882,7 +1014,15 @@ export function collectCodexMetadata(lines: readonly string[]): {
       }
     }
   }
-  return { threadId, modelEvents, eventCount, parseErrors, usage };
+  return {
+    threadId,
+    modelEvents,
+    eventCount,
+    parseErrors,
+    turnCount,
+    usageReportedTurns,
+    usage,
+  };
 }
 
 async function runCodex(
@@ -942,12 +1082,17 @@ async function runCodex(
 async function runCheck(
   root: string,
   check: z.infer<typeof Check>,
+  timeoutMs?: number,
 ): Promise<CheckResult> {
   const start = Date.now();
   let code: number | null = null;
   try {
-    code = (await commandOutput(check.argv[0] ?? "", check.argv.slice(1), root))
-      .code;
+    code = (
+      await commandOutput(check.argv[0] ?? "", check.argv.slice(1), root, {
+        maxOutputChars: 500,
+        ...(timeoutMs === undefined ? {} : { timeoutMs }),
+      })
+    ).code;
   } catch {
     // Keep the failed check in the run record, including missing executables.
   }
@@ -957,6 +1102,98 @@ async function runCheck(
     exit_code: code,
     duration_ms: Date.now() - start,
   };
+}
+
+async function scoutHandoff(
+  root: string,
+  plan: DevelopmentPlan,
+  planHash: string,
+  prompt: string,
+  now: string,
+): Promise<{ id: string; handoff: DevelopmentHandoff }> {
+  const repositoryRoot = (
+    await git(root, ["rev-parse", "--show-toplevel"])
+  ).trim();
+  if (repositoryRoot !== root)
+    throw new Error("--project-dir must be the Git repository root");
+  const baseCommit = (await git(root, ["rev-parse", "HEAD"])).trim();
+  if ((await observedChange(root)).paths.length)
+    throw new Error("scout requires a clean repository outside .anvilmark");
+  const trackedPaths = (await git(root, ["ls-files", "-z", "--cached"]))
+    .split("\0")
+    .filter(Boolean);
+  const files = await verifiedHandoffFiles(
+    root,
+    trackedPaths,
+    prompt,
+    plan.task.summary,
+    [...plan.task.checks, ...(plan.phase?.integration_checks ?? [])],
+  );
+  const checkout = join(tmpdir(), `anvilmark-scout-${randomUUID()}`);
+  await git(root, ["worktree", "add", "--detach", checkout, baseCommit]);
+  let checks: CheckResult[];
+  try {
+    checks = [];
+    for (const check of [
+      ...plan.task.checks,
+      ...(plan.phase?.integration_checks ?? []),
+    ])
+      checks.push(await runCheck(checkout, check, 120_000));
+  } finally {
+    await git(root, ["worktree", "remove", "--force", checkout]);
+  }
+  const handoff: DevelopmentHandoff = {
+    schema_version: 1,
+    plan_hash: planHash,
+    architecture_id: plan.architecture.id,
+    task_id: plan.task.id,
+    base_commit: baseCommit,
+    source_prompt_sha256: digest(prompt),
+    created_at: now,
+    tracked_file_count: trackedPaths.length,
+    files,
+    baseline_checks: checks,
+    verification:
+      "tracked file hashes at a clean Git commit; declared checks in a detached worktree",
+  };
+  const id = digest(JSON.stringify(handoff));
+  await safeDirectory(root, handoffsDirectory(root));
+  await atomicJson(join(handoffsDirectory(root), `${id}.json`), handoff);
+  return { id, handoff };
+}
+
+async function loadVerifiedHandoff(
+  root: string,
+  id: string,
+  plan: DevelopmentPlan,
+  planHash: string,
+  baseCommit: string,
+  prompt: string,
+): Promise<DevelopmentHandoff> {
+  if (!/^[a-f0-9]{64}$/.test(id)) throw new Error("invalid handoff id");
+  const handoffs = await lstat(handoffsDirectory(root));
+  if (!handoffs.isDirectory() || handoffs.isSymbolicLink())
+    throw new Error("handoff storage must be a real directory");
+  const path = join(handoffsDirectory(root), `${id}.json`);
+  const stat = await lstat(path);
+  if (!stat.isFile() || stat.isSymbolicLink())
+    throw new Error("handoff must be a regular file");
+  const handoff = Handoff.parse(JSON.parse(await readFile(path, "utf8")));
+  if (digest(JSON.stringify(handoff)) !== id)
+    throw new Error("handoff content has changed");
+  if (
+    handoff.plan_hash !== planHash ||
+    handoff.architecture_id !== plan.architecture.id ||
+    handoff.task_id !== plan.task.id ||
+    handoff.base_commit !== baseCommit ||
+    handoff.source_prompt_sha256 !== digest(prompt)
+  )
+    throw new Error(
+      "handoff does not match the current plan, commit, or prompt",
+    );
+  if (!(await handoffFilesStillMatch(root, handoff.files)))
+    throw new Error("handoff file evidence has changed");
+  return handoff;
 }
 
 async function observedChange(
@@ -980,7 +1217,13 @@ async function observedChange(
     const path = line.slice(3);
     paths.push(path);
     if (state === "??") untracked.push(path);
-    if (state.includes("R") || state.includes("C")) index += 1; // porcelain -z adds the source path
+    if (state.includes("R")) {
+      const source = entries[index + 1];
+      if (source) paths.push(source);
+      index += 1; // porcelain -z adds the old path after a rename
+    } else if (state.includes("C")) {
+      index += 1; // a copy leaves its source path unchanged
+    }
   }
   const diff = await git(root, [
     "diff",
@@ -999,6 +1242,195 @@ async function observedChange(
       hashes.push(`${path}:${digest(await readFile(file))}`);
   }
   return { paths, hash: digest(`${diff}\n${hashes.sort().join("\n")}`) };
+}
+
+async function resultFileStates(
+  root: string,
+  paths: readonly string[],
+): Promise<NonNullable<DevelopmentRun["result_files"]>> {
+  const results: NonNullable<DevelopmentRun["result_files"]> = [];
+  for (const path of paths) {
+    const full = resolve(root, path);
+    if (!full.startsWith(`${root}/`))
+      throw new Error("changed path escaped the repository");
+    const stat = await lstat(full).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (!stat) {
+      results.push({ path, standing: "deleted", sha256: null, mode: null });
+    } else if (stat.isSymbolicLink()) {
+      results.push({
+        path,
+        standing: "symlink",
+        sha256: digest(await readlink(full)),
+        mode: stat.mode & 0o777,
+      });
+    } else if (
+      stat.isFile() &&
+      stat.size <= 16 * 1024 * 1024 &&
+      (await realpath(full)).startsWith(`${root}/`)
+    ) {
+      results.push({
+        path,
+        standing: "file",
+        sha256: digest(await readFile(full)),
+        mode: stat.mode & 0o777,
+      });
+    } else {
+      results.push({ path, standing: "unsupported", sha256: null, mode: null });
+    }
+  }
+  return results;
+}
+
+async function phaseClosure(
+  root: string,
+  id: string,
+): Promise<z.infer<typeof PhaseClosure> | null> {
+  const directoryInfo = await lstat(phasesDirectory(root)).catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    },
+  );
+  if (!directoryInfo) return null;
+  if (!directoryInfo.isDirectory() || directoryInfo.isSymbolicLink())
+    throw new Error("phase closure storage must be a real directory");
+  const path = join(phasesDirectory(root), `${id}.json`);
+  const stat = await lstat(path).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  });
+  if (!stat) return null;
+  if (!stat.isFile() || stat.isSymbolicLink())
+    throw new Error(`phase closure ${id} must be a regular file`);
+  return PhaseClosure.parse(JSON.parse(await readFile(path, "utf8")));
+}
+
+async function verifiedPhaseCommit(
+  root: string,
+  run: DevelopmentRun,
+  commit: string,
+): Promise<boolean> {
+  if (
+    !run.result_files ||
+    run.result_files.length !== run.changed_paths.length ||
+    run.result_files.some((file) => file.standing === "unsupported")
+  )
+    return false;
+  const ancestor = await commandOutput(
+    "git",
+    ["merge-base", "--is-ancestor", run.base_commit, commit],
+    root,
+  );
+  if (ancestor.code !== 0 || commit === run.base_commit) return false;
+  const committedPaths = (
+    await git(root, [
+      "diff",
+      "--name-only",
+      "--no-renames",
+      "-z",
+      run.base_commit,
+      commit,
+      "--",
+      ".",
+      ":(exclude).anvilmark",
+    ])
+  )
+    .split("\0")
+    .filter(Boolean)
+    .sort();
+  if (
+    JSON.stringify(committedPaths) !==
+    JSON.stringify([...run.changed_paths].sort())
+  )
+    return false;
+  for (const file of run.result_files) {
+    const entry = (
+      await git(root, ["ls-tree", "-z", commit, "--", file.path])
+    ).split("\0")[0];
+    if (file.standing === "deleted") {
+      if (entry) return false;
+      continue;
+    }
+    if (!entry) return false;
+    const match = /^(\d+) blob ([a-f0-9]{40,64})\t/.exec(entry);
+    if (!match) return false;
+    const [, mode, oid] = match;
+    if (file.standing === "file" && mode !== "100644" && mode !== "100755")
+      return false;
+    if (file.standing === "symlink" && mode !== "120000") return false;
+    if (
+      file.standing === "file" &&
+      Boolean(file.mode && file.mode & 0o111) !== (mode === "100755")
+    )
+      return false;
+    const output = await execFileAsync("git", ["cat-file", "blob", oid!], {
+      cwd: root,
+      encoding: "buffer",
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    if (digest(output.stdout as Buffer) !== file.sha256) return false;
+  }
+  return true;
+}
+
+async function requirePhasePrerequisites(
+  root: string,
+  plan: DevelopmentPlan,
+  hash: string,
+  currentCommit: string,
+): Promise<void> {
+  if (!plan.phase) return;
+  if (!(await currentApproval(root, hash)))
+    throw new Error("phase requires current plan approval before running");
+  if (await phaseClosure(root, plan.phase.id))
+    throw new Error(
+      `phase ${plan.phase.id} is already closed; create a new phase or explicit plan revision`,
+    );
+  const attempts = (await loadRuns(root)).filter(
+    (run) => run.plan_hash === hash,
+  ).length;
+  if (attempts >= plan.phase.max_attempts)
+    throw new Error(
+      `phase attempt limit reached (${attempts}/${plan.phase.max_attempts}); replan and reapprove before another run`,
+    );
+  for (const id of plan.phase.depends_on) {
+    const closure = await phaseClosure(root, id);
+    if (!closure || closure.phase_id !== id)
+      throw new Error(`prerequisite phase ${id} is not closed`);
+    const run = (await loadRuns(root)).find(
+      (item) => item.id === closure.run_id,
+    );
+    const review = run && (await loadReview(root, run.id));
+    const archived = run && (await archivedPlan(root, run.plan_hash));
+    if (
+      !run ||
+      !review ||
+      !archived ||
+      archived.phase?.id !== id ||
+      closure.plan_hash !== run.plan_hash ||
+      closure.run_hash !== digest(JSON.stringify(run)) ||
+      review.run_hash !== closure.run_hash ||
+      review.decision !== "accepted" ||
+      review.actor !== "interactive_local_operator"
+    )
+      throw new Error(`prerequisite phase ${id} has invalid closure evidence`);
+    if (!(await verifiedPhaseCommit(root, run, closure.commit)))
+      throw new Error(
+        `prerequisite phase ${id} commit differs from its reviewed result`,
+      );
+    const ancestor = await commandOutput(
+      "git",
+      ["merge-base", "--is-ancestor", closure.commit, currentCommit],
+      root,
+    );
+    if (ancestor.code !== 0)
+      throw new Error(
+        `prerequisite phase ${id} commit is not in the current baseline`,
+      );
+  }
 }
 
 async function saveRun(root: string, run: DevelopmentRun): Promise<void> {
@@ -1130,8 +1562,7 @@ async function syncDevelopmentEvidence(root: string): Promise<{
         output_tokens: run.usage.output_tokens,
       };
       rows.push(row);
-      const elapsed =
-        Date.parse(run.finished_at) - Date.parse(run.started_at);
+      const elapsed = Date.parse(run.finished_at) - Date.parse(run.started_at);
       records.push({
         row,
         task_id: run.task_id,
@@ -1221,7 +1652,7 @@ function recommendation(
       ? `Shadow-trial candidate: ${matched.trial_candidate_id}. ${matched.reason}. The person still chooses the setup.`
       : matched.standing === "baseline_retained"
         ? `Retain fixed baseline ${matched.baseline_candidate_id} for the next shadow comparison: ${matched.reason}. The person still chooses the setup.`
-      : `${suggestion(plan, resolutions, now)} No evidence-backed model choice: ${matched.reason}.`;
+        : `${suggestion(plan, resolutions, now)} No evidence-backed model choice: ${matched.reason}.`;
   return {
     profile_key: key ?? null,
     options,
@@ -1308,10 +1739,12 @@ export async function developmentCommand(
       model: { type: "string" },
       candidate: { type: "string" },
       "prompt-file": { type: "string" },
+      handoff: { type: "string" },
       run: { type: "string" },
       decision: { type: "string" },
       reason: { type: "string" },
       "catalog-db": { type: "string" },
+      goal: { type: "string" },
       id: { type: "string" },
       "agent-test": { type: "boolean" },
     },
@@ -1324,6 +1757,15 @@ export async function developmentCommand(
   if (sub !== "catalog" && parsed.positionals.length)
     throw new UsageError("unexpected positional argument", DEVELOPMENT_USAGE);
   const root = projectDirectory(context.io, parsed);
+  if (sub === "landscape") {
+    const report = await developmentLandscape(
+      root,
+      typeof parsed.values.goal === "string" ? parsed.values.goal : undefined,
+    );
+    if (flag(parsed, "json")) writeJson(context.io, report);
+    else context.io.stdout(`${renderDevelopmentLandscape(report)}\n`);
+    return EXIT.ok;
+  }
   if (sub === "catalog") {
     const action = parsed.positionals[0];
     if (
@@ -1407,6 +1849,21 @@ export async function developmentCommand(
       requiredOption(parsed, "file", DEVELOPMENT_USAGE),
     );
     const plan = Plan.parse(JSON.parse(await readFile(source, "utf8")));
+    if (plan.phase) {
+      if (
+        plan.phase.depends_on.includes(plan.phase.id) ||
+        new Set(plan.phase.depends_on).size !== plan.phase.depends_on.length
+      )
+        throw new Error(
+          "phase prerequisites must be unique and cannot include this phase",
+        );
+      const checkNames = [
+        ...plan.task.checks,
+        ...plan.phase.integration_checks,
+      ].map((check) => check.name);
+      if (new Set(checkNames).size !== checkNames.length)
+        throw new Error("task and integration check names must be unique");
+    }
     if (
       plan.evaluation &&
       !plan.candidates.some(
@@ -1528,6 +1985,29 @@ export async function developmentCommand(
       catalog.close();
     }
   }
+  if (sub === "scout") {
+    const { plan, hash } = await loadPlan(root);
+    const promptPath = resolve(
+      root,
+      requiredOption(parsed, "prompt-file", DEVELOPMENT_USAGE),
+    );
+    const prompt = await readFile(promptPath, "utf8");
+    if (!prompt.trim()) throw new Error("prompt file is empty");
+    const { id, handoff } = await scoutHandoff(
+      root,
+      plan,
+      hash,
+      prompt,
+      context.io.clock(),
+    );
+    if (flag(parsed, "json")) writeJson(context.io, { id, ...handoff });
+    else {
+      context.io.stdout(`Saved verified handoff ${id}.\n`);
+      context.io.stdout(`${renderVerifiedHandoff(handoff)}\n`);
+      context.io.stdout(`Use --handoff ${id} with development run.\n`);
+    }
+    return EXIT.ok;
+  }
   if (sub === "run") {
     const { plan, hash } = await loadPlan(root);
     const resolutions = await resolveConfigurations(root, plan);
@@ -1559,8 +2039,8 @@ export async function developmentCommand(
       throw new Error(
         "selected candidate is absent, excluded, or has an unresolved hard restriction",
       );
-    const prompt = await readFile(promptPath, "utf8");
-    if (!prompt.trim()) throw new Error("prompt file is empty");
+    const sourcePrompt = await readFile(promptPath, "utf8");
+    if (!sourcePrompt.trim()) throw new Error("prompt file is empty");
     const repositoryRoot = (
       await git(root, ["rev-parse", "--show-toplevel"])
     ).trim();
@@ -1572,6 +2052,24 @@ export async function developmentCommand(
       throw new Error(
         "development pilot requires a clean repository outside .anvilmark",
       );
+    await requirePhasePrerequisites(root, plan, hash, baseCommit);
+    const handoffId =
+      typeof parsed.values.handoff === "string" ? parsed.values.handoff : null;
+    const handoff =
+      handoffId === null
+        ? null
+        : await loadVerifiedHandoff(
+            root,
+            handoffId,
+            plan,
+            hash,
+            baseCommit,
+            sourcePrompt,
+          );
+    const prompt =
+      handoff === null
+        ? sourcePrompt
+        : `${sourcePrompt.trimEnd()}\n\n${renderVerifiedHandoff(handoff)}\n`;
     const approvalRecord = await currentApproval(root, hash);
     const approval = approvalRecord ? "current" : "missing_or_stale";
     if (approval !== "current")
@@ -1584,6 +2082,7 @@ export async function developmentCommand(
       );
     const started = context.io.clock();
     const runId = `${started.replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`;
+    const agentStartedAt = Date.now();
     const execution = await runCodex(
       root,
       model,
@@ -1591,11 +2090,16 @@ export async function developmentCommand(
       context.io.signal,
       context.io.env.ANVILMARK_CODEX_EXECUTABLE ?? "codex",
     );
+    const agentFinishedAt = Date.now();
     const metadata = collectCodexMetadata(execution.lines);
     const checks: CheckResult[] = [];
-    for (const check of plan.task.checks)
+    for (const check of [
+      ...plan.task.checks,
+      ...(plan.phase?.integration_checks ?? []),
+    ])
       checks.push(await runCheck(root, check));
     const changes = await observedChange(root);
+    const resultFiles = await resultFileStates(root, changes.paths);
     const bill = effectiveBilling(
       candidate,
       resolutions.get(candidate.id),
@@ -1606,6 +2110,14 @@ export async function developmentCommand(
     const modelRateApplicable = metadata.modelEvents.every(
       (event) => event.model === model,
     );
+    const usageComplete =
+      execution.code === 0 &&
+      metadata.parseErrors === 0 &&
+      metadata.turnCount > 0 &&
+      metadata.usageReportedTurns === metadata.turnCount;
+    const costComponents = usageComplete
+      ? observedApiComponents(bill, metadata.usage, modelRateApplicable)
+      : null;
     const run: DevelopmentRun = {
       schema_version: 1,
       id: runId,
@@ -1627,6 +2139,8 @@ export async function developmentCommand(
             : "tool_reported",
       codex_thread_id: metadata.threadId,
       prompt_sha256: digest(prompt),
+      source_prompt_sha256: digest(sourcePrompt),
+      handoff_id: handoffId,
       started_at: started,
       finished_at: context.io.clock(),
       agent_exit_code: execution.code,
@@ -1635,24 +2149,33 @@ export async function developmentCommand(
       event_parse_errors: metadata.parseErrors,
       event_stream_sha256: digest(execution.lines.join("\n")),
       usage: metadata.usage,
+      turn_count: metadata.turnCount,
+      usage_reported_turns: metadata.usageReportedTurns,
+      agent_duration_ms: Math.max(0, agentFinishedAt - agentStartedAt),
       billing:
         bill.mode === "subscription"
           ? "subscription_allowance"
           : "api_rate_estimate",
-      estimated_usd_from_observed_tokens: observedApiEstimate(
-        bill,
-        metadata.usage,
-        modelRateApplicable,
-      ),
+      estimated_api_cost_components_usd: costComponents,
+      estimated_usd_from_observed_tokens:
+        costComponents === null
+          ? null
+          : costComponents.uncached_input +
+            costComponents.cached_input +
+            costComponents.output,
       base_commit: baseCommit,
       baseline_clean: true,
       changed_paths: changes.paths,
       change_sha256: changes.hash,
+      result_files: resultFiles,
       checks,
     };
     await saveRun(root, run);
     context.io.stdout(
       `Recorded run ${run.id}: ${run.changed_paths.length} changed paths, ${run.usage.input_tokens} input and ${run.usage.output_tokens} output tokens.\n`,
+    );
+    context.io.stdout(
+      `Agent turns: ${run.turn_count}; cache input: ${run.usage.cached_input_tokens}; agent time: ${run.agent_duration_ms} ms; check time: ${run.checks.reduce((sum, check) => sum + check.duration_ms, 0)} ms${handoffId ? `; verified handoff ${handoffId}` : ""}.\n`,
     );
     context.io.stdout(
       `Model identity: ${run.model_identity}; cash cost: ${run.estimated_usd_from_observed_tokens === null ? (bill.mode === "subscription" ? "unknown (subscription)" : !modelRateApplicable ? "unknown (reported model differs from configured rate)" : "unknown (cached-input usage or rate unavailable)") : `$${run.estimated_usd_from_observed_tokens.toFixed(4)} estimated from rates`}.\n`,
@@ -1748,6 +2271,62 @@ export async function developmentCommand(
     );
     return EXIT.ok;
   }
+  if (sub === "close") {
+    const runId = requiredOption(parsed, "run", DEVELOPMENT_USAGE);
+    if (!Id.safeParse(runId).success)
+      throw new UsageError("invalid run id", DEVELOPMENT_USAGE);
+    const run = (await loadRuns(root)).find((item) => item.id === runId);
+    if (!run) throw new Error("run not found");
+    const plan = await archivedPlan(root, run.plan_hash);
+    if (!plan?.phase) throw new Error("run has no phase contract");
+    if (await phaseClosure(root, plan.phase.id))
+      throw new Error(`phase ${plan.phase.id} is already closed`);
+    const review = await loadReview(root, run.id);
+    const runHash = digest(JSON.stringify(run));
+    if (
+      !review ||
+      review.run_hash !== runHash ||
+      review.decision !== "accepted" ||
+      review.actor !== "interactive_local_operator" ||
+      run.approval_at_start !== "current" ||
+      run.approval_actor_at_start !== "interactive_local_operator" ||
+      run.agent_exit_code !== 0 ||
+      run.changed_paths.length === 0 ||
+      run.checks.some((check) => check.exit_code !== 0) ||
+      !run.result_files ||
+      run.result_files.some((file) => file.standing === "unsupported")
+    )
+      throw new Error(
+        "phase needs a human-accepted, fully checked run with current file evidence",
+      );
+    if ((await observedChange(root)).paths.length)
+      throw new Error(
+        "commit the reviewed result and leave a clean tree before closing the phase",
+      );
+    const commit = (await git(root, ["rev-parse", "HEAD"])).trim();
+    if (!(await verifiedPhaseCommit(root, run, commit)))
+      throw new Error(
+        "committed paths or file content differs from the reviewed phase result",
+      );
+    const closure = {
+      format: "anvilmark-development-phase-closure/1" as const,
+      phase_id: plan.phase.id,
+      plan_hash: run.plan_hash,
+      run_id: run.id,
+      run_hash: runHash,
+      commit,
+      closed_at: context.io.clock(),
+    };
+    await safeDirectory(root, phasesDirectory(root));
+    await atomicJson(
+      join(phasesDirectory(root), `${plan.phase.id}.json`),
+      closure,
+    );
+    context.io.stdout(
+      `Closed phase ${plan.phase.id} at ${commit.slice(0, 12)} using human-accepted run ${run.id}.\n`,
+    );
+    return EXIT.ok;
+  }
   if (sub === "report") {
     const { plan, hash } = await loadPlan(root);
     const resolutions = await resolveConfigurations(root, plan);
@@ -1803,6 +2382,9 @@ export async function developmentCommand(
         plan_hash: hash,
         approval,
         approval_actor: approvalRecord?.actor ?? null,
+        phase_closure: plan.phase
+          ? await phaseClosure(root, plan.phase.id)
+          : null,
         comparison: comparison(plan, resolutions, now),
         suggestion: suggestion(plan, resolutions, now),
         runs: runSummaries,
@@ -1810,12 +2392,18 @@ export async function developmentCommand(
       return EXIT.ok;
     }
     printPlan(context, plan, hash, resolutions, now);
+    if (plan.phase) {
+      const closure = await phaseClosure(root, plan.phase.id);
+      context.io.stdout(
+        `Phase standing: ${closure ? `closed at ${closure.commit.slice(0, 12)}` : "open"}; attempts ${runs.filter((run) => run.plan_hash === hash).length}/${plan.phase.max_attempts}.\n`,
+      );
+    }
     context.io.stdout(
       `Approval: ${approval}${approvalRecord?.actor === "agent_test_operator" ? " (agent test)" : ""}. Recorded runs: ${runs.length}.\n`,
     );
     for (const run of runSummaries) {
       context.io.stdout(
-        `  ${run.id}: ${run.candidate_id}; approval at start ${run.approval_at_start}; agent exit ${run.agent_exit_code ?? "unknown"}; model ${run.model_identity}; tokens ${run.usage.input_tokens} in/${run.usage.output_tokens} out; changed ${run.changed_paths.join(", ") || "none"}; checks ${run.checks.map((check) => `${check.name}=${check.exit_code ?? "error"}`).join(", ")}; review ${run.review_status}; cash ${run.estimated_usd_from_observed_tokens === null ? "unknown" : `$${run.estimated_usd_from_observed_tokens.toFixed(4)} estimated`}\n`,
+        `  ${run.id}: ${run.candidate_id}; approval at start ${run.approval_at_start}; agent exit ${run.agent_exit_code ?? "unknown"}; model ${run.model_identity}; tokens ${run.usage.input_tokens} in/${run.usage.cached_input_tokens} cached/${run.usage.output_tokens} out; turns ${run.turn_count ?? "unknown"}; agent ${run.agent_duration_ms ?? "unknown"} ms; checks ${run.checks.map((check) => `${check.name}=${check.exit_code ?? "error"}`).join(", ")} (${run.checks.reduce((sum, check) => sum + check.duration_ms, 0)} ms); handoff ${run.handoff_id ?? "none"}; changed ${run.changed_paths.join(", ") || "none"}; review ${run.review_status}; cash ${run.estimated_usd_from_observed_tokens === null ? "unknown" : `$${run.estimated_usd_from_observed_tokens.toFixed(4)} estimated`}\n`,
       );
     }
     return EXIT.ok;

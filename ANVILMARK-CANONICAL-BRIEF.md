@@ -47,8 +47,8 @@ The opportunity is the connective decision layer across the development cycle, w
 
 ### Current primary workflow and build order
 
-1. Capture an idea or repository, restrictions, and architecture decisions.
-2. Define a bounded development task, comparable task profile, and acceptance checks before work begins.
+1. Capture an idea or repository and produce a source-linked development-landscape report: current architecture, working conventions, available AI-development provenance and cost evidence, restrictions, and explicit unknowns. Application AI API calls are relevant only when they affect the requested architecture or task; they do not identify the AI that wrote code.
+2. Define a bounded development task. For large work, investigate architecture-changing unknowns first, then use ordered end-to-end slices with reviewed phase contracts, interface and integration checks, and correction limits. Close a phase only when its checks and human review accept the exact result; replan explicitly when its contract changes or a correction limit is reached.
 3. Filter available agent/model setups by hard restrictions. Compare relevant public evidence and reviewed local outcomes, showing source, date, billing basis, and uncertainty. A public benchmark is a first-run signal, not proof for this project.
 4. Let the person approve the plan; let the chosen coding agent do the work. Record configured and tool-reported model identities separately, along with usage, code changes, and checks.
 5. Record acceptance or rejection by a person, retries, rework, and observed or estimated cost. Reuse comparable outcomes in the next selection. Measure cost per accepted task only when the billing and review evidence support it.

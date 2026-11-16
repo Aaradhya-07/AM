@@ -131,4 +131,40 @@ describe("matched development evidence", () => {
     expect(unverified.standing).toBe("model_identity_unverified");
     expect(unverified.trial_candidate_id).toBeNull();
   });
+
+  it("abstains when a run lacks human review or a complete API-rate estimate", () => {
+    const records = Array.from({ length: 30 }, (_, task) => [
+      evidence(task, candidates[0]!, "accepted", 0.2),
+      evidence(task, candidates[1]!, "accepted", 1),
+    ]).flat();
+    records[0] = evidence(0, candidates[0]!, "accepted", 0.2, {
+      reviewed_by_human: false,
+    });
+    const unreviewed = matchedDevelopmentEvidence(
+      candidates,
+      records,
+      "matching-profile",
+      "baseline",
+    );
+    expect(unreviewed.matched_tasks).toBe(29);
+    expect(unreviewed.standing).toBe("insufficient_matched_tasks");
+
+    records[0] = evidence(0, candidates[0]!, "accepted", 0.2);
+    records[1] = evidence(0, candidates[1]!, "accepted", 1, {
+      row: {
+        ...records[1]!.row,
+        billing: "subscription",
+        estimated_usd: null,
+      },
+    });
+    const unknownCash = matchedDevelopmentEvidence(
+      candidates,
+      records,
+      "matching-profile",
+      "baseline",
+    );
+    expect(unknownCash.matched_tasks).toBe(30);
+    expect(unknownCash.standing).toBe("cash_cost_unknown");
+    expect(unknownCash.trial_candidate_id).toBeNull();
+  });
 });

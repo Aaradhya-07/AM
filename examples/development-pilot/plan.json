@@ -19,6 +19,10 @@
     "allowed_models": ["gpt-6-luna", "gpt-6-sol"],
     "max_estimated_usd": null
   },
+  "evaluation": {
+    "baseline_candidate_id": "strong",
+    "max_acceptance_drop": 0
+  },
   "candidates": [
     {
       "id": "fast",

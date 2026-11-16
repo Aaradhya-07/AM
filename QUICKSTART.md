@@ -78,6 +78,19 @@ does not establish empirical redaction quality or runtime privacy. This training
 exercise is not a real production decision or actual agent application test.
 See the [guided walkthrough](docs/vnext/milestones/07-guided-workshop.md).
 
+## Guided development demo
+
+After setup, start the interactive tour from this checkout:
+
+```sh
+bash scripts/development-tour.sh
+```
+
+Press Enter for each explained command, or `q` to quit. It shows the repository
+landscape, phase plan, model comparison, verified handoff, checks, review, and
+the phase closure gate using a disposable example. The stand-in coding agent
+and test-only records do not establish model quality or human approval.
+
 ## Automated replay and tests
 
 For an unattended synthetic fixture replay, independent of your training project:

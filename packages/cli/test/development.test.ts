@@ -109,9 +109,7 @@ describe("development pilot", () => {
     expect(await cli(["development", "recommend", "--json"], output)).toBe(0);
     const result = JSON.parse(output.out());
     expect(result.matched_evidence.baseline_candidate_id).toBe("strong");
-    expect(result.matched_evidence.standing).toBe(
-      "insufficient_matched_tasks",
-    );
+    expect(result.matched_evidence.standing).toBe("insufficient_matched_tasks");
     expect(result.matched_evidence.trial_candidate_id).toBeNull();
   });
 
@@ -398,6 +396,8 @@ describe("development pilot", () => {
       modelEvents: [],
       eventCount: 3,
       parseErrors: 1,
+      turnCount: 1,
+      usageReportedTurns: 1,
       usage: {
         input_tokens: 120,
         cached_input_tokens: 40,
@@ -418,6 +418,216 @@ describe("development pilot", () => {
     ]);
   });
 
+  it("scouts a frozen checkout and binds a run to an untampered handoff", async () => {
+    const { dir, root } = await repository();
+    await writeFile(
+      join(root, "label.mjs"),
+      "export const normalize = (value) => value;\n",
+    );
+    await writeFile(
+      join(root, "check.mjs"),
+      'import { normalize } from "./label.mjs"; if (normalize("a!!") !== "a!") process.exit(1);\n',
+    );
+    await writeFile(
+      join(root, ".anvilmark/prompt.txt"),
+      "Fix label.mjs so check.mjs passes.\n",
+    );
+    const billedPlan = structuredClone(plan);
+    billedPlan.candidates[0]!.billing = {
+      mode: "api_estimate",
+      input_usd_per_million: 1,
+      cached_input_usd_per_million: 0.5,
+      output_usd_per_million: 2,
+      source: "test rates",
+    };
+    await writeFile(
+      join(root, ".anvilmark/input-plan.json"),
+      JSON.stringify(billedPlan),
+    );
+    execFileSync("git", ["init", "-q", root]);
+    execFileSync("git", ["-C", root, "add", "label.mjs", "check.mjs"]);
+    execFileSync("git", [
+      "-C",
+      root,
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.com",
+      "commit",
+      "-qm",
+      "baseline",
+    ]);
+    expect(
+      await cli(
+        ["development", "plan", "--file", ".anvilmark/input-plan.json"],
+        scriptedIo({ cwd: root }),
+      ),
+    ).toBe(0);
+
+    const scouted = scriptedIo({ cwd: root });
+    expect(
+      await cli(
+        [
+          "development",
+          "scout",
+          "--prompt-file",
+          ".anvilmark/prompt.txt",
+          "--json",
+        ],
+        scouted,
+      ),
+      scouted.err(),
+    ).toBe(0);
+    const handoff = JSON.parse(scouted.out());
+    expect(handoff.files.map((file: { path: string }) => file.path)).toContain(
+      "label.mjs",
+    );
+    expect(handoff.baseline_checks[0].exit_code).toBe(1);
+    expect(await readFile(join(root, "label.mjs"), "utf8")).toContain(
+      "=> value;",
+    );
+
+    const fake = join(dir, "fake-codex-handoff.mjs");
+    await writeFile(
+      fake,
+      '#!/usr/bin/env node\nimport { writeFileSync } from "node:fs";\nlet prompt="";for await (const chunk of process.stdin) prompt+=chunk;\nwriteFileSync(".anvilmark/seen-handoff.txt", prompt);\nwriteFileSync("label.mjs", "export const normalize = (value) => value.replace(/!!/g, \\"!\\");\\n");\nconsole.log(JSON.stringify({type:"turn.completed",usage:{input_tokens:1000,output_tokens:100}}));\n',
+    );
+    await chmod(fake, 0o755);
+    const ran = scriptedIo({
+      cwd: root,
+      env: { ANVILMARK_CODEX_EXECUTABLE: fake },
+    });
+    expect(
+      await cli(
+        [
+          "development",
+          "run",
+          "--candidate",
+          "fast",
+          "--prompt-file",
+          ".anvilmark/prompt.txt",
+          "--handoff",
+          handoff.id,
+        ],
+        ran,
+      ),
+      ran.err(),
+    ).toBe(0);
+    expect(
+      await readFile(join(root, ".anvilmark/seen-handoff.txt"), "utf8"),
+    ).toContain("Verified repository handoff (Anvilmark)");
+    const runFile = (
+      await readdir(join(root, ".anvilmark/development/runs"))
+    )[0]!;
+    const run = JSON.parse(
+      await readFile(
+        join(root, ".anvilmark/development/runs", runFile),
+        "utf8",
+      ),
+    );
+    expect(run.handoff_id).toBe(handoff.id);
+    expect(run.prompt_sha256).not.toBe(run.source_prompt_sha256);
+    expect(run.turn_count).toBe(1);
+    expect(run.usage_reported_turns).toBe(1);
+    expect(run.estimated_usd_from_observed_tokens).toBeCloseTo(0.0012);
+    expect(run.estimated_api_cost_components_usd).toEqual({
+      uncached_input: 0.001,
+      cached_input: 0,
+      output: 0.0002,
+    });
+    execFileSync("git", ["-C", root, "restore", "label.mjs"]);
+
+    const noUsageFake = join(dir, "fake-codex-no-usage.mjs");
+    await writeFile(
+      noUsageFake,
+      '#!/usr/bin/env node\nimport { writeFileSync } from "node:fs";\nwriteFileSync("label.mjs", "export const normalize = (value) => value.replace(/!!/g, \\"!\\");\\n");\nconsole.log(JSON.stringify({type:"turn.completed"}));\n',
+    );
+    await chmod(noUsageFake, 0o755);
+    const beforeNoUsage = new Set(
+      await readdir(join(root, ".anvilmark/development/runs")),
+    );
+    const noUsageIo = scriptedIo({
+      cwd: root,
+      env: { ANVILMARK_CODEX_EXECUTABLE: noUsageFake },
+    });
+    expect(
+      await cli(
+        [
+          "development",
+          "run",
+          "--candidate",
+          "fast",
+          "--prompt-file",
+          ".anvilmark/prompt.txt",
+        ],
+        noUsageIo,
+      ),
+      noUsageIo.err(),
+    ).toBe(0);
+    const noUsageFile = (
+      await readdir(join(root, ".anvilmark/development/runs"))
+    ).find((file) => !beforeNoUsage.has(file))!;
+    const noUsageRun = JSON.parse(
+      await readFile(
+        join(root, ".anvilmark/development/runs", noUsageFile),
+        "utf8",
+      ),
+    );
+    expect(noUsageRun.turn_count).toBe(1);
+    expect(noUsageRun.usage_reported_turns).toBe(0);
+    expect(noUsageRun.estimated_usd_from_observed_tokens).toBeNull();
+    execFileSync("git", ["-C", root, "restore", "label.mjs"]);
+
+    await writeFile(join(root, ".anvilmark/prompt.txt"), "A changed prompt.\n");
+    const stale = scriptedIo({ cwd: root });
+    expect(
+      await cli(
+        [
+          "development",
+          "run",
+          "--candidate",
+          "fast",
+          "--prompt-file",
+          ".anvilmark/prompt.txt",
+          "--handoff",
+          handoff.id,
+        ],
+        stale,
+      ),
+    ).toBe(1);
+    expect(stale.err()).toContain("handoff does not match");
+    await writeFile(
+      join(root, ".anvilmark/prompt.txt"),
+      "Fix label.mjs so check.mjs passes.\n",
+    );
+
+    const path = join(
+      root,
+      ".anvilmark/development/handoffs",
+      `${handoff.id}.json`,
+    );
+    const altered = JSON.parse(await readFile(path, "utf8"));
+    altered.files[0].sha256 = "0".repeat(64);
+    await writeFile(path, JSON.stringify(altered));
+    const invalid = scriptedIo({ cwd: root });
+    expect(
+      await cli(
+        [
+          "development",
+          "run",
+          "--candidate",
+          "fast",
+          "--prompt-file",
+          ".anvilmark/prompt.txt",
+          "--handoff",
+          handoff.id,
+        ],
+        invalid,
+      ),
+    ).toBe(1);
+    expect(invalid.err()).toContain("handoff content has changed");
+  });
+
   it("connects a plan, comparison and exact approval", async () => {
     const { root } = await repository();
     const input = ".anvilmark/input-plan.json";
@@ -426,9 +636,7 @@ describe("development pilot", () => {
       await cli(["development", "plan", "--file", input], planned),
       planned.err(),
     ).toBe(0);
-    expect(planned.out()).toContain(
-      "Provisional allowance-use starting point: fast",
-    );
+    expect(planned.out()).toContain("No evidence-backed first-run winner");
 
     const saved = JSON.parse(
       await readFile(join(root, ".anvilmark/development/plan.json"), "utf8"),
