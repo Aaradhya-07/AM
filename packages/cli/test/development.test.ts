@@ -426,7 +426,7 @@ describe("development pilot", () => {
     );
     await writeFile(
       join(root, "check.mjs"),
-      'import { normalize } from "./label.mjs"; if (normalize("a!!") !== "a!") process.exit(1);\n',
+      'import { normalize } from "./label.mjs"; if (normalize("a!!") !== "a!") { console.error("label regression"); console.error("x".repeat(3000)); process.exit(1); }\n',
     );
     await writeFile(
       join(root, ".anvilmark/prompt.txt"),
@@ -435,6 +435,7 @@ describe("development pilot", () => {
     const billedPlan = structuredClone(plan);
     const boundedPlan = {
       ...billedPlan,
+      review_policy: "two_pass",
       architecture: {
         ...billedPlan.architecture,
         allowed_changed_paths: ["label.mjs"],
@@ -444,6 +445,10 @@ describe("development pilot", () => {
         checks: billedPlan.task.checks.map((check) => ({
           ...check,
           capture_output: true,
+          expected_baseline: {
+            exit_code: 1,
+            output_contains: "label regression",
+          },
         })),
       },
     };
@@ -478,6 +483,24 @@ describe("development pilot", () => {
       ),
     ).toBe(0);
 
+    const runArgs = [
+      "development",
+      "run",
+      "--candidate",
+      "fast",
+      "--prompt-file",
+      ".anvilmark/prompt.txt",
+    ];
+    const noHandoff = scriptedIo({ cwd: root });
+    expect(await cli(runArgs, noHandoff)).toBe(1);
+    expect(noHandoff.err()).toContain("Run needs a scout handoff");
+    expect(
+      await cli(
+        ["development", "approve", "--agent-test"],
+        scriptedIo({ cwd: root }),
+      ),
+    ).toBe(0);
+
     const scouted = scriptedIo({ cwd: root });
     expect(
       await cli(
@@ -497,6 +520,14 @@ describe("development pilot", () => {
       "label.mjs",
     );
     expect(handoff.baseline_checks[0].exit_code).toBe(1);
+    expect(handoff.baseline_checks[0].baseline_expectation).toEqual({
+      expected_exit_code: 1,
+      output_matched: true,
+      passed: true,
+    });
+    expect(handoff.baseline_checks[0].output_tail.stderr).not.toContain(
+      "label regression",
+    );
     expect(await readFile(join(root, "label.mjs"), "utf8")).toContain(
       "=> value;",
     );
@@ -583,6 +614,61 @@ describe("development pilot", () => {
       cached_input: 0,
       output: 0.0002,
     });
+    const reviewArgs = [
+      "development",
+      "review",
+      "--run",
+      run.id,
+      "--agent-test",
+    ];
+    const missingReview = scriptedIo({ cwd: root });
+    expect(await cli(reviewArgs, missingReview)).toBe(1);
+    expect(missingReview.err()).toContain(
+      "requires spec compliance and code quality",
+    );
+
+    const findingsFile = ".anvilmark/review-findings.json";
+    const pass = { verdict: "pass", findings: [] };
+    const findings = {
+      spec_compliance: pass,
+      code_quality: {
+        verdict: "changes_requested",
+        findings: [
+          {
+            severity: "blocking",
+            path: "label.mjs",
+            line: 1,
+            message: "Handle multiple separators.",
+          },
+        ],
+      },
+    };
+    await writeFile(join(root, findingsFile), JSON.stringify(findings));
+    const structured = [...reviewArgs, "--file", findingsFile];
+    const inconsistent = scriptedIo({ cwd: root });
+    expect(
+      await cli([...structured, "--decision", "accept"], inconsistent),
+    ).toBe(1);
+    expect(inconsistent.err()).toContain("decision conflicts");
+    expect(await cli(structured, scriptedIo({ cwd: root }))).toBe(0);
+
+    const reviewedTimeline = scriptedIo({ cwd: root });
+    expect(
+      await cli(
+        ["development", "timeline", "--run", run.id, "--json"],
+        reviewedTimeline,
+      ),
+    ).toBe(0);
+    expect(JSON.parse(reviewedTimeline.out()).events.at(-1)).toMatchObject({
+      stage: "review-recorded",
+      detail: { decision: "rejected", findings },
+    });
+    await writeFile(
+      join(root, findingsFile),
+      JSON.stringify({ spec_compliance: pass, code_quality: pass }),
+    );
+    expect(await cli(structured, scriptedIo({ cwd: root }))).toBe(0);
+
     execFileSync("git", ["-C", root, "restore", "label.mjs"]);
 
     const noUsageFake = join(dir, "fake-codex-no-usage.mjs");
@@ -607,6 +693,8 @@ describe("development pilot", () => {
           "fast",
           "--prompt-file",
           ".anvilmark/prompt.txt",
+          "--handoff",
+          handoff.id,
         ],
         noUsageIo,
       ),
@@ -693,6 +781,54 @@ describe("development pilot", () => {
       "Change outside approved paths: check.mjs",
     );
     execFileSync("git", ["-C", root, "restore", "check.mjs"]);
+
+    const mismatchedPlan = structuredClone(boundedPlan);
+    mismatchedPlan.task.checks[0]!.expected_baseline.output_contains =
+      "different regression";
+    await writeFile(
+      join(root, ".anvilmark/input-plan.json"),
+      JSON.stringify(mismatchedPlan),
+    );
+    expect(
+      await cli(
+        ["development", "plan", "--file", ".anvilmark/input-plan.json"],
+        scriptedIo({ cwd: root }),
+      ),
+    ).toBe(0);
+    const wrongBaseline = scriptedIo({ cwd: root });
+    expect(
+      await cli(
+        [
+          "development",
+          "scout",
+          "--prompt-file",
+          ".anvilmark/prompt.txt",
+          "--json",
+        ],
+        wrongBaseline,
+      ),
+    ).toBe(1);
+    const wrongHandoff = JSON.parse(wrongBaseline.out());
+    expect(wrongHandoff.baseline_checks[0].baseline_expectation).toMatchObject({
+      expected_exit_code: 1,
+      output_matched: false,
+      passed: false,
+    });
+    const wrongRun = scriptedIo({ cwd: root });
+    expect(
+      await cli([...runArgs, "--handoff", wrongHandoff.id], wrongRun),
+    ).toBe(1);
+    expect(wrongRun.err()).toContain("Run needs a scout handoff");
+    await writeFile(
+      join(root, ".anvilmark/input-plan.json"),
+      JSON.stringify(boundedPlan),
+    );
+    expect(
+      await cli(
+        ["development", "plan", "--file", ".anvilmark/input-plan.json"],
+        scriptedIo({ cwd: root }),
+      ),
+    ).toBe(0);
 
     const path = join(
       root,

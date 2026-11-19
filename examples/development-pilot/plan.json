@@ -11,7 +11,12 @@
     "checks": [
       {
         "name": "label-test",
-        "argv": ["node", "check.mjs"]
+        "argv": ["node", "--test", "--test-reporter=tap", "check.mjs"],
+        "capture_output": true,
+        "expected_baseline": {
+          "exit_code": 1,
+          "output_contains": "not ok 2 - collapses repeated punctuation"
+        }
       }
     ]
   },

@@ -357,20 +357,16 @@ describe("Studio and Start surfaces", () => {
     expect(html).toContain("removed");
   });
 
-  it("renders StartPage setup guide", () => {
+  it("guides users into the local development workflow without retired examples", () => {
     const html = renderToStaticMarkup(createElement(StartPage));
-    expect(html).toContain("Get Started with ANVILMARK");
-    expect(html).toContain("Create a decision contract");
-    expect(html).toContain("Explore Atlas Support Desk");
-    expect(html).toContain('href="/demo"');
-    expect(html).toContain('href="/playground"');
-    expect(html).toContain('href="/studio?example=atlas"');
-    expect(html).toContain("Existing TypeScript / JavaScript Project");
-    expect(html).toContain("New Project Built with Coding Agents");
+    expect(html).toContain("A little setup.");
     expect(html).toContain("node scripts/setup.mjs");
-    expect(html).toContain("anvilmark check");
-    expect(html).toContain("anvilmark export");
+    expect(html).toContain("anvilmark development landscape");
+    expect(html).toContain("anvilmark development --help");
+    expect(html).toContain('href="/workspace"');
+    expect(html).not.toContain('href="/demo"');
+    expect(html).not.toContain('href="/playground"');
+    expect(html).not.toContain("Atlas Support Desk");
     expect(html).not.toContain("npx anvilmark");
-    expect(html).not.toContain("@anvilmark/cli");
   });
 });

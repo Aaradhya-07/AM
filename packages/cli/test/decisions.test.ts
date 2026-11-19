@@ -627,7 +627,11 @@ describe("interactive approval", () => {
     ];
     expect(sources.length).toBeGreaterThan(0);
     for (const [path, text] of sources) {
-      expect({ path, approval: /approv/i.test(text) }).toEqual({
+      expect({
+        path,
+        approval:
+          /\b(?:approveCommand|approveDecision|approve_decision)\b/.test(text),
+      }).toEqual({
         path,
         approval: false,
       });

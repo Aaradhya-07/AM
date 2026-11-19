@@ -62,11 +62,13 @@ function label(value: string) {
 }
 
 function snapshotTime(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  }).format(new Date(value)) + " UTC";
+  return (
+    new Intl.DateTimeFormat("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "UTC",
+    }).format(new Date(value)) + " UTC"
+  );
 }
 
 function ModelNav({
@@ -113,7 +115,7 @@ function ModelNav({
             href="/models"
             className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold tracking-tight text-white"
           >
-            ◈ &nbsp;Model Atlas
+            Research index / 01
           </a>
           <nav
             aria-label="Catalog navigation"
@@ -165,10 +167,10 @@ function ModelNav({
           </nav>
         </div>
         <a
-          href="/"
+          href="/start"
           className="text-xs text-slate-600 underline underline-offset-4 hover:text-slate-950"
         >
-          Anvilmark home ↗
+          Start locally ↗
         </a>
       </div>
       {open && (
@@ -1077,7 +1079,7 @@ export function ModelExplorer({
     );
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "model-atlas-offers.csv";
+    anchor.download = "anvilmark-model-offers.csv";
     anchor.click();
     URL.revokeObjectURL(url);
   }
@@ -1093,10 +1095,10 @@ export function ModelExplorer({
       <header className="border-b border-slate-200 bg-[#f5f6f7]">
         <div className="mx-auto max-w-[1500px] px-5 pb-7 pt-10 sm:px-8 lg:px-10">
           <p className="text-xs font-semibold uppercase tracking-widest text-blue-700">
-            Independent model directory
+            Model research / sourced, dated, open
           </p>
           <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-            Find the right model offer
+            Explore the possibilities.
           </h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 sm:text-base">
             Compare provider listings, underlying releases, and independent
@@ -1154,7 +1156,7 @@ export function ModelExplorer({
         id="catalog-content"
         className="mx-auto max-w-[1500px] px-5 pb-24 pt-7 sm:px-8 lg:px-10"
       >
-        {(
+        {
           <>
             <div
               className="mb-5 flex flex-wrap items-center gap-2 border-b border-slate-200"
@@ -1724,7 +1726,7 @@ export function ModelExplorer({
               </section>
             )}
           </>
-        )}
+        }
       </main>
       {detail && payload && (
         <Detail

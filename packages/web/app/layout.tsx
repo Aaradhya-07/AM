@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { AuthProvider } from "./components/auth-provider";
 
 import "./globals.css";
+import "./alpha.css";
 
 const body = Space_Grotesk({
   subsets: ["latin"],
@@ -28,15 +29,15 @@ const mono = IBM_Plex_Mono({
 });
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
-const socialImage = "/hero/anvilmark-hero-hit-only-poster.png";
+const socialImage = "/brand/logo-horizontal-on-light.png";
 
 const description =
-  "ANVILMARK is a free, local-first, vendor-neutral decision and conformance layer. It uses the intelligence you already have to turn an idea, repository, and explicit constraints into an evidence-backed architecture, model, and deployment contract — then checks that the implementation still conforms.";
+  "Anvilmark is a free, local-first development decision record. Connect bounded tasks, coding-agent and model choices, recorded runs, checks, human review and cost evidence. Bring your own agent.";
 
 export const metadata: Metadata = {
   ...(siteUrl ? { metadataBase: new URL(siteUrl) } : {}),
   title: {
-    default: "ANVILMARK — Forge decisions your agents can build against",
+    default: "Anvilmark — Good decisions. Kept on record.",
     template: "%s · ANVILMARK",
   },
   description,
@@ -62,16 +63,14 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "ANVILMARK",
-    title: "ANVILMARK — Forge decisions your agents can build against",
+    title: "Anvilmark — Good decisions. Kept on record.",
     description,
     ...(siteUrl
       ? {
           images: [
             {
               url: socialImage,
-              width: 1920,
-              height: 1080,
-              alt: "A line-drawn smith striking an anvil rendered as circuit-board traces.",
+              alt: "Anvilmark — a local-first development decision record.",
             },
           ],
         }
@@ -79,15 +78,15 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "ANVILMARK — Forge decisions your agents can build against",
+    title: "Anvilmark — Good decisions. Kept on record.",
     description,
     ...(siteUrl ? { images: [socialImage] } : {}),
   },
 };
 
 export const viewport: Viewport = {
-  colorScheme: "dark",
-  themeColor: "#000000",
+  colorScheme: "light",
+  themeColor: "#f3f0e7",
 };
 
 // Runs before first paint so scroll-reveal never flashes, and so no-JS or

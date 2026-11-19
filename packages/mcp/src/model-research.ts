@@ -182,7 +182,9 @@ export async function researchCandidateModel(
   );
   const catalog = await openModelCatalog(path);
   try {
-    const stored = catalog.storeSnapshot(snapshot);
+    const { id } = catalog.storeSnapshot(snapshot);
+    const stored = catalog.getById(id, { now: new Date(asOf) });
+    if (!stored) throw new Error("The saved model snapshot could not be read.");
     const result = {
       ok: true as const,
       tool: "research_candidate_model" as const,

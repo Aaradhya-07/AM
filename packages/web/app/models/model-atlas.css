@@ -37,3 +37,94 @@
   color: #0f172a;
   padding: 0.75rem 1rem;
 }
+
+/* Alpha research: retain the directory logic and source semantics, bring its
+   presentation into the shared ledger identity. */
+.model-atlas {
+  background: #f3f0e7;
+  color: #20221f;
+  font-family: var(--font-display), sans-serif;
+}
+.model-atlas h1 {
+  font-weight: 500;
+  font-size: clamp(36px, 4.8vw, 68px);
+  letter-spacing: -0.055em;
+}
+.model-atlas h2,
+.model-atlas h3 {
+  letter-spacing: -0.03em;
+}
+.model-atlas [class~="bg-slate-50"],
+.model-atlas [class~="bg-[#f5f6f7]"],
+.model-atlas [class~="bg-slate-100"] {
+  background-color: #eeeee3;
+}
+.model-atlas [class~="bg-white"] {
+  background-color: #fbfaf6;
+}
+.model-atlas [class~="bg-slate-950"],
+.model-atlas [class~="bg-blue-600"] {
+  background-color: #214c3a;
+}
+.model-atlas [class~="text-blue-700"],
+.model-atlas [class~="text-blue-600"] {
+  color: #214c3a;
+}
+.model-atlas [class~="border-slate-200"],
+.model-atlas [class~="border-slate-300"] {
+  border-color: #cdd0c2;
+}
+.model-atlas [class~="text-slate-900"],
+.model-atlas [class~="text-slate-950"] {
+  color: #20221f;
+}
+.model-atlas [class~="text-slate-500"],
+.model-atlas [class~="text-slate-600"] {
+  color: #5b6158;
+}
+.model-atlas button,
+.model-atlas input,
+.model-atlas select {
+  border-radius: 2px;
+  min-height: 40px;
+}
+.model-atlas [class~="rounded-full"] {
+  border-radius: 2px;
+}
+.model-atlas th {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.025em;
+}
+.model-atlas :focus-visible {
+  outline-color: #214c3a;
+}
+.model-atlas-skip:focus-visible {
+  background: #214c3a;
+  color: #f3f0e7;
+}
+@media (max-width: 640px) {
+  .model-atlas h1 {
+    font-size: 38px;
+  }
+}
+.model-atlas [class~="text-blue-800"],
+.model-atlas [class~="text-blue-950"] {
+  color: #214c3a;
+}
+.model-atlas [class~="border-blue-600"] {
+  border-color: #214c3a;
+}
+.model-atlas [class~="bg-blue-50"] {
+  background-color: #e6ebdf;
+}
+.model-atlas [class~="hover:bg-blue-50/60"]:hover {
+  background-color: #e6ebdf;
+}
+.model-atlas [class~="rounded-lg"] {
+  border-radius: 2px;
+}
+.model-atlas h1 {
+  line-height: 1.08;
+}

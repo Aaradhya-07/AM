@@ -143,13 +143,6 @@ try {
     copyFileSync(join(fixture, name), join(project, name));
   const plan = JSON.parse(readFileSync(join(fixture, "plan.json"), "utf8"));
   plan.architecture.allowed_changed_paths = ["label.mjs"];
-  plan.task.checks = [
-    {
-      name: "label-test",
-      argv: ["node", "--test", "--test-reporter=tap", "check.mjs"],
-      capture_output: true,
-    },
-  ];
   plan.phase = {
     id: "phase.label-normalization",
     outcome: "Repeated punctuation is normalized correctly",

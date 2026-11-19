@@ -123,10 +123,12 @@ describe("Model Atlas public snapshot", () => {
     const html = renderToStaticMarkup(
       createElement(ModelExplorer, { initialCatalog: catalog }),
     );
-    expect(html).toContain("Model Atlas");
-    expect(html).toContain("Find the right model offer");
+    expect(html).toContain("Research index / 01");
+    expect(html).toContain("Explore the possibilities.");
     expect(html).toContain("model listings");
-    expect(html).toContain(catalog.offers.find((offer) => offer.mode === "chat")!.name);
+    expect(html).toContain(
+      catalog.offers.find((offer) => offer.mode === "chat")!.name,
+    );
     expect(html).not.toContain("Loading model listings");
     expect(html).not.toContain("Synthetic preview");
   });

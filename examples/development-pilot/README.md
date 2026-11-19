@@ -24,8 +24,8 @@ ID. With `--keep`, the run records and bundle remain available under
 `.anvilmark/` in that project.
 
 1. **Show the plan and baseline.** Only `label.mjs` may change. The isolated
-   baseline runs three tests. One passes and two fail. The bundle already builds,
-   so the regression is in behavior.
+   baseline runs three tests. One passes and two fail. The plan requires the TAP
+   failure marker for repeated punctuation, and the scout confirms it.
 2. **Run the patch.** The stand-in edits `label.mjs`. The same test command now
    passes all three cases and esbuild writes `.anvilmark/build/label.mjs`.
 3. **Review the patch.** Have someone other than the author check that the export
@@ -40,8 +40,8 @@ ID. With `--keep`, the run records and bundle remain available under
 
 | Priority                | Implemented                                                                                                                                                                                                                                                                                                                  | Proposed                                                                                       |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Independent review      | An advisory Git diff check runs separately from the editor. An operator can review the patch, accept or reject the exact run, and record a reason. The terminal actor label records the interaction method.                                                                                                                  | A second-model reviewer, structured findings, and authenticated reviewer identity.             |
-| Verification            | Executes approved test and integration commands. Records arguments, exit status, duration, and completion time. An individual command can opt in to retaining bounded, sanitized stdout and stderr tails with `capture_output: true`.                                                                                        | Full log artifacts and CI attestation.                                                         |
+| Independent review      | An advisory Git diff check runs separately from the editor. An operator can review the patch, accept or reject the exact run, and record a reason. Plans can require separate spec-compliance and code-quality verdicts with findings.                                                                                       | A second-model reviewer and authenticated reviewer identity.                                   |
+| Verification            | Executes approved test and integration commands. Records arguments, exit status, duration, and completion time. A check can require a specific baseline exit status and output marker. Output tails are opt-in.                                                                                                              | Full log artifacts and CI attestation.                                                         |
 | Timeline                | `anvilmark development timeline --run ID [--json]` follows the verified handoff, approval when recorded, agent execution, checks, boundary result, and hash-matched review. It reads the existing local records.                                                                                                             | Web timeline and cross-run aggregation.                                                        |
 | Architecture compliance | Optional `architecture.allowed_changed_paths` lists exact repository-relative files. The check rejects out-of-scope visible Git changes, deleted or non-regular changed paths, and a different HEAD. It detects changes to the observed code state between verification commands and prevents acceptance of a violating run. | Dependency-direction, API compatibility, and semantic architecture rules for development runs. |
 

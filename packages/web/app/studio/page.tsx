@@ -1,23 +1,9 @@
 import type { Metadata } from "next";
-
-import { SiteFooter } from "../components/site-footer";
-import { SiteHeader } from "../components/site-header";
-import { StudioClient } from "./StudioClient";
-
+import { RetiredSurface } from "../components/retired-surface";
 export const metadata: Metadata = {
-  title: "Review bundle · ANVILMARK",
-  description:
-    "Review locally exported project review bundles in memory with zero cloud uploads or telemetry.",
+  title: "A new chapter",
+  robots: { index: false, follow: true },
 };
-
-export default function StudioPage() {
-  return (
-    <div className="min-h-screen bg-ink font-sans text-canvas selection:bg-gold selection:text-ink">
-      <SiteHeader />
-      <main className="pt-[var(--am-header-h)]">
-        <StudioClient />
-      </main>
-      <SiteFooter />
-    </div>
-  );
+export default function Page() {
+  return <RetiredSurface />;
 }

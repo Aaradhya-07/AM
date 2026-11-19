@@ -217,7 +217,58 @@ not proof of the stated root cause. Pass the ID with `development run
 --candidate ID --prompt-file FILE --handoff HANDOFF_ID`. The run rejects a
 handoff whose plan, commit, prompt, file hashes, or stored content changed. It
 records the hash of the full prompt actually sent, including the handoff.
-The handoff is optional; existing runs work without it.
+A handoff is optional for plans without baseline expectations.
+
+To require a baseline result, add `expected_baseline` to a task or integration
+check. This example requires a test runner to report a specific failing case.
+
+```json
+{
+  "name": "label-test",
+  "argv": ["node", "--test", "--test-reporter=tap", "check.mjs"],
+  "expected_baseline": {
+    "exit_code": 1,
+    "output_contains": "not ok 2 - collapses repeated punctuation"
+  }
+}
+```
+
+Use a marker that appears only when the intended assertion fails. Anvilmark
+matches the literal text in either stdout or stderr, even outside the captured
+output tail. A mismatch saves the observed baseline and causes `scout` to exit
+with status 1. `run` requires a matching handoff for that plan, commit, and
+prompt. The same check is expected to exit 0 after implementation.
+
+Add `"review_policy": "two_pass"` at the top level of the plan to require
+structured spec-compliance and code-quality verdicts. To record them, run
+`anvilmark development review --run ID --file .anvilmark/review-findings.json`
+from an interactive terminal. Store the input under `.anvilmark/` or outside
+the project so preparing the review leaves the observed code state intact.
+This example requests changes even if the tests passed.
+
+```json
+{
+  "spec_compliance": { "verdict": "pass", "findings": [] },
+  "code_quality": {
+    "verdict": "changes_requested",
+    "findings": [
+      {
+        "severity": "blocking",
+        "message": "Handle labels containing only separators.",
+        "path": "label.mjs",
+        "line": 2
+      }
+    ]
+  }
+}
+```
+
+A pass can include advisory findings. A changes-requested verdict requires at
+least one blocking finding. A review with both verdicts passing can accept a
+run that meets the existing verification gates. The terminal confirmation
+covers the exact run and findings. `development timeline --run ID [--json]`
+shows the findings and baseline evidence. Plans that omit the review policy
+can still use the existing accept/reject command or supply structured findings.
 
 Run records now also separate cached input from other tokens, count completed
 agent turns and turns with usage reports, record agent and check time, and

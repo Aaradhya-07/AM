@@ -51,6 +51,7 @@ import {
   verifiedHandoffFiles,
   type DevelopmentHandoff,
 } from "./development-handoff.js";
+import { ReviewFindings, reviewPasses } from "./development-review.js";
 import {
   matchedDevelopmentEvidence,
   type SelectionEvidenceRecord,
@@ -72,7 +73,7 @@ export const DEVELOPMENT_USAGE = `anvilmark development <landscape|catalog|plan|
                              run an exact setup, collect metadata and check the result
   run --model ID --prompt-file FILE [--handoff ID]
                              use a model name when it identifies one candidate
-  review --run ID [--decision accept|reject] [--reason TEXT] [--agent-test]
+  review --run ID [--file FINDINGS.json] [--decision accept|reject] [--reason TEXT] [--agent-test]
                              review the exact run; agent-test is excluded from outcome evidence
   timeline --run ID [--json] show linked run evidence in observed order
   close --run ID             seal a reviewed phase against its exact committed result
@@ -86,6 +87,12 @@ const Check = z.strictObject({
   name: Id,
   argv: z.array(Nonempty).min(1),
   capture_output: z.boolean().optional(),
+  expected_baseline: z
+    .strictObject({
+      exit_code: z.number().int().min(0).max(255),
+      output_contains: Nonempty.max(1000).optional(),
+    })
+    .optional(),
 });
 const PhaseContract = z.strictObject({
   id: Id,
@@ -193,6 +200,7 @@ const Plan = z.strictObject({
     checks: z.array(Check).min(1),
   }),
   phase: PhaseContract.optional(),
+  review_policy: z.literal("two_pass").optional(),
   restrictions: z.strictObject({
     allowed_models: z.array(Nonempty).min(1),
     max_estimated_usd: z.number().nonnegative().nullable(),
@@ -339,6 +347,7 @@ interface RunReview {
   readonly decision?: "accepted" | "rejected";
   readonly accepted_at?: string;
   readonly reviewed_at?: string;
+  readonly findings?: ReviewFindings;
   readonly reason?: string;
   readonly actor: "interactive_local_operator" | "agent_test_operator";
 }
@@ -902,6 +911,14 @@ function printPlan(
       `  Attempt limit: ${plan.phase.max_attempts}; escalation: ${plan.phase.escalation}\n`,
     );
   }
+  if (plan.review_policy === "two_pass")
+    context.io.stdout("  Review policy: spec compliance and code quality.\n");
+  for (const check of plannedChecks(plan)) {
+    if (check.expected_baseline)
+      context.io.stdout(
+        `  Baseline expectation for ${check.name}: ${JSON.stringify(check.expected_baseline)}.\n`,
+      );
+  }
   context.io.stdout(`Plan hash: ${hash}\n`);
   for (const option of comparison(plan, resolutions, now)) {
     const cost =
@@ -924,8 +941,17 @@ async function commandOutput(
   program: string,
   args: string[],
   cwd: string,
-  options: { maxOutputChars?: number; timeoutMs?: number } = {},
-): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  options: {
+    maxOutputChars?: number;
+    timeoutMs?: number;
+    outputContains?: string;
+  } = {},
+): Promise<{
+  code: number | null;
+  stdout: string;
+  stderr: string;
+  outputMatched: boolean;
+}> {
   return new Promise((resolveResult, reject) => {
     const child = spawn(program, args, {
       cwd,
@@ -937,18 +963,25 @@ async function commandOutput(
       options.timeoutMs === undefined
         ? null
         : setTimeout(() => child.kill("SIGKILL"), options.timeoutMs);
-    const append = (previous: string, chunk: Buffer): string =>
-      (previous + chunk.toString("utf8")).slice(
-        -(options.maxOutputChars ?? Number.MAX_SAFE_INTEGER),
-      );
-    child.stdout.on(
-      "data",
-      (chunk: Buffer) => (stdout = append(stdout, chunk)),
+    const outputContains = options.outputContains;
+    let outputMatched = false;
+    // Keep enough of each stream to match a literal split across chunks.
+    const limit = Math.max(
+      options.maxOutputChars ?? Number.MAX_SAFE_INTEGER,
+      outputContains?.length ?? 0,
     );
-    child.stderr.on(
-      "data",
-      (chunk: Buffer) => (stderr = append(stderr, chunk)),
-    );
+    const append = (previous: string, chunk: string): string => {
+      const next = previous + chunk;
+      if (outputContains && !outputMatched)
+        outputMatched = next.includes(outputContains);
+      return next.slice(-limit);
+    };
+    child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
+      stdout = append(stdout, chunk);
+    });
+    child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
+      stderr = append(stderr, chunk);
+    });
     child.on("error", (error) => {
       if (timer) clearTimeout(timer);
       reject(error);
@@ -959,6 +992,7 @@ async function commandOutput(
         code,
         stdout,
         stderr,
+        outputMatched,
       });
     });
   });
@@ -1101,23 +1135,44 @@ async function runCodex(
   });
 }
 
+function plannedChecks(plan: DevelopmentPlan): z.infer<typeof Check>[] {
+  return [...plan.task.checks, ...(plan.phase?.integration_checks ?? [])];
+}
+
+function unmetBaseline(
+  plan: DevelopmentPlan,
+  handoff: DevelopmentHandoff | null,
+): string[] {
+  return plannedChecks(plan).flatMap((check, index) =>
+    check.expected_baseline &&
+    handoff?.baseline_checks[index]?.baseline_expectation?.passed !== true
+      ? [check.name]
+      : [],
+  );
+}
+
 async function runCheck(
   root: string,
   check: z.infer<typeof Check>,
   clock: () => string,
   timeoutMs?: number,
+  baseline = false,
 ): Promise<CheckResult> {
   const start = Date.now();
   let code: number | null = null;
   let stdout = "";
   let stderr = "";
+  let outputMatched = false;
+  const expectation = baseline ? check.expected_baseline : undefined;
+  const marker = expectation?.output_contains;
   try {
-    ({ code, stdout, stderr } = await commandOutput(
+    ({ code, stdout, stderr, outputMatched } = await commandOutput(
       check.argv[0] ?? "",
       check.argv.slice(1),
       root,
       {
         maxOutputChars: 2_000,
+        ...(marker ? { outputContains: marker } : {}),
         ...(timeoutMs === undefined ? {} : { timeoutMs }),
       },
     ));
@@ -1130,6 +1185,16 @@ async function runCheck(
     exit_code: code,
     duration_ms: Date.now() - start,
     finished_at: clock(),
+    ...(expectation
+      ? {
+          baseline_expectation: {
+            expected_exit_code: expectation.exit_code,
+            output_matched: marker ? outputMatched : null,
+            passed:
+              code === expectation.exit_code && (!marker || outputMatched),
+          },
+        }
+      : {}),
     ...(check.capture_output
       ? {
           output_tail: {
@@ -1164,18 +1229,15 @@ async function scoutHandoff(
     trackedPaths,
     prompt,
     plan.task.summary,
-    [...plan.task.checks, ...(plan.phase?.integration_checks ?? [])],
+    plannedChecks(plan),
   );
   const checkout = join(tmpdir(), `anvilmark-scout-${randomUUID()}`);
   await git(root, ["worktree", "add", "--detach", checkout, baseCommit]);
   let checks: CheckResult[];
   try {
     checks = [];
-    for (const check of [
-      ...plan.task.checks,
-      ...(plan.phase?.integration_checks ?? []),
-    ])
-      checks.push(await runCheck(checkout, check, clock, 120_000));
+    for (const check of plannedChecks(plan))
+      checks.push(await runCheck(checkout, check, clock, 120_000, true));
   } finally {
     await git(root, ["worktree", "remove", "--force", checkout]);
   }
@@ -1455,6 +1517,8 @@ async function requirePhasePrerequisites(
       !review ||
       !archived ||
       archived.phase?.id !== id ||
+      (archived.review_policy === "two_pass" &&
+        !reviewPasses(review.findings)) ||
       closure.plan_hash !== run.plan_hash ||
       closure.run_hash !== digest(JSON.stringify(run)) ||
       review.run_hash !== closure.run_hash ||
@@ -1579,13 +1643,17 @@ async function syncDevelopmentEvidence(root: string): Promise<{
         continue;
       }
       const completed =
+        !run.architecture_check?.violations.length &&
         run.agent_exit_code === 0 &&
         run.changed_paths.length > 0 &&
         run.checks.every((check) => check.exit_code === 0);
       const outcome: DevelopmentEvidenceRow["outcome"] =
         reviewValid && review?.decision === "rejected"
           ? "rejected"
-          : reviewValid && completed && review?.decision !== "rejected"
+          : reviewValid &&
+              completed &&
+              (plan.review_policy !== "two_pass" ||
+                reviewPasses(review?.findings))
             ? "accepted"
             : !completed
               ? "failed"
@@ -2041,13 +2109,19 @@ export async function developmentCommand(
     const { id, handoff } = await scoutHandoff(root, plan, hash, prompt, () =>
       context.io.clock(),
     );
+    const unmet = unmetBaseline(plan, handoff);
     if (flag(parsed, "json")) writeJson(context.io, { id, ...handoff });
     else {
       context.io.stdout(`Saved verified handoff ${id}.\n`);
       context.io.stdout(`${renderVerifiedHandoff(handoff)}\n`);
-      context.io.stdout(`Use --handoff ${id} with development run.\n`);
+      if (!unmet.length)
+        context.io.stdout(`Use --handoff ${id} with development run.\n`);
     }
-    return EXIT.ok;
+    if (unmet.length)
+      context.io.stderr(
+        `Baseline expectations unmet: ${unmet.join(", ")}. Evidence saved as ${id}.\n`,
+      );
+    return unmet.length ? EXIT.failed : EXIT.ok;
   }
   if (sub === "run") {
     const { plan, hash } = await loadPlan(root);
@@ -2107,6 +2181,11 @@ export async function developmentCommand(
             baseCommit,
             sourcePrompt,
           );
+    const unmet = unmetBaseline(plan, handoff);
+    if (unmet.length)
+      throw new Error(
+        `Run needs a scout handoff that meets baseline expectations: ${unmet.join(", ")}`,
+      );
     const prompt =
       handoff === null
         ? sourcePrompt
@@ -2161,10 +2240,7 @@ export async function developmentCommand(
 
     const checks: CheckResult[] = [];
     if (violations.length === 0) {
-      for (const check of [
-        ...plan.task.checks,
-        ...(plan.phase?.integration_checks ?? []),
-      ]) {
+      for (const check of plannedChecks(plan)) {
         checks.push(await runCheck(root, check, () => context.io.clock()));
         if (!allowed) continue;
         const afterCheck = await observedChange(root);
@@ -2400,6 +2476,7 @@ export async function developmentCommand(
           actor: matchingReview.actor,
           decision: matchingReview.decision ?? "accepted",
           reason: matchingReview.reason,
+          findings: matchingReview.findings,
         },
       });
 
@@ -2423,6 +2500,10 @@ export async function developmentCommand(
             `${prefix}  ${check.name} · exit ${check.exit_code ?? "error"} · ${check.duration_ms} ms\n`,
           );
           context.io.stdout(`  argv ${JSON.stringify(check.argv)}\n`);
+          if (check.baseline_expectation)
+            context.io.stdout(
+              `  baseline expectation ${JSON.stringify(check.baseline_expectation)}\n`,
+            );
           for (const stream of ["stdout", "stderr"] as const) {
             const output = check.output_tail?.[stream];
             if (output)
@@ -2446,7 +2527,16 @@ export async function developmentCommand(
   }
   if (sub === "review") {
     const runId = requiredOption(parsed, "run", DEVELOPMENT_USAGE);
-    const decision = parsed.values["decision"] ?? "accept";
+    const reviewFile = parsed.values.file;
+    const findings =
+      typeof reviewFile === "string"
+        ? ReviewFindings.parse(
+            JSON.parse(await readFile(resolve(root, reviewFile), "utf8")),
+          )
+        : undefined;
+    const decision =
+      parsed.values["decision"] ??
+      (findings && !reviewPasses(findings) ? "reject" : "accept");
     if (decision !== "accept" && decision !== "reject")
       throw new UsageError(
         "decision must be accept or reject",
@@ -2456,11 +2546,17 @@ export async function developmentCommand(
       typeof parsed.values["reason"] === "string"
         ? parsed.values["reason"].trim()
         : undefined;
-    if (decision === "reject" && !reason)
+    if (decision === "reject" && !reason && !findings)
       throw new UsageError("rejection requires --reason", DEVELOPMENT_USAGE);
     if (!Id.safeParse(runId).success)
       throw new UsageError("invalid run id", DEVELOPMENT_USAGE);
-    const { hash } = await loadPlan(root);
+    const { plan, hash } = await loadPlan(root);
+    if (plan.review_policy === "two_pass" && !findings)
+      throw new Error(
+        "plan requires spec compliance and code quality findings via --file",
+      );
+    if (findings && (decision === "accept") !== reviewPasses(findings))
+      throw new Error("decision conflicts with the structured review verdicts");
     const run = (await loadRuns(root)).find((entry) => entry.id === runId);
     if (!run) throw new Error("run not found");
     if (
@@ -2496,11 +2592,20 @@ export async function developmentCommand(
     context.io.stdout(
       `Run ${run.id}: ${run.changed_paths.join(", ") || "no changed paths"}; checks ${run.checks.map((check) => `${check.name}=${check.exit_code ?? "error"}`).join(", ")}; model identity ${run.model_identity}; cash cost ${run.estimated_usd_from_observed_tokens === null ? "unknown" : "estimated only"}.\n`,
     );
-    if (!agentTest) {
-      const answer = await context.io.prompt(
-        `Type ${runHash.slice(0, 12)} to ${decision} this exact run and code state: `,
+    if (findings)
+      context.io.stdout(
+        `Review findings: ${JSON.stringify(findings, null, 2)}\n`,
       );
-      if (answer?.trim() !== runHash.slice(0, 12))
+    if (!agentTest) {
+      const confirmation = (
+        findings
+          ? digest(JSON.stringify({ runHash, decision, reason, findings }))
+          : runHash
+      ).slice(0, 12);
+      const answer = await context.io.prompt(
+        `Type ${confirmation} to ${decision} this exact run and code state: `,
+      );
+      if (answer?.trim() !== confirmation)
         throw new Cancelled("Run was not reviewed.");
       if (
         (await loadPlan(root)).hash !== hash ||
@@ -2517,9 +2622,9 @@ export async function developmentCommand(
       run_hash: runHash,
       decision: decision === "accept" ? "accepted" : "rejected",
       reviewed_at: reviewedAt,
-      ...(decision === "accept"
-        ? { accepted_at: reviewedAt, ...(reason ? { reason } : {}) }
-        : { reason: reason! }),
+      ...(decision === "accept" ? { accepted_at: reviewedAt } : {}),
+      ...(reason ? { reason } : {}),
+      ...(findings ? { findings } : {}),
       actor: agentTest ? "agent_test_operator" : "interactive_local_operator",
     } satisfies RunReview);
     context.io.stdout(
@@ -2543,6 +2648,7 @@ export async function developmentCommand(
       !review ||
       review.run_hash !== runHash ||
       review.decision !== "accepted" ||
+      (plan.review_policy === "two_pass" && !reviewPasses(review.findings)) ||
       review.actor !== "interactive_local_operator" ||
       run.approval_at_start !== "current" ||
       run.approval_actor_at_start !== "interactive_local_operator" ||
