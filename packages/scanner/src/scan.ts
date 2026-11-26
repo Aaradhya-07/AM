@@ -71,6 +71,7 @@ export interface InventoryInput {
 
 export interface ResolutionInput extends InventoryInput {
   readonly inventory: Inventory;
+  readonly onLocalImport?: ((from: string, to: string) => void) | undefined;
 }
 
 export interface ResolutionOutput {
@@ -135,9 +136,12 @@ export const DEFAULT_PIPELINE: ScanPipeline = {
   resolution: {
     id: "typescript-program",
     version: "1",
-    run: ({ reader, config, inventory, recognizers }) => {
+    run: ({ reader, config, inventory, recognizers, onLocalImport }) => {
       const setup = createCompilerSetup(reader, config, inventory);
-      return { setup, imports: resolveImports(setup, reader, recognizers) };
+      return {
+        setup,
+        imports: resolveImports(setup, reader, recognizers, onLocalImport),
+      };
     },
   },
   semantics: {
@@ -244,6 +248,7 @@ export interface ScanInput {
   readonly pipeline?: Partial<ScanPipeline>;
   readonly budget?: number;
   readonly maxFileBytes?: number;
+  readonly onLocalImport?: ((from: string, to: string) => void) | undefined;
 }
 
 export interface ScanOutcome {
@@ -305,6 +310,7 @@ export function scanRepository(input: ScanInput): ScanOutcome {
     config: input.config,
     recognizers,
     inventory,
+    onLocalImport: input.onLocalImport,
   });
   stage("semantics", files);
   const semantic = pipeline.semantics.run({

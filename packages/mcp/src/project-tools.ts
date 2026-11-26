@@ -1,3 +1,4 @@
+import { registerSliceTools } from "./slice-tools.js";
 import { registerHardwareTools } from "./hardware-tools.js";
 import { DecisionBriefInputSchema, draftDecisionBrief } from "./assessment.js";
 import {
@@ -63,6 +64,9 @@ export interface ProjectServerOptions {
   readonly agentAssessment?: boolean;
   readonly hardwareSizing?: boolean;
   readonly hardwareProbe?: boolean;
+  readonly sliceExecution?: boolean;
+  readonly sliceReadOnly?: boolean;
+  readonly sliceApprovedCommands?: readonly string[];
   /** Directory containing `.anvilmark/`. */
   readonly root: string;
   readonly projection: ProjectionName;
@@ -553,5 +557,7 @@ export function createProjectServer(options: ProjectServerOptions): McpServer {
     );
   }
   registerHardwareTools(server, options);
+  if (options.sliceExecution || options.sliceReadOnly)
+    registerSliceTools(server, options);
   return server;
 }

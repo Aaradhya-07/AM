@@ -350,3 +350,43 @@ describe("upsertPlanBlock", () => {
     );
   });
 });
+
+it("keeps v1 quota and strict slice contracts in the active plan", async () => {
+  const root = await tempDir();
+  const input = bundle();
+  Object.assign(input, { quotaMode: "conserve" });
+  const contract = {
+    allowedGlobs: ["src/**"],
+    forbiddenGlobs: [".env*"],
+    verificationCommands: ["pnpm test"],
+    allowDependencyChanges: false,
+    expectedBoundaries: ["Auth"],
+    reviewerFamily: "anthropic",
+  };
+  Object.assign(input.plan.tasks[0]!, { contract });
+  const file = join(root, "bundle.json");
+  await writeFile(file, JSON.stringify(input));
+  const result = await cli(
+    ["apply-plan", "--file", file, "-C", root],
+    scriptedIo({ cwd: root }),
+  );
+  expect(result).toBe(0);
+  const active = JSON.parse(
+    await readFile(
+      join(root, ".anvilmark/development/active-plan.json"),
+      "utf8",
+    ),
+  );
+  expect(active.quotaMode).toBe("conserve");
+  expect(active.plan.tasks[0].contract).toEqual(contract);
+  Object.assign(input.plan.tasks[0]!, {
+    contract: { ...contract, extra: true },
+  });
+  await writeFile(file, JSON.stringify(input));
+  expect(
+    await cli(
+      ["apply-plan", "--file", file, "-C", root],
+      scriptedIo({ cwd: root }),
+    ),
+  ).toBe(1);
+});

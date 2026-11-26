@@ -22,3 +22,12 @@ export * from "./scan.js";
 export * from "./conformance.js";
 export * from "./commands/login.js";
 export * from "./commands/push.js";
+export { loadSlicePlan } from "./commands/slice-storage.js";
+export { verifySlice, SliceId } from "./commands/verify-slice.js";
+export type { SliceVerificationReport } from "./commands/verify-slice.js";
+export {
+  appendSliceOutcome,
+  readSliceOutcomes,
+  SliceOutcomeInputSchema,
+} from "./commands/outcomes.js";
+export { sliceDigest } from "./commands/slice-worktree.js";

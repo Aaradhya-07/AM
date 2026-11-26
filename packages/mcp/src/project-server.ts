@@ -21,6 +21,9 @@ Protocol messages use stdout only; diagnostics go to stderr.
 a local server does not by itself authorize a client to send them to a remote model.
 --as-of fixes the instant evidence freshness is evaluated; by default each call
 uses the current time and reports it as as_of.
+--slice-read-only exposes slice lookup and static verification.
+--slice-execution exposes active-plan slice instructions, local checks and outcome recording.
+--allow-check COMMAND approves an exact shell command for slice verification (repeatable).
 --hardware-sizing adds pure catalog and estimate tools.
 --agent-assessment adds draft_decision_brief, propose_decision_options,
 compare_decision_options and research_candidate_model. Research fetches a
@@ -38,6 +41,9 @@ try {
   ({ values } = parseArgs({
     options: {
       "project-dir": { type: "string" },
+      "allow-check": { type: "string", multiple: true },
+      "slice-read-only": { type: "boolean" },
+      "slice-execution": { type: "boolean" },
       "hardware-sizing": { type: "boolean" },
       "agent-assessment": { type: "boolean" },
       "hardware-probe": { type: "boolean" },
@@ -74,11 +80,17 @@ if (asOf !== undefined) {
 if (values["project-dir"] === undefined) {
   fail("--project-dir is required");
 }
+if (values["slice-execution"] && values["slice-read-only"]) {
+  fail("Choose either --slice-execution or --slice-read-only");
+}
 const root = resolve(values["project-dir"]);
 
 const server = createProjectServer({
   root,
   projection,
+  sliceReadOnly: values["slice-read-only"] === true,
+  sliceExecution: values["slice-execution"] === true,
+  sliceApprovedCommands: values["allow-check"] ?? [],
   hardwareSizing: values["hardware-sizing"] === true,
   agentAssessment: values["agent-assessment"] === true,
   hardwareProbe: values["hardware-probe"] === true,

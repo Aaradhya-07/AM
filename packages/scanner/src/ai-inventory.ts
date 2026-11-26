@@ -348,6 +348,7 @@ export interface AiInventoryInput {
   readonly deniedDirectories?: readonly string[];
   readonly recognizers?: RecognizerSet;
   readonly budget?: number;
+  readonly onLocalImport?: (from: string, to: string) => void;
   /** Observes stage starts so a caller can show progress; changes nothing. */
   readonly onStage?: (event: {
     readonly stage: string;
@@ -372,6 +373,7 @@ export function inventoryRepository(input: AiInventoryInput): {
     stateRevision: null,
     config: defaultScanConfig(),
     configSource: { source: "default" },
+    onLocalImport: input.onLocalImport,
     ...(input.recognizers === undefined
       ? {}
       : { recognizers: input.recognizers }),
