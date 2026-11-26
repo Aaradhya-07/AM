@@ -53,7 +53,7 @@ export const SliceVerificationReportSchema = z.strictObject({
         ]),
         path: z.string().trim().max(400).optional(),
         command: z.string().trim().max(400).optional(),
-        detail: z.string().trim().min(1).max(2000),
+        detail: z.string().max(4000),
       }),
     )
     .max(200),

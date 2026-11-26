@@ -319,7 +319,21 @@ export function subscribeBridgeEvents(
 
   const handleSliceStatus = (event: MessageEvent) => {
     try {
-      const parsed = JSON.parse(String(event.data)) as {
+      const rawJson: unknown = JSON.parse(String(event.data));
+      const directReport = SliceVerificationReportSchema.safeParse(rawJson);
+      if (directReport.success) {
+        onEvent({
+          type: "slice_status",
+          data: {
+            sliceId: directReport.data.sliceId,
+            status: directReport.data.passed ? "passed" : "failed",
+            report: directReport.data,
+          },
+        });
+        return;
+      }
+
+      const parsed = rawJson as {
         sliceId?: unknown;
         status?: unknown;
         report?: unknown;
