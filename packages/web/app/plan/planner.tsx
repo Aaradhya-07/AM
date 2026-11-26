@@ -26,15 +26,25 @@ const defaults = {
 
 export function Planner({
   configured,
+  configuredModel = "",
   serverGemini,
 }: {
   configured: boolean;
+  configuredModel?: string;
   serverGemini: boolean;
 }) {
+  const providerDefaults: Record<Provider, string> = {
+    ...defaults,
+    configured: configuredModel,
+  };
   const [idea, setIdea] = useState("");
   const [context, setContext] = useState("");
-  const [provider, setProvider] = useState<Provider>("google");
-  const [model, setModel] = useState(defaults.google);
+  const [provider, setProvider] = useState<Provider>(
+    configured ? "configured" : "google",
+  );
+  const [model, setModel] = useState(
+    configured ? configuredModel : defaults.google,
+  );
   const [key, setKey] = useState("");
   const [strict, setStrict] = useState(false);
   const [models, setModels] = useState<(Candidate & { id: number })[]>([
@@ -78,11 +88,11 @@ export function Planner({
       setIdea(draft.idea);
       setContext(`Planning depth: ${betaPlanningDepth[draft.effort]}`);
       setProvider(selectedProvider);
-      setModel(defaults[selectedProvider]);
+      setModel(providerDefaults[selectedProvider]);
     } catch {
       // Keep the planner usable when there is no accessible Beta draft.
     }
-  }, [configured]);
+  }, [configured, configuredModel]);
 
   function updateModel(id: number, patch: Partial<Candidate>) {
     setModels((current) =>
@@ -216,7 +226,7 @@ export function Planner({
                 onChange={(event) => {
                   const selected = event.target.value as Provider;
                   setProvider(selected);
-                  setModel(defaults[selected]);
+                  setModel(providerDefaults[selected]);
                   setKey("");
                 }}
               >

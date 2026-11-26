@@ -6,6 +6,10 @@ import {
   type GeneratedPlan,
   type PlanningInput,
 } from "../lib/planner";
+import {
+  deriveModelsUrl,
+  listSelfHostedModels,
+} from "../lib/self-hosted-models";
 
 const request: PlanningInput = {
   idea: "Prevent duplicate CSV imports.",
@@ -118,6 +122,29 @@ describe("planning route", () => {
     expect(upstream.body).not.toContain("server-test-key");
   });
 
+  it("falls back to the server-side OpenAI key when the form key is empty", async () => {
+    vi.stubEnv("ANVILMARK_OPENAI_API_KEY", "server-openai-key");
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: JSON.stringify(draft) } }],
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const response = await submit({
+      ...request,
+      provider: "openai",
+      model: "gpt-5-mini",
+      key: "",
+    });
+    expect(response.status).toBe(200);
+    const [url, upstream] = fetch.mock.calls[0]!;
+    expect(url).toBe("https://api.openai.com/v1/chat/completions");
+    expect(upstream.headers.Authorization).toBe("Bearer server-openai-key");
+    expect(upstream.body).not.toContain("server-openai-key");
+  });
+
   it("rejects unknown execution models and missing Strict mode verification", async () => {
     const fetch = vi
       .fn()
@@ -144,5 +171,70 @@ describe("planning route", () => {
     expect(handoff).toContain("Strict verification requirements");
     expect(handoff).toContain(request.idea);
     expect(handoff).not.toContain(request.key);
+  });
+
+  it("sends structured json_schema requests to configured self-hosted endpoints and parses <think>-wrapped output", async () => {
+    vi.stubEnv(
+      "ANVILMARK_PLANNER_ENDPOINT",
+      "http://am-server:8080/v1/chat/completions",
+    );
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: `<think>checking constraints</think>\n${JSON.stringify(draft)}`,
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const response = await submit({
+      ...request,
+      provider: "configured",
+      model: "qwen3.5-9b",
+      key: "",
+    });
+    expect(response.status).toBe(200);
+    const [url, upstream] = fetch.mock.calls[0]!;
+    expect(url).toBe("http://am-server:8080/v1/chat/completions");
+    const sent = JSON.parse(upstream.body);
+    expect(sent.model).toBe("qwen3.5-9b");
+    expect(sent.response_format.type).toBe("json_schema");
+    expect(
+      sent.response_format.json_schema.schema.properties.tasks.items.properties
+        .model.enum,
+    ).toEqual(["gpt-5-mini", "gpt-5"]);
+  });
+
+  it("discovers self-hosted models from /v1/models with loaded models sorted first", async () => {
+    expect(deriveModelsUrl("http://am-server:8080/v1/chat/completions")).toBe(
+      "http://am-server:8080/v1/models",
+    );
+    vi.stubEnv(
+      "ANVILMARK_PLANNER_ENDPOINT",
+      "http://am-server:8080/v1/chat/completions",
+    );
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [
+            { id: "gemma-4-12b", status: { value: "unloaded" } },
+            { id: "qwen3.5-9b", status: { value: "loaded" } },
+          ],
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const models = await listSelfHostedModels();
+    expect(models.map((item) => item.id)).toEqual([
+      "qwen3.5-9b",
+      "gemma-4-12b",
+    ]);
+    expect(models[0]?.label).toBe("Qwen 3.5 9B");
+    expect(models[0]?.status).toBe("loaded");
   });
 });

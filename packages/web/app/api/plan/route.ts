@@ -15,6 +15,51 @@ function error(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
 }
 
+function buildPlanSchema(
+  candidateModels: string[],
+  strict: boolean,
+): Record<string, unknown> {
+  const schema = z.toJSONSchema(PlanOutput) as Record<string, unknown>;
+  const props = schema.properties as Record<string, Record<string, unknown>>;
+  if (strict && props?.security) {
+    props.security.minItems = 1;
+  }
+  const taskItems = props?.tasks?.items as
+    { properties?: Record<string, Record<string, unknown>> } | undefined;
+  const taskProps = taskItems?.properties;
+  if (taskProps && candidateModels.length > 0) {
+    taskProps.model = {
+      type: "string",
+      enum: candidateModels,
+    };
+    const alternativesItems = taskProps.alternatives?.items as
+      { properties?: Record<string, Record<string, unknown>> } | undefined;
+    if (alternativesItems?.properties) {
+      alternativesItems.properties.model = {
+        type: "string",
+        enum: candidateModels,
+      };
+    }
+    if (candidateModels.length > 1 && taskProps.alternatives) {
+      taskProps.alternatives.minItems = 1;
+    }
+  }
+  return schema;
+}
+
+function extractJsonText(raw: string): string {
+  const stripped = raw
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .trim()
+    .replace(/^\x60{3}(?:json)?\s*|\s*\x60{3}$/gi, "")
+    .trim();
+  if (stripped.startsWith("{")) return stripped;
+  const start = stripped.indexOf("{");
+  const end = stripped.lastIndexOf("}");
+  if (start >= 0 && end > start) return stripped.slice(start, end + 1);
+  return stripped;
+}
+
 export async function POST(request: Request) {
   if (request.headers.get("sec-fetch-site") === "cross-site")
     return error("Open the planner directly to submit a request.", 403);
@@ -54,7 +99,9 @@ export async function POST(request: Request) {
     suppliedKey ||
     (provider === "google"
       ? (process.env.ANVILMARK_GEMINI_API_KEY?.trim() ?? "")
-      : "");
+      : provider === "openai"
+        ? (process.env.ANVILMARK_OPENAI_API_KEY?.trim() ?? "")
+        : "");
   const endpoint =
     provider === "configured"
       ? process.env.ANVILMARK_PLANNER_ENDPOINT
@@ -69,7 +116,9 @@ export async function POST(request: Request) {
   if (!key && provider !== "configured")
     return error("Enter your provider API key.", 400);
 
-  const instruction = `${system}\nSchema: ${JSON.stringify(z.toJSONSchema(PlanOutput))}`;
+  const candidateModels = details.candidates.map((item) => item.model);
+  const planSchema = buildPlanSchema(candidateModels, details.strict);
+  const instruction = `${system}\nSchema: ${JSON.stringify(planSchema)}`;
   const user = JSON.stringify({
     ...details,
     candidates: details.candidates.map((candidate) => ({
@@ -77,6 +126,14 @@ export async function POST(request: Request) {
       publishedApiRatePerMillion: candidateRate(candidate) ?? null,
     })),
   });
+  const baseConfiguredInput = {
+    model,
+    messages: [
+      { role: "system", content: instruction },
+      { role: "user", content: user },
+    ],
+    max_tokens: 8000,
+  };
   const input =
     provider === "google"
       ? {
@@ -87,35 +144,60 @@ export async function POST(request: Request) {
             maxOutputTokens: 8000,
           },
         }
-      : {
-          model,
-          messages: [
-            { role: "system", content: instruction },
-            { role: "user", content: user },
-          ],
-          ...(provider === "openai"
-            ? {
-                response_format: { type: "json_object" },
-                max_completion_tokens: 8000,
-              }
-            : { max_tokens: 8000 }),
-        };
+      : provider === "openai"
+        ? {
+            model,
+            messages: [
+              { role: "system", content: instruction },
+              { role: "user", content: user },
+            ],
+            response_format: { type: "json_object" },
+            max_completion_tokens: 8000,
+          }
+        : {
+            ...baseConfiguredInput,
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "anvilmark_plan",
+                strict: true,
+                schema: planSchema,
+              },
+            },
+            chat_template_kwargs: { enable_thinking: false },
+          };
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(provider === "google"
+      ? { "x-goog-api-key": key }
+      : key
+        ? { Authorization: `Bearer ${key}` }
+        : {}),
+  };
+  const timeoutMs = provider === "configured" ? 240_000 : 90_000;
   try {
-    const response = await fetch(endpoint, {
+    let response = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(provider === "google"
-          ? { "x-goog-api-key": key }
-          : key
-            ? { Authorization: `Bearer ${key}` }
-            : {}),
-      },
+      headers,
       body: JSON.stringify(input),
       redirect: "error",
       cache: "no-store",
-      signal: AbortSignal.timeout(90_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
+    // Fallback for OpenAI-compatible self-hosted endpoints that reject json_schema or chat_template_kwargs.
+    if (
+      provider === "configured" &&
+      (response.status === 400 || response.status === 422)
+    ) {
+      response = await fetch(endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(baseConfiguredInput),
+        redirect: "error",
+        cache: "no-store",
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    }
     if (!response.ok) {
       if (response.status === 429)
         return error(
@@ -147,9 +229,7 @@ export async function POST(request: Request) {
     }
     try {
       const plan = validatePlan(
-        JSON.parse(
-          content.trim().replace(/^\x60{3}(?:json)?\s*|\s*\x60{3}$/gi, ""),
-        ),
+        JSON.parse(extractJsonText(content)),
         parsed.data,
       );
       return NextResponse.json(

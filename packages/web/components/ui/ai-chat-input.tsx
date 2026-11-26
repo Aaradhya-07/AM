@@ -90,6 +90,9 @@ type SpeechWindow = Window & {
 export interface PromptOption {
   id: string;
   label: string;
+  badge?: string;
+  badgeTone?: "ready" | "muted";
+  group?: string;
 }
 
 export interface PromptInputProps {
@@ -101,9 +104,17 @@ export interface PromptInputProps {
   ) => void;
   models: readonly [PromptOption, ...PromptOption[]];
   efforts: readonly [PromptOption, ...PromptOption[]];
+  model?: string;
+  onModelChange?: (id: string) => void;
   placeholder?: string;
+  submitLabel?: string;
   minLength: number;
   maxLength: number;
+  settled?: boolean;
+  busy?: boolean;
+  onCancel?: () => void;
+  toolbarExtra?: React.ReactNode;
+  focusTrigger?: number;
 }
 
 const maxAttachments = 6;
@@ -115,11 +126,24 @@ export function PromptInput({
   onSubmit,
   models,
   efforts,
+  model: controlledModel,
+  onModelChange,
   placeholder = "Describe what you want to build…",
+  submitLabel = "Generate plan",
   minLength,
   maxLength,
+  settled = false,
+  busy = false,
+  onCancel,
+  toolbarExtra,
+  focusTrigger = 0,
 }: PromptInputProps) {
-  const [model, setModel] = useState(models[0].id);
+  const [internalModel, setInternalModel] = useState(models[0].id);
+  const model = controlledModel ?? internalModel;
+  const setModel = (next: string) => {
+    setInternalModel(next);
+    onModelChange?.(next);
+  };
   const [effortIndex, setEffortIndex] = useState(
     Math.min(1, efforts.length - 1),
   );
@@ -147,7 +171,11 @@ export function PromptInput({
     if (!input) return;
     input.style.height = "0px";
     input.style.height = `${input.scrollHeight}px`;
-  }, [value]);
+  }, [value, settled]);
+
+  useEffect(() => {
+    if (focusTrigger > 0) textarea.current?.focus();
+  }, [focusTrigger]);
 
   useEffect(() => {
     const urls = attachmentUrls.current;
@@ -183,7 +211,7 @@ export function PromptInput({
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (listening) return;
+    if (listening || busy) return;
     const idea = value.trim();
     if (idea.length < minLength) {
       setMessage(`Enter at least ${minLength} characters to continue.`);
@@ -205,7 +233,7 @@ export function PromptInput({
       !event.nativeEvent.isComposing
     ) {
       event.preventDefault();
-      event.currentTarget.form?.requestSubmit();
+      if (!busy) event.currentTarget.form?.requestSubmit();
     }
   }
 
@@ -290,7 +318,11 @@ export function PromptInput({
 
   return (
     <>
-      <form className={styles.composer} onSubmit={submit} noValidate>
+      <form
+        className={`${styles.composer} ${settled ? styles.settled : ""}`}
+        onSubmit={submit}
+        noValidate
+      >
         {attachments.length > 0 && (
           <ul className={styles.attachments} aria-label="Image previews">
             {attachments.map((attachment) => (
@@ -316,14 +348,14 @@ export function PromptInput({
             ))}
           </ul>
         )}
-        <div className={styles.surface}>
+        <div className={`${styles.surface} ${busy ? styles.surfaceBusy : ""}`}>
           <label className="sr-only" htmlFor={promptId}>
             Project idea
           </label>
           <textarea
             ref={textarea}
             id={promptId}
-            rows={2}
+            rows={settled ? 1 : 2}
             value={value}
             placeholder={placeholder}
             maxLength={maxLength}
@@ -370,20 +402,45 @@ export function PromptInput({
                   aria-label="Planning model"
                   hidden={!modelOpen}
                 >
-                  {models.map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      aria-pressed={selectedModel.id === option.id}
-                      onClick={() => {
-                        setModel(option.id);
-                        setModelOpen(false);
-                        modelButton.current?.focus();
-                      }}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
+                  {models.map((option, index) => {
+                    const showGroup =
+                      option.group &&
+                      (index === 0 ||
+                        models[index - 1]?.group !== option.group);
+                    return (
+                      <div key={option.id} className={styles.modelMenuEntry}>
+                        {showGroup && (
+                          <span className={styles.modelGroup}>
+                            {option.group}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          aria-pressed={selectedModel.id === option.id}
+                          onClick={() => {
+                            setModel(option.id);
+                            setModelOpen(false);
+                            modelButton.current?.focus();
+                          }}
+                        >
+                          <span className={styles.modelLabel}>
+                            {option.label}
+                          </span>
+                          {option.badge && (
+                            <span
+                              className={`${styles.modelBadge} ${
+                                option.badgeTone === "ready"
+                                  ? styles.modelBadgeReady
+                                  : ""
+                              }`}
+                            >
+                              {option.badge}
+                            </span>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
               <button
@@ -397,6 +454,7 @@ export function PromptInput({
                 <Icon name="bars" level={effortIndex + 1} />
                 <span key={effort.id}>{effort.label}</span>
               </button>
+              {toolbarExtra}
             </div>
             <div className={styles.actions}>
               {listening && (
@@ -411,7 +469,7 @@ export function PromptInput({
                 className={styles.attach}
                 aria-label="Add image preview"
                 onClick={() => fileInput.current?.click()}
-                disabled={attachments.length >= maxAttachments}
+                disabled={attachments.length >= maxAttachments || busy}
               >
                 <Icon name="plus" />
               </button>
@@ -427,7 +485,16 @@ export function PromptInput({
                   event.target.value = "";
                 }}
               />
-              {listening ? (
+              {busy ? (
+                <button
+                  type="button"
+                  className={`${styles.send} ${styles.stopButton}`}
+                  aria-label="Cancel request"
+                  onClick={() => onCancel?.()}
+                >
+                  <Icon name="stop" />
+                </button>
+              ) : listening ? (
                 <button
                   type="button"
                   className={styles.send}
@@ -440,7 +507,7 @@ export function PromptInput({
                 <button
                   type="submit"
                   className={styles.send}
-                  aria-label="Continue to planner"
+                  aria-label={submitLabel}
                 >
                   <Icon name="up" />
                 </button>
