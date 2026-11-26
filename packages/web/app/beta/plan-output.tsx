@@ -5,7 +5,9 @@ import { useEffect, useState, type FormEvent } from "react";
 import type {
   BetaTurnProgressSection,
   ClarificationQuestionItem,
+  PlanHandoffBundle,
 } from "../../lib/beta-turn";
+import type { ArchitectureDriftReport } from "../../lib/bridge-client";
 import {
   strictChecks,
   type GeneratedPlan,
@@ -15,13 +17,26 @@ import {
   computePlanSavingsSummary,
   estimateTaskUsd,
   subscriptionCatalog,
+  type QuotaMode,
   type RoutableCandidate,
   type RoutingPreferences,
   type SubscriptionId,
 } from "../../lib/routing-types";
+import {
+  SliceContractSchema,
+  formatReviewerFamilyLabel,
+  type SliceContractSpec,
+  type SliceVerificationReport,
+} from "../../lib/slice-contracts";
 import { FlowGraph } from "./flow-graph";
 import { LocalHandoffStudio } from "./handoff-studio";
 import styles from "./beta.module.css";
+
+export interface LiveSliceVerificationState {
+  status: "idle" | "queued" | "running" | "passed" | "failed" | "accepted";
+  report?: SliceVerificationReport | undefined;
+  error?: string | undefined;
+}
 
 const thinkingPhrases = [
   "Thinking…",
@@ -489,27 +504,120 @@ export function PlanArtifactView({
   candidates,
   catalogDate,
   strict,
+  quotaMode,
   editedArchitectureIndices = [],
+  driftReport,
+  onRefreshDrift,
+  bridgeConnected = false,
+  bridgeRepoName = null,
+  onApplyOverBridge,
+  sliceVerifications,
+  onVerifySlice,
   onSelectQuestion,
   onUpdateTaskModel,
+  onUpdateTaskContract,
   onSwapArchitectureDecision,
 }: {
   plan: GeneratedPlan;
   candidates: readonly RoutableCandidate[];
   catalogDate: string;
   strict: boolean;
+  quotaMode?: QuotaMode | undefined;
   editedArchitectureIndices?: readonly number[] | undefined;
+  driftReport?: ArchitectureDriftReport | null | undefined;
+  onRefreshDrift?: (() => void) | undefined;
+  bridgeConnected?: boolean | undefined;
+  bridgeRepoName?: string | null | undefined;
+  onApplyOverBridge?:
+    | ((bundle: PlanHandoffBundle) => Promise<{ writtenFiles: string[] }>)
+    | undefined;
+  sliceVerifications?:
+    Readonly<Record<string, LiveSliceVerificationState>> | undefined;
+  onVerifySlice?: ((sliceId: string) => void) | undefined;
   onSelectQuestion: (question: string) => void;
   onUpdateTaskModel?:
     ((taskIndex: number, nextModel: string) => void) | undefined;
+  onUpdateTaskContract?:
+    ((taskIndex: number, nextContract: SliceContractSpec) => void) | undefined;
   onSwapArchitectureDecision?: ((decisionIndex: number) => void) | undefined;
 }) {
+  const [editingContractId, setEditingContractId] = useState<string | null>(
+    null,
+  );
+  const [contractDraft, setContractDraft] = useState<{
+    allowedGlobsText: string;
+    forbiddenGlobsText: string;
+    verificationCommandsText: string;
+    allowDependencyChanges: boolean;
+    error: string | null;
+  } | null>(null);
+
   const totalTokens = plan.tasks.reduce(
     (sum, t) => sum + t.inputTokens + t.outputTokens,
     0,
   );
   const savings = computePlanSavingsSummary(plan.tasks, candidates);
   const editedSet = new Set(editedArchitectureIndices);
+
+  function openContractEditor(taskId: string, contract?: SliceContractSpec) {
+    if (editingContractId === taskId) {
+      setEditingContractId(null);
+      setContractDraft(null);
+      return;
+    }
+    setEditingContractId(taskId);
+    setContractDraft({
+      allowedGlobsText: (contract?.allowedGlobs ?? []).join(", "),
+      forbiddenGlobsText: (contract?.forbiddenGlobs ?? [".env", ".env.*"]).join(
+        ", ",
+      ),
+      verificationCommandsText: (contract?.verificationCommands ?? []).join(
+        "\n",
+      ),
+      allowDependencyChanges: Boolean(contract?.allowDependencyChanges),
+      error: null,
+    });
+  }
+
+  function saveContractDraft(taskIndex: number, existing?: SliceContractSpec) {
+    if (!contractDraft || !onUpdateTaskContract) return;
+    const allowedGlobs = contractDraft.allowedGlobsText
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const forbiddenGlobs = contractDraft.forbiddenGlobsText
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const verificationCommands = contractDraft.verificationCommandsText
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const parsed = SliceContractSchema.safeParse({
+      allowedGlobs,
+      forbiddenGlobs,
+      verificationCommands,
+      allowDependencyChanges: contractDraft.allowDependencyChanges,
+      expectedBoundaries: existing?.expectedBoundaries ?? [],
+      ...(existing?.reviewerFamily
+        ? { reviewerFamily: existing.reviewerFamily }
+        : {}),
+    });
+
+    if (!parsed.success) {
+      setContractDraft({
+        ...contractDraft,
+        error:
+          "Use repo-relative POSIX globs (no leading '/' or '..') and non-empty check commands.",
+      });
+      return;
+    }
+
+    onUpdateTaskContract(taskIndex, parsed.data);
+    setEditingContractId(null);
+    setContractDraft(null);
+  }
 
   return (
     <div className={styles.planArtifact}>
@@ -631,7 +739,11 @@ export function PlanArtifactView({
             })}
           </div>
 
-          <FlowGraph flows={plan.flows} />
+          <FlowGraph
+            flows={plan.flows}
+            driftReport={driftReport}
+            onRefreshDrift={onRefreshDrift}
+          />
         </section>
 
         <hr className={styles.divider} />
@@ -669,6 +781,46 @@ export function PlanArtifactView({
                       <p>{task.outcome}</p>
                     </div>
                     <div className={styles.taskBadges}>
+                      {sliceVerifications?.[task.id] &&
+                        sliceVerifications[task.id]!.status !== "idle" && (
+                          <span
+                            className={`${styles.sliceVerifyBadge} ${
+                              sliceVerifications[task.id]!.status ===
+                                "passed" ||
+                              sliceVerifications[task.id]!.status === "accepted"
+                                ? styles.sliceVerifyPassed
+                                : sliceVerifications[task.id]!.status ===
+                                    "failed"
+                                  ? styles.sliceVerifyFailed
+                                  : styles.sliceVerifyRunning
+                            }`}
+                          >
+                            {sliceVerifications[task.id]!.status === "passed"
+                              ? "Verified ✓"
+                              : sliceVerifications[task.id]!.status ===
+                                  "accepted"
+                                ? "Accepted ✓"
+                                : sliceVerifications[task.id]!.status ===
+                                    "failed"
+                                  ? `Failed (${sliceVerifications[task.id]!.report?.violations.length ?? 1})`
+                                  : sliceVerifications[task.id]!.status ===
+                                      "running"
+                                    ? "Verifying…"
+                                    : "Queued"}
+                          </span>
+                        )}
+                      {candidate?.observedRuns &&
+                        candidate.observedRuns > 0 &&
+                        candidate.observedFirstPassRate !== undefined && (
+                          <span
+                            className={styles.empiricalBadge}
+                            title={candidate.empiricalNote}
+                          >
+                            Proven:{" "}
+                            {Math.round(candidate.observedFirstPassRate * 100)}%
+                            1st-pass ({candidate.observedRuns})
+                          </span>
+                        )}
                       {candidate && (
                         <span
                           className={`${styles.tierPill} ${
@@ -733,6 +885,177 @@ export function PlanArtifactView({
                       compact
                     />
                   </div>
+
+                  {task.contract && (
+                    <div className={styles.sliceContractBox}>
+                      <div className={styles.sliceContractBar}>
+                        <div className={styles.sliceContractSummary}>
+                          <span className={styles.contractTag}>Contract</span>
+                          <span>
+                            <strong>Scope:</strong>{" "}
+                            {task.contract.allowedGlobs.length > 0
+                              ? task.contract.allowedGlobs.join(", ")
+                              : "unrestricted"}
+                          </span>
+                          <span>
+                            <strong>Deps:</strong>{" "}
+                            {task.contract.allowDependencyChanges
+                              ? "allowed"
+                              : "locked"}
+                          </span>
+                          {task.contract.reviewerFamily && (
+                            <span>
+                              <strong>Adversarial review:</strong>{" "}
+                              {formatReviewerFamilyLabel(
+                                task.contract.reviewerFamily,
+                              )}
+                            </span>
+                          )}
+                        </div>
+                        <div className={styles.sliceContractActions}>
+                          {bridgeConnected && onVerifySlice && (
+                            <button
+                              type="button"
+                              className={styles.miniCopyBtn}
+                              disabled={
+                                sliceVerifications?.[task.id]?.status ===
+                                "running"
+                              }
+                              onClick={() => onVerifySlice(task.id)}
+                            >
+                              {sliceVerifications?.[task.id]?.status ===
+                              "running"
+                                ? "Verifying…"
+                                : "Verify slice"}
+                            </button>
+                          )}
+                          {onUpdateTaskContract && (
+                            <button
+                              type="button"
+                              className={styles.miniCopyBtn}
+                              aria-expanded={editingContractId === task.id}
+                              onClick={() =>
+                                openContractEditor(task.id, task.contract)
+                              }
+                            >
+                              {editingContractId === task.id
+                                ? "Cancel"
+                                : "Edit contract"}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {editingContractId === task.id && contractDraft && (
+                        <div className={styles.contractEditor}>
+                          <label className={styles.contractField}>
+                            <span>
+                              Allowed scope globs (comma-separated, blank =
+                              unrestricted)
+                            </span>
+                            <input
+                              type="text"
+                              aria-label={`Allowed scope globs for ${task.title}`}
+                              value={contractDraft.allowedGlobsText}
+                              onChange={(e) =>
+                                setContractDraft({
+                                  ...contractDraft,
+                                  allowedGlobsText: e.target.value,
+                                  error: null,
+                                })
+                              }
+                              placeholder="e.g. packages/web/**, test/**"
+                            />
+                          </label>
+                          <label className={styles.contractField}>
+                            <span>Forbidden globs (comma-separated)</span>
+                            <input
+                              type="text"
+                              aria-label={`Forbidden globs for ${task.title}`}
+                              value={contractDraft.forbiddenGlobsText}
+                              onChange={(e) =>
+                                setContractDraft({
+                                  ...contractDraft,
+                                  forbiddenGlobsText: e.target.value,
+                                  error: null,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className={styles.contractField}>
+                            <span>
+                              Executable verification commands (one per line)
+                            </span>
+                            <textarea
+                              rows={2}
+                              aria-label={`Verification commands for ${task.title}`}
+                              value={contractDraft.verificationCommandsText}
+                              onChange={(e) =>
+                                setContractDraft({
+                                  ...contractDraft,
+                                  verificationCommandsText: e.target.value,
+                                  error: null,
+                                })
+                              }
+                            />
+                          </label>
+                          <div className={styles.contractEditorBottom}>
+                            <label className={styles.strictToggle}>
+                              <input
+                                type="checkbox"
+                                checked={contractDraft.allowDependencyChanges}
+                                onChange={(e) =>
+                                  setContractDraft({
+                                    ...contractDraft,
+                                    allowDependencyChanges: e.target.checked,
+                                  })
+                                }
+                              />
+                              <span>Allow package.json dependency edits</span>
+                            </label>
+                            <button
+                              type="button"
+                              className={styles.primaryAction}
+                              onClick={() =>
+                                saveContractDraft(index, task.contract)
+                              }
+                            >
+                              Save contract
+                            </button>
+                          </div>
+                          {contractDraft.error && (
+                            <p className={styles.repoError} role="alert">
+                              {contractDraft.error}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {sliceVerifications?.[task.id]?.error && (
+                        <p className={styles.repoError} role="alert">
+                          {sliceVerifications[task.id]!.error}
+                        </p>
+                      )}
+
+                      {sliceVerifications?.[task.id]?.report &&
+                        sliceVerifications[task.id]!.report!.violations.length >
+                          0 && (
+                          <ul
+                            className={styles.sliceViolationList}
+                            aria-label={`Conformance violations for ${task.title}`}
+                          >
+                            {sliceVerifications[
+                              task.id
+                            ]!.report!.violations.map((v, vIdx) => (
+                              <li key={vIdx}>
+                                <code>{v.kind}</code>
+                                {v.path ? ` (${v.path})` : ""}: {v.detail}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                    </div>
+                  )}
 
                   <div className={styles.taskFooter}>
                     <p>
@@ -830,7 +1153,15 @@ export function PlanArtifactView({
         )}
       </div>
 
-      <LocalHandoffStudio plan={plan} candidates={candidates} strict={strict} />
+      <LocalHandoffStudio
+        plan={plan}
+        candidates={candidates}
+        strict={strict}
+        quotaMode={quotaMode}
+        bridgeConnected={bridgeConnected}
+        bridgeRepoName={bridgeRepoName}
+        onApplyOverBridge={onApplyOverBridge}
+      />
     </div>
   );
 }

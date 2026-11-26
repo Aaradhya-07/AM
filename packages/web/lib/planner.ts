@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { SliceContractSpec } from "./slice-contracts";
 
 const text = z.string().trim().min(1).max(1600);
 const list = z.array(text).max(12);
@@ -103,7 +104,13 @@ export const PlanOutput = z.strictObject({
     )
     .max(10),
 });
-export type GeneratedPlan = z.infer<typeof PlanOutput>;
+type RawGeneratedPlan = z.infer<typeof PlanOutput>;
+export type GeneratedTask = RawGeneratedPlan["tasks"][number] & {
+  contract?: SliceContractSpec | undefined;
+};
+export type GeneratedPlan = Omit<RawGeneratedPlan, "tasks"> & {
+  tasks: GeneratedTask[];
+};
 
 export const publishedRates: Readonly<
   Record<
@@ -138,7 +145,8 @@ export const publishedRates: Readonly<
   "gemini-3.1-flash-lite": {
     input: 0.25,
     output: 1.5,
-    source: "https://ai.google.dev/gemini-api/docs/pricing#gemini-3.1-flash-lite",
+    source:
+      "https://ai.google.dev/gemini-api/docs/pricing#gemini-3.1-flash-lite",
   },
 };
 export const ratesChecked = "2026-11-20";

@@ -10,8 +10,10 @@ import { RepoContextSnapshotSchema } from "./beta-turn";
 import type { GeneratedPlan } from "./planner";
 import {
   defaultRoutingPreferences,
+  quotaModes,
   routingPrefsStorageKey,
   subscriptionIds,
+  type QuotaMode,
   type RoutableCandidate,
   type RoutingPreferences,
   type SubscriptionId,
@@ -316,6 +318,7 @@ export function parseStoredRoutingPrefs(
     const parsed = JSON.parse(raw) as {
       mode?: unknown;
       subscriptions?: unknown;
+      quotaMode?: unknown;
     };
     if (parsed.mode !== "open" && parsed.mode !== "subscriptions") return null;
     const validSet = new Set<string>(subscriptionIds);
@@ -325,7 +328,17 @@ export function parseStoredRoutingPrefs(
             typeof item === "string" && validSet.has(item),
         )
       : [];
-    return { mode: parsed.mode, subscriptions: subs };
+    const validQuotaSet = new Set<string>(quotaModes);
+    const quotaMode: QuotaMode | undefined =
+      typeof parsed.quotaMode === "string" &&
+      validQuotaSet.has(parsed.quotaMode)
+        ? (parsed.quotaMode as QuotaMode)
+        : undefined;
+    return {
+      mode: parsed.mode,
+      subscriptions: subs,
+      ...(quotaMode ? { quotaMode } : {}),
+    };
   } catch {
     return null;
   }

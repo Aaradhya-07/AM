@@ -48,9 +48,44 @@ export const subscriptionCatalog: readonly SubscriptionOptionMeta[] = [
   },
 ];
 
+export const quotaModes = ["plenty", "conserve", "exhausted"] as const;
+
+export type QuotaMode = (typeof quotaModes)[number];
+
+export interface QuotaModeMeta {
+  id: QuotaMode;
+  label: string;
+  shortLabel: string;
+  description: string;
+}
+
+export const quotaModeCatalog: readonly QuotaModeMeta[] = [
+  {
+    id: "plenty",
+    label: "Plenty of quota",
+    shortLabel: "Plenty",
+    description: "Normal tier routing across frontier, balanced, fast & local",
+  },
+  {
+    id: "conserve",
+    label: "Conserve frontier quota",
+    shortLabel: "Conserve",
+    description:
+      "Caps frontier to critical security/concurrency slices; spills CRUD & tests to Local OSS / fast",
+  },
+  {
+    id: "exhausted",
+    label: "Frontier cap hit (Local + Fast)",
+    shortLabel: "Cap hit",
+    description:
+      "Excludes frontier cloud models completely; routes across am-server OSS & fast/balanced tiers",
+  },
+];
+
 export interface RoutingPreferences {
   mode: "open" | "subscriptions";
   subscriptions: SubscriptionId[];
+  quotaMode?: QuotaMode | undefined;
 }
 
 export const defaultRoutingPreferences: RoutingPreferences = {
@@ -74,6 +109,12 @@ export interface RoutableCandidate {
   catalogDate: string;
   strengths: string;
   subscriptionGroup?: SubscriptionId;
+  observedRuns?: number | undefined;
+  observedFirstPassRate?: number | undefined;
+  observedMeanRetries?: number | undefined;
+  observedMeanReworkRatio?: number | undefined;
+  empiricalScore?: number | undefined;
+  empiricalNote?: string | undefined;
 }
 
 export interface RoutingCatalogSnapshot {
@@ -98,16 +139,22 @@ export interface CatalogFreshness {
 }
 
 export function formatRoutingSummary(prefs: RoutingPreferences): string {
+  const quotaSuffix =
+    prefs.quotaMode === "conserve"
+      ? " · Conserve"
+      : prefs.quotaMode === "exhausted"
+        ? " · Cap hit"
+        : "";
   if (prefs.mode === "open" || prefs.subscriptions.length === 0) {
-    return "Open best-fit";
+    return `Open best-fit${quotaSuffix}`;
   }
   if (prefs.subscriptions.length === 1) {
     const found = subscriptionCatalog.find(
       (item) => item.id === prefs.subscriptions[0],
     );
-    return found ? found.shortLabel : "1 subscription";
+    return `${found ? found.shortLabel : "1 subscription"}${quotaSuffix}`;
   }
-  return `${prefs.subscriptions.length} tools`;
+  return `${prefs.subscriptions.length} tools${quotaSuffix}`;
 }
 
 export function estimateTaskUsd(

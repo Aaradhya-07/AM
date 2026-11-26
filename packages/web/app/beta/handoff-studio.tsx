@@ -7,12 +7,14 @@ import {
   buildCodexAgentsSection,
   buildCursorRuleMdc,
   buildMasterHandoffPrompt,
+  buildPlanBundle,
   buildPlanBundleJson,
   buildTaskSlicePrompt,
   resolveCandidateLabel,
+  type PlanHandoffBundle,
 } from "../../lib/beta-turn";
 import type { GeneratedPlan } from "../../lib/planner";
-import type { RoutableCandidate } from "../../lib/routing-types";
+import type { QuotaMode, RoutableCandidate } from "../../lib/routing-types";
 import styles from "./beta.module.css";
 
 type HandoffTab = "master" | "slices" | "claude" | "cursor" | "codex" | "cli";
@@ -42,15 +44,30 @@ export function LocalHandoffStudio({
   plan,
   candidates,
   strict,
+  quotaMode,
+  bridgeConnected = false,
+  bridgeRepoName = null,
+  onApplyOverBridge,
 }: {
   plan: GeneratedPlan;
   candidates: readonly RoutableCandidate[];
   strict: boolean;
+  quotaMode?: QuotaMode | undefined;
+  bridgeConnected?: boolean | undefined;
+  bridgeRepoName?: string | null | undefined;
+  onApplyOverBridge?:
+    | ((bundle: PlanHandoffBundle) => Promise<{ writtenFiles: string[] }>)
+    | undefined;
 }) {
   const [tab, setTab] = useState<HandoffTab>("master");
   const [expandedTabs, setExpandedTabs] = useState<Record<string, boolean>>({});
   const [expandedSliceId, setExpandedSliceId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [bridgeApplyState, setBridgeApplyState] = useState<{
+    status: "idle" | "applying" | "applied" | "error";
+    writtenFiles?: string[];
+    error?: string;
+  }>({ status: "idle" });
 
   const slug = slugify(plan.title);
   const masterPrompt = buildMasterHandoffPrompt(plan, candidates, strict);
@@ -73,6 +90,33 @@ export function LocalHandoffStudio({
       }, 2400);
     } catch {
       // Clipboard blocked in restricted browser contexts.
+    }
+  }
+
+  async function handleDirectBridgeApply() {
+    if (!onApplyOverBridge || bridgeApplyState.status === "applying") return;
+    setBridgeApplyState({ status: "applying" });
+    try {
+      const bundle = buildPlanBundle(
+        plan,
+        candidates,
+        strict,
+        new Date().toISOString(),
+        quotaMode,
+      );
+      const res = await onApplyOverBridge(bundle);
+      setBridgeApplyState({
+        status: "applied",
+        writtenFiles: res.writtenFiles,
+      });
+    } catch (err) {
+      setBridgeApplyState({
+        status: "error",
+        error:
+          err instanceof Error
+            ? err.message
+            : "Could not apply plan over local bridge.",
+      });
     }
   }
 
@@ -139,12 +183,26 @@ export function LocalHandoffStudio({
           </span>
           <h3>Shift to local development</h3>
           <p>
-            Architecture choices, task slices, and per-task model routing sync
-            instantly into ready-to-apply briefs for Claude Code, Cursor, Codex,
-            and the AnvilMark CLI.
+            Architecture choices, executable slice contracts, and per-task model
+            routing sync instantly into ready-to-apply briefs for Claude Code,
+            Cursor, Codex, and the AnvilMark CLI.
           </p>
         </div>
         <div className={styles.handoffPrimaryActions}>
+          {bridgeConnected && onApplyOverBridge && (
+            <button
+              type="button"
+              className={styles.bridgeApplyAction}
+              disabled={bridgeApplyState.status === "applying"}
+              onClick={() => void handleDirectBridgeApply()}
+            >
+              {bridgeApplyState.status === "applying"
+                ? "Applying to repo…"
+                : bridgeApplyState.status === "applied"
+                  ? `Applied to ${bridgeRepoName ?? "repo"} ✓`
+                  : `Apply to ${bridgeRepoName ?? "local repo"} ⚡`}
+            </button>
+          )}
           <button
             type="button"
             className={styles.primaryAction}
@@ -169,6 +227,22 @@ export function LocalHandoffStudio({
           </button>
         </div>
       </div>
+
+      {bridgeApplyState.status === "applied" && (
+        <div className={styles.bridgeApplyFeedback} role="status">
+          <strong>Applied directly over local bridge ✓</strong>
+          {bridgeApplyState.writtenFiles &&
+            bridgeApplyState.writtenFiles.length > 0 && (
+              <span>Updated: {bridgeApplyState.writtenFiles.join(", ")}</span>
+            )}
+        </div>
+      )}
+
+      {bridgeApplyState.status === "error" && bridgeApplyState.error && (
+        <div className={styles.bridgeApplyError} role="alert">
+          <span>{bridgeApplyState.error}</span>
+        </div>
+      )}
 
       <div
         className={styles.handoffTabs}
@@ -347,10 +421,41 @@ export function LocalHandoffStudio({
             Apply this entire plan bundle directly into your local repository.{" "}
             <code>anvilmark apply-plan</code> updates <code>PLAN.md</code>,{" "}
             <code>CLAUDE.md</code>,{" "}
-            <code>.cursor/rules/anvilmark-plan.mdc</code>, and{" "}
-            <code>AGENTS.md</code> inside marked blocks—preserving your existing
-            instructions.
+            <code>.cursor/rules/anvilmark-plan.mdc</code>,{" "}
+            <code>AGENTS.md</code>, and{" "}
+            <code>.anvilmark/development/active-plan.json</code> (including
+            executable slice contracts)—preserving your existing instructions.
           </p>
+
+          {bridgeConnected && onApplyOverBridge && (
+            <div className={styles.cliStepCard}>
+              <div className={styles.cliStepHeader}>
+                <span className={styles.cliStepNum}>⚡</span>
+                <div>
+                  <h4>1-click apply via connected Local Bridge</h4>
+                  <p>
+                    Connected to <code>{bridgeRepoName ?? "local repo"}</code>{" "}
+                    over loopback—writes all target files atomically without
+                    downloading a JSON file.
+                  </p>
+                </div>
+              </div>
+              <div className={styles.cliStepActions}>
+                <button
+                  type="button"
+                  className={styles.primaryAction}
+                  disabled={bridgeApplyState.status === "applying"}
+                  onClick={() => void handleDirectBridgeApply()}
+                >
+                  {bridgeApplyState.status === "applying"
+                    ? "Applying to repository…"
+                    : bridgeApplyState.status === "applied"
+                      ? "Re-apply bundle to repository ✓"
+                      : "Apply bundle directly to repository"}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className={styles.cliSteps}>
             <div className={styles.cliStepCard}>
@@ -359,8 +464,8 @@ export function LocalHandoffStudio({
                 <div>
                   <h4>Download signed plan bundle</h4>
                   <p>
-                    Includes your latest model picks, swapped decisions, and all
-                    IDE targets.
+                    Includes your latest model picks, slice contracts, swapped
+                    decisions, and all IDE targets.
                   </p>
                 </div>
               </div>
@@ -371,7 +476,13 @@ export function LocalHandoffStudio({
                   onClick={() =>
                     downloadTextFile(
                       bundleFilename,
-                      buildPlanBundleJson(plan, candidates, strict),
+                      buildPlanBundleJson(
+                        plan,
+                        candidates,
+                        strict,
+                        undefined,
+                        quotaMode,
+                      ),
                       "application/json;charset=utf-8",
                     )
                   }
@@ -421,7 +532,15 @@ export function LocalHandoffStudio({
             <pre
               className={`${styles.handoffCode} ${styles.handoffCodeExpanded}`}
             >
-              <code>{buildPlanBundleJson(plan, candidates, strict)}</code>
+              <code>
+                {buildPlanBundleJson(
+                  plan,
+                  candidates,
+                  strict,
+                  undefined,
+                  quotaMode,
+                )}
+              </code>
             </pre>
           )}
         </div>

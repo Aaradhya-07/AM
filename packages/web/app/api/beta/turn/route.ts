@@ -11,7 +11,9 @@ import {
   type BetaTurnResponse,
   type ClarificationQuestionItem,
   type RepoContextSnapshot,
+  type RepoOutcomesSummary,
 } from "../../../../lib/beta-turn";
+import { formatOutcomesPromptSection } from "../../../../lib/outcome-priors";
 import {
   PlanOutput,
   validatePlan,
@@ -19,12 +21,14 @@ import {
 } from "../../../../lib/planner";
 import {
   resolveRoutingPool,
+  type QuotaMode,
   type RoutableCandidate,
 } from "../../../../lib/routing-catalog";
 import {
   listSelfHostedModels,
   type SelfHostedModel,
 } from "../../../../lib/self-hosted-models";
+import { compileSliceContractForTask } from "../../../../lib/slice-contracts";
 
 export const runtime = "nodejs";
 
@@ -786,9 +790,11 @@ async function executeTurn(
       subscriptions: Array<
         "claude" | "chatgpt" | "gemini" | "cursor" | "local_oss"
       >;
+      quotaMode?: QuotaMode | undefined;
     };
     attachments: readonly BetaAttachment[];
     repoContext?: RepoContextSnapshot | undefined;
+    repoOutcomes?: RepoOutcomesSummary | undefined;
     wantsStream: boolean;
     signal?: AbortSignal | undefined;
   },
@@ -806,6 +812,7 @@ async function executeTurn(
     routingPrefs,
     attachments,
     repoContext,
+    repoOutcomes,
     wantsStream,
     signal,
   } = params;
@@ -950,12 +957,19 @@ async function executeTurn(
     model,
   });
 
+  const quotaMode: QuotaMode = routingPrefs.quotaMode ?? "plenty";
   const selfHosted =
     routingPrefs.subscriptions.includes("local_oss") ||
-    routingPrefs.mode === "open"
+    routingPrefs.mode === "open" ||
+    quotaMode === "conserve" ||
+    quotaMode === "exhausted"
       ? await getSelfHostedModels()
       : [];
-  const routingSnapshot = resolveRoutingPool(routingPrefs, selfHosted);
+  const routingSnapshot = resolveRoutingPool(
+    routingPrefs,
+    selfHosted,
+    repoOutcomes,
+  );
   const candidates = routingSnapshot.candidates;
 
   const rawIdea =
@@ -967,10 +981,27 @@ async function executeTurn(
       ? rawIdea.slice(0, 12000)
       : `${rawIdea} — software implementation plan`;
 
+  const quotaGuidanceLine =
+    quotaMode === "exhausted"
+      ? "QUOTA ARBITRAGE (FRONTIER EXHAUSTED): Frontier cloud caps are exhausted. Route slices across am-server local OSS and fast/balanced models only."
+      : quotaMode === "conserve"
+        ? "QUOTA ARBITRAGE (CONSERVE FRONTIER): Frontier quota is scarce—assign a frontier model AT MOST once (only for high-risk auth/concurrency); spill all schema, CRUD, UI, and test slices onto local OSS or fast/balanced models."
+        : "";
+
+  const outcomesSummaryText = repoOutcomes
+    ? formatOutcomesPromptSection(repoOutcomes)
+    : "";
+
   const transcriptContextParts: string[] = [
     `Planning depth: ${effortGuidance[effort]}`,
     `Routing mode: ${routingPrefs.mode === "open" ? "Open best-fit across ecosystem" : `User subscriptions (${routingPrefs.subscriptions.join(", ")})`}`,
   ];
+  if (quotaGuidanceLine) {
+    transcriptContextParts.push(quotaGuidanceLine);
+  }
+  if (outcomesSummaryText) {
+    transcriptContextParts.push(outcomesSummaryText.slice(0, 1800));
+  }
   if (repoContextSummary) {
     transcriptContextParts.push(repoContextSummary.slice(0, 2600));
   }
@@ -1013,9 +1044,19 @@ async function executeTurn(
       outputUsdPerMillion: c.outputUsdPerMillion,
       arenaAgentRank: c.arenaAgentRank,
       arenaCodingScore: c.arenaCodingScore,
+      ...(c.observedRuns !== undefined
+        ? {
+            observedRuns: c.observedRuns,
+            observedFirstPassRate: c.observedFirstPassRate,
+            empiricalScore: c.empiricalScore,
+          }
+        : {}),
       strengths: c.strengths,
     })),
   };
+  if (repoOutcomes) {
+    planUserPayload.observedRepoOutcomes = repoOutcomes;
+  }
   if (repoContext) {
     planUserPayload.verifiedRepoContext = {
       ...repoContext,
@@ -1059,7 +1100,21 @@ async function executeTurn(
       JSON.parse(planResult.text),
       candidates,
     );
-    const plan = validatePlan(rawParsed, plannerInput);
+    const validatedPlan = validatePlan(rawParsed, plannerInput);
+    const plan = {
+      ...validatedPlan,
+      tasks: validatedPlan.tasks.map((task) => ({
+        ...task,
+        contract: compileSliceContractForTask({
+          task,
+          flows: validatedPlan.flows,
+          candidates,
+          repoCheckCommands: repoContext?.checkCommands,
+          sampleFiles: repoContext?.sampleFiles,
+          strict,
+        }),
+      })),
+    };
     const payload: BetaTurnResponse = {
       mode: "plan",
       reply: architectReply,
@@ -1129,6 +1184,7 @@ export async function POST(request: Request) {
     routingPrefs,
     attachments = [],
     repoContext,
+    repoOutcomes,
   } = parsed.data;
 
   const key =
@@ -1172,6 +1228,7 @@ export async function POST(request: Request) {
       routingPrefs,
       attachments,
       repoContext,
+      repoOutcomes,
       wantsStream: false,
       signal: request.signal,
     });
@@ -1214,6 +1271,7 @@ export async function POST(request: Request) {
             routingPrefs,
             attachments,
             repoContext,
+            repoOutcomes,
             wantsStream: true,
             signal: request.signal,
           },

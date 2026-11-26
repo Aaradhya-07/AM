@@ -2,13 +2,20 @@ import { DatabaseSync } from "node:sqlite";
 
 import { modelDatabasePath } from "./model-catalog-db";
 import {
+  applyEmpiricalOutcomePriors,
+  type RepoOutcomesSummary,
+} from "./outcome-priors";
+import {
   catalogRefreshCommand,
   computePlanSavingsSummary,
   defaultRoutingPreferences,
   estimateTaskUsd,
+  quotaModeCatalog,
+  quotaModes,
   subscriptionIds,
   type CatalogFreshness,
   type CatalogSourceFreshness,
+  type QuotaMode,
   type RoutableCandidate,
   type RoutingCatalogSnapshot,
   type RoutingPreferences,
@@ -21,9 +28,12 @@ export {
   computePlanSavingsSummary,
   defaultRoutingPreferences,
   estimateTaskUsd,
+  quotaModeCatalog,
+  quotaModes,
   subscriptionIds,
   type CatalogFreshness,
   type CatalogSourceFreshness,
+  type QuotaMode,
   type RoutableCandidate,
   type RoutingCatalogSnapshot,
   type RoutingPreferences,
@@ -335,13 +345,92 @@ function buildLocalCandidates(
   }));
 }
 
+function applyQuotaArbitrage(
+  basePool: readonly RoutableCandidate[],
+  quotaMode: QuotaMode,
+  selfHostedModels: readonly SelfHostedModel[],
+  fetchedAt: string,
+  byModel: ReadonlyMap<
+    string,
+    Omit<RoutableCandidate, "billing" | "subscriptionGroup">
+  >,
+): RoutableCandidate[] {
+  if (quotaMode === "plenty") {
+    return [...basePool];
+  }
+
+  const localCandidates = buildLocalCandidates(selfHostedModels, fetchedAt);
+
+  if (quotaMode === "exhausted") {
+    // Strip all paid/subscription frontier models completely.
+    const nonFrontier = basePool.filter(
+      (c) => c.billing === "local" || c.tier !== "frontier",
+    );
+    const merged: RoutableCandidate[] = [];
+    const seen = new Set<string>();
+    // Put zero-cost local OSS models first when frontier caps are exhausted.
+    for (const loc of localCandidates) {
+      if (!seen.has(loc.model)) {
+        seen.add(loc.model);
+        merged.push(loc);
+      }
+    }
+    for (const item of nonFrontier) {
+      if (!seen.has(item.model) && merged.length < 8) {
+        seen.add(item.model);
+        merged.push(item);
+      }
+    }
+    if (merged.length === 0) {
+      for (const fallbackId of [
+        "claude-haiku-5-5",
+        "gpt-6-luna",
+        "gemini-3.8-flash",
+      ]) {
+        const fallback = byModel.get(fallbackId);
+        if (fallback) {
+          merged.push({ ...fallback, billing: "api" });
+        }
+      }
+    }
+    return merged.slice(0, 8);
+  }
+
+  // quotaMode === "conserve": keep at most 1 frontier candidate, promote local OSS + balanced/fast.
+  let keptFrontier = false;
+  const conserved: RoutableCandidate[] = [];
+  const seen = new Set<string>();
+
+  for (const item of basePool) {
+    if (item.tier === "frontier" && item.billing !== "local") {
+      if (keptFrontier) continue;
+      keptFrontier = true;
+    }
+    if (!seen.has(item.model)) {
+      seen.add(item.model);
+      conserved.push(item);
+    }
+  }
+
+  for (const loc of localCandidates) {
+    if (!seen.has(loc.model) && conserved.length < 8) {
+      seen.add(loc.model);
+      conserved.push(loc);
+    }
+  }
+
+  return conserved.slice(0, 8);
+}
+
 export function resolveRoutingPool(
   prefs: RoutingPreferences,
   selfHostedModels: readonly SelfHostedModel[] = [],
+  outcomes?: RepoOutcomesSummary | null,
 ): RoutingCatalogSnapshot {
   const { fetchedAt, byModel } = loadCatalogBase();
   const activeSubs = new Set(prefs.subscriptions);
   const isOpen = prefs.mode === "open" || activeSubs.size === 0;
+  const quotaMode: QuotaMode = prefs.quotaMode ?? "plenty";
 
   const selected: RoutableCandidate[] = [];
 
@@ -367,7 +456,19 @@ export function resolveRoutingPool(
       }
     }
     selected.push(...localPool);
-    return { fetchedAt, candidates: selected };
+    const quotaAdjusted = applyQuotaArbitrage(
+      selected,
+      quotaMode,
+      selfHostedModels,
+      fetchedAt,
+      byModel,
+    );
+    return {
+      fetchedAt,
+      candidates: outcomes
+        ? applyEmpiricalOutcomePriors(quotaAdjusted, outcomes)
+        : quotaAdjusted,
+    };
   }
 
   for (const spec of curatedSpecs) {
@@ -392,12 +493,25 @@ export function resolveRoutingPool(
 
   if (selected.length === 0) {
     return resolveRoutingPool(
-      { mode: "open", subscriptions: [] },
+      { mode: "open", subscriptions: [], quotaMode },
       selfHostedModels,
+      outcomes,
     );
   }
 
-  return { fetchedAt, candidates: selected.slice(0, 8) };
+  const quotaAdjusted = applyQuotaArbitrage(
+    selected.slice(0, 8),
+    quotaMode,
+    selfHostedModels,
+    fetchedAt,
+    byModel,
+  );
+  return {
+    fetchedAt,
+    candidates: outcomes
+      ? applyEmpiricalOutcomePriors(quotaAdjusted, outcomes)
+      : quotaAdjusted,
+  };
 }
 
 const fallbackCatalogFetchedAt = "2026-10-27T00:00:00.000Z";

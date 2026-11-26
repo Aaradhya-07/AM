@@ -1,7 +1,20 @@
 import { z } from "zod";
 
+import {
+  RepoOutcomesSummarySchema,
+  type RepoOutcomesSummary,
+} from "./outcome-priors";
 import { plannerProviders, strictChecks, type GeneratedPlan } from "./planner";
-import { subscriptionIds, type RoutableCandidate } from "./routing-types";
+import {
+  quotaModes,
+  subscriptionIds,
+  type QuotaMode,
+  type RoutableCandidate,
+} from "./routing-types";
+import {
+  formatReviewerFamilyLabel,
+  type SliceContractSpec,
+} from "./slice-contracts";
 
 export const ClarificationQuestion = z.strictObject({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/),
@@ -88,12 +101,15 @@ export const BetaTurnRequest = z.strictObject({
   routingPrefs: z.strictObject({
     mode: z.enum(["open", "subscriptions"]),
     subscriptions: z.array(z.enum(subscriptionIds)).max(5),
+    quotaMode: z.enum(quotaModes).optional(),
   }),
   attachments: z.array(BetaAttachmentSchema).max(4).optional(),
   repoContext: RepoContextSnapshotSchema.optional(),
+  repoOutcomes: RepoOutcomesSummarySchema.optional(),
 });
 
 export type BetaTurnInput = z.infer<typeof BetaTurnRequest>;
+export type { RepoOutcomesSummary, SliceContractSpec };
 
 export type BetaTurnProgressSection =
   "overview" | "architecture" | "flows" | "tasks" | "security";
@@ -209,6 +225,48 @@ export function resolveCandidateLabel(
   return candidates.find((item) => item.model === modelId)?.label ?? modelId;
 }
 
+function formatSliceContractSummaryLines(
+  contract: SliceContractSpec | undefined,
+  indent = "  ",
+): string[] {
+  if (!contract) return [];
+  const lines: string[] = [];
+  lines.push(
+    `${indent}- **Allowed scope globs:** ${
+      contract.allowedGlobs.length > 0
+        ? contract.allowedGlobs.map((g) => `\`${g}\``).join(", ")
+        : "unrestricted (confirm before editing)"
+    }`,
+  );
+  if (contract.forbiddenGlobs.length > 0) {
+    lines.push(
+      `${indent}- **Forbidden globs:** ${contract.forbiddenGlobs
+        .map((g) => `\`${g}\``)
+        .join(", ")}`,
+    );
+  }
+  lines.push(
+    `${indent}- **Package dependency changes:** ${
+      contract.allowDependencyChanges ? "allowed" : "disallowed"
+    }`,
+  );
+  if (contract.verificationCommands.length > 0) {
+    lines.push(
+      `${indent}- **Executable verification gate:** ${contract.verificationCommands
+        .map((cmd) => `\`${cmd}\``)
+        .join(" && ")}`,
+    );
+  }
+  if (contract.reviewerFamily) {
+    lines.push(
+      `${indent}- **Adversarial reviewer family:** ${formatReviewerFamilyLabel(
+        contract.reviewerFamily,
+      )}`,
+    );
+  }
+  return lines;
+}
+
 export function buildMasterHandoffPrompt(
   plan: GeneratedPlan,
   candidates: readonly RoutableCandidate[],
@@ -270,6 +328,11 @@ export function buildMasterHandoffPrompt(
           `- **Outcome:** ${task.outcome}`,
           `- **Acceptance criteria:**\n${task.acceptance.map((a) => `  - ${a}`).join("\n")}`,
           `- **Verification checks:**\n${task.checks.map((c) => `  - ${c}`).join("\n")}`,
+          ...(task.contract
+            ? [
+                `- **Enforced slice contract (\`anvilmark verify-slice --slice ${task.id}\`):**\n${formatSliceContractSummaryLines(task.contract, "  ").join("\n")}`,
+              ]
+            : []),
         ]
           .filter(Boolean)
           .join("\n");
@@ -326,6 +389,9 @@ export function buildTaskSlicePrompt(
       .join("\n")}`,
     `## Done When (Acceptance Criteria)\n${task.acceptance.map((a) => `- ${a}`).join("\n")}`,
     `## Required Checks Before Marking Complete\n${task.checks.map((c) => `- ${c}`).join("\n")}`,
+    task.contract
+      ? `## Enforced Slice Contract (\`anvilmark verify-slice --slice ${task.id}\`)\n${formatSliceContractSummaryLines(task.contract, "").join("\n")}`
+      : "",
     strict
       ? `## Strict Security Checks\n${strictChecks.map((c) => `- ${c}`).join("\n")}`
       : "",
@@ -403,6 +469,7 @@ export interface PlanHandoffBundle {
   plan: GeneratedPlan;
   candidates: PlanHandoffCandidate[];
   strict: boolean;
+  quotaMode?: QuotaMode | undefined;
   masterPrompt: string;
   claudeMdSection: string;
   cursorRuleMdc: string;
@@ -444,6 +511,21 @@ export function buildClaudeMdSection(
           `  - Outcome: ${task.outcome}`,
           `  - Acceptance: ${task.acceptance.join("; ")}`,
           `  - Checks: ${task.checks.join(" · ")}${fallbacks}`,
+          ...(task.contract
+            ? [
+                `  - Enforced contract (\`anvilmark verify-slice --slice ${task.id}\`): scope=${
+                  task.contract.allowedGlobs.length > 0
+                    ? task.contract.allowedGlobs.join(", ")
+                    : "unrestricted"
+                }; deps=${
+                  task.contract.allowDependencyChanges ? "allowed" : "locked"
+                }${
+                  task.contract.reviewerFamily
+                    ? `; reviewer=${task.contract.reviewerFamily}`
+                    : ""
+                }`,
+              ]
+            : []),
         ].join("\n");
       })
       .join("\n")}`,
@@ -559,8 +641,23 @@ export function buildCodexAgentsSection(
           `  - Recommended model: \`${task.model}\` (${modelInfo}) — ${task.why}`,
           `  - Depends on: ${deps}`,
           `  - Outcome: ${task.outcome}`,
-          `  - Acceptance: ${task.acceptance.join("; ")}`,
+          `- Acceptance: ${task.acceptance.join("; ")}`,
           `  - Required checks: ${task.checks.join(" | ")}`,
+          ...(task.contract
+            ? [
+                `  - Enforced contract (\`anvilmark verify-slice --slice ${task.id}\`): scope=${
+                  task.contract.allowedGlobs.length > 0
+                    ? task.contract.allowedGlobs.join(", ")
+                    : "unrestricted"
+                }; deps=${
+                  task.contract.allowDependencyChanges ? "allowed" : "locked"
+                }${
+                  task.contract.reviewerFamily
+                    ? `; reviewer=${task.contract.reviewerFamily}`
+                    : ""
+                }`,
+              ]
+            : []),
         ].join("\n");
       })
       .join("\n")}`,
@@ -585,6 +682,7 @@ export function buildPlanBundle(
   candidates: readonly RoutableCandidate[],
   strict: boolean,
   createdAt: string = new Date().toISOString(),
+  quotaMode?: QuotaMode,
 ): PlanHandoffBundle {
   return {
     version: "anvilmark.plan-handoff.v1",
@@ -598,6 +696,7 @@ export function buildPlanBundle(
       billing,
     })),
     strict,
+    ...(quotaMode ? { quotaMode } : {}),
     masterPrompt: buildMasterHandoffPrompt(plan, candidates, strict),
     claudeMdSection: buildClaudeMdSection(plan, candidates, strict),
     cursorRuleMdc: buildCursorRuleMdc(plan, candidates, strict),
@@ -610,9 +709,10 @@ export function buildPlanBundleJson(
   candidates: readonly RoutableCandidate[],
   strict: boolean,
   createdAt: string = new Date().toISOString(),
+  quotaMode?: QuotaMode,
 ): string {
   return JSON.stringify(
-    buildPlanBundle(plan, candidates, strict, createdAt),
+    buildPlanBundle(plan, candidates, strict, createdAt, quotaMode),
     null,
     2,
   );

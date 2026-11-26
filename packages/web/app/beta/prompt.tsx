@@ -27,18 +27,44 @@ import {
   RepoContextSnapshotSchema,
   type BetaAttachment,
   type BetaTurnResponse,
+  type PlanHandoffBundle,
   type RepoContextSnapshot,
 } from "../../lib/beta-turn";
+import {
+  BRIDGE_COMMAND_SNIPPET,
+  DEFAULT_BRIDGE_BASE_URL,
+  applyPlanOverBridge,
+  clearBridgeSessionConfig,
+  fetchBridgeDrift,
+  loadBridgeSessionConfig,
+  parseBridgePairingInput,
+  saveBridgeSessionConfig,
+  subscribeBridgeEvents,
+  syncAllFromBridge,
+  verifySliceOverBridge,
+  type ArchitectureDriftReport,
+  type BridgeConnectionConfig,
+} from "../../lib/bridge-client";
+import {
+  RepoOutcomesSummarySchema,
+  type RepoOutcomesSummary,
+} from "../../lib/outcome-priors";
 import type { PlanningInput } from "../../lib/planner";
 import {
   defaultRoutingPreferences,
   formatRoutingSummary,
+  quotaModeCatalog,
   subscriptionCatalog,
   type CatalogFreshness,
+  type QuotaMode,
   type RoutingPreferences,
   type SubscriptionId,
 } from "../../lib/routing-types";
 import type { SelfHostedModel } from "../../lib/self-hosted-models";
+import {
+  pickCrossVendorReviewer,
+  type SliceContractSpec,
+} from "../../lib/slice-contracts";
 import { useAuth } from "../components/auth-provider";
 import { HistoryDrawer } from "./history-drawer";
 import {
@@ -48,6 +74,7 @@ import {
   PlanArtifactView,
   StreamingSynthesisRow,
   ThinkingRow,
+  type LiveSliceVerificationState,
 } from "./plan-output";
 import styles from "./beta.module.css";
 
@@ -373,6 +400,22 @@ export function BetaPrompt({
   const [repoContext, setRepoContext] = useState<RepoContextSnapshot | null>(
     null,
   );
+  const [repoOutcomes, setRepoOutcomes] = useState<RepoOutcomesSummary | null>(
+    null,
+  );
+  const [driftReport, setDriftReport] =
+    useState<ArchitectureDriftReport | null>(null);
+  const [bridgeConfig, setBridgeConfig] =
+    useState<BridgeConnectionConfig | null>(null);
+  const [bridgeRepoName, setBridgeRepoName] = useState<string | null>(null);
+  const [bridgeUrlInput, setBridgeUrlInput] = useState<string>(
+    DEFAULT_BRIDGE_BASE_URL,
+  );
+  const [bridgeTokenInput, setBridgeTokenInput] = useState<string>("");
+  const [bridgeBusy, setBridgeBusy] = useState(false);
+  const [sliceVerifications, setSliceVerifications] = useState<
+    Record<string, LiveSliceVerificationState>
+  >({});
   const [repoError, setRepoError] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
@@ -397,6 +440,7 @@ export function BetaPrompt({
   const repoRef = useRef<HTMLDivElement>(null);
   const repoButtonRef = useRef<HTMLButtonElement>(null);
   const repoFileInputRef = useRef<HTMLInputElement>(null);
+  const outcomesFileInputRef = useRef<HTMLInputElement>(null);
   const threadScrollRef = useRef<HTMLDivElement>(null);
   const threadBottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -437,10 +481,54 @@ export function BetaPrompt({
 
   useEffect(() => {
     setSavedThreads(loadSavedThreads());
+    const storedBridge = loadBridgeSessionConfig();
+    if (storedBridge) {
+      setBridgeUrlInput(storedBridge.baseUrl);
+      setBridgeTokenInput(storedBridge.token);
+      void syncAllFromBridge(storedBridge)
+        .then((snapshot) => {
+          setBridgeConfig(storedBridge);
+          setBridgeRepoName(snapshot.health.repoName);
+          if (snapshot.repoContext) setRepoContext(snapshot.repoContext);
+          if (snapshot.outcomes) setRepoOutcomes(snapshot.outcomes);
+          if (snapshot.drift) setDriftReport(snapshot.drift);
+        })
+        .catch(() => {
+          // Local bridge daemon not currently running; keep inputs prefilled.
+        });
+    }
     return () => {
       abortRef.current?.abort();
     };
   }, []);
+
+  useEffect(() => {
+    if (!bridgeConfig) return;
+    const unsubscribe = subscribeBridgeEvents(
+      bridgeConfig,
+      (event) => {
+        if (event.type === "slice_status") {
+          setSliceVerifications((current) => ({
+            ...current,
+            [event.data.sliceId]: {
+              status: event.data.status,
+              ...(event.data.report ? { report: event.data.report } : {}),
+            },
+          }));
+        } else if (event.type === "drift_updated") {
+          setDriftReport(event.data);
+        } else if (event.type === "plan_applied") {
+          void fetchBridgeDrift(bridgeConfig)
+            .then((nextDrift) => setDriftReport(nextDrift))
+            .catch(() => {});
+        }
+      },
+      () => {
+        // Keep bridge config so user can re-sync if daemon restarts.
+      },
+    );
+    return unsubscribe;
+  }, [bridgeConfig]);
 
   useEffect(() => {
     setRoutingPrefs(loadRoutingPrefsForUser(authUserId));
@@ -476,6 +564,14 @@ export function BetaPrompt({
     updateRoutingPrefs({
       mode: nextSubs.length > 0 ? "subscriptions" : "open",
       subscriptions: nextSubs,
+      quotaMode: routingPrefs.quotaMode ?? "plenty",
+    });
+  }
+
+  function selectQuotaMode(nextQuotaMode: QuotaMode) {
+    updateRoutingPrefs({
+      ...routingPrefs,
+      quotaMode: nextQuotaMode,
     });
   }
 
@@ -598,6 +694,126 @@ export function BetaPrompt({
     }
   }
 
+  async function handleOutcomesFileChange(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setRepoError(null);
+    try {
+      const text = await readFileAsText(file);
+      const raw: unknown = JSON.parse(text);
+      const parsed = RepoOutcomesSummarySchema.safeParse(raw);
+      if (!parsed.success) {
+        setRepoError(
+          "Invalid outcomes JSON. Generate it with `anvilmark outcomes --write`.",
+        );
+        return;
+      }
+      setRepoOutcomes(parsed.data);
+      setRepoOpen(false);
+    } catch {
+      setRepoError(
+        "Could not parse outcomes JSON file. Select `.anvilmark/development/outcomes-summary.json`.",
+      );
+    }
+  }
+
+  async function handleConnectBridge() {
+    setRepoError(null);
+    const parsed = parseBridgePairingInput(bridgeUrlInput, bridgeTokenInput);
+    if (!parsed.ok) {
+      setRepoError(parsed.error);
+      return;
+    }
+    setBridgeBusy(true);
+    try {
+      const snapshot = await syncAllFromBridge(parsed.config);
+      setBridgeConfig(parsed.config);
+      setBridgeUrlInput(parsed.config.baseUrl);
+      setBridgeTokenInput(parsed.config.token);
+      setBridgeRepoName(snapshot.health.repoName);
+      saveBridgeSessionConfig(parsed.config);
+      if (snapshot.repoContext) {
+        setRepoContext(snapshot.repoContext);
+        if (activeThreadId && entries.length > 0) {
+          persistThread(activeThreadId, entries, snapshot.repoContext);
+        }
+      }
+      if (snapshot.outcomes) setRepoOutcomes(snapshot.outcomes);
+      if (snapshot.drift) setDriftReport(snapshot.drift);
+      setRepoOpen(false);
+    } catch (err) {
+      setRepoError(
+        err instanceof Error
+          ? err.message
+          : "Could not reach local bridge on loopback.",
+      );
+    } finally {
+      setBridgeBusy(false);
+    }
+  }
+
+  function handleDisconnectBridge() {
+    setBridgeConfig(null);
+    setBridgeRepoName(null);
+    clearBridgeSessionConfig();
+  }
+
+  async function handleRefreshDrift() {
+    if (!bridgeConfig) return;
+    try {
+      const nextDrift = await fetchBridgeDrift(bridgeConfig);
+      setDriftReport(nextDrift);
+    } catch {
+      // Ignore transient refresh failure.
+    }
+  }
+
+  async function handleApplyOverBridge(bundle: PlanHandoffBundle) {
+    if (!bridgeConfig) {
+      throw new Error("Local bridge is not connected.");
+    }
+    const result = await applyPlanOverBridge(bridgeConfig, bundle);
+    void fetchBridgeDrift(bridgeConfig)
+      .then((nextDrift) => setDriftReport(nextDrift))
+      .catch(() => {});
+    return result;
+  }
+
+  async function handleVerifySlice(sliceId: string) {
+    if (!bridgeConfig) return;
+    setSliceVerifications((current) => ({
+      ...current,
+      [sliceId]: { status: "running" },
+    }));
+    try {
+      const report = await verifySliceOverBridge(bridgeConfig, sliceId, true);
+      setSliceVerifications((current) => ({
+        ...current,
+        [sliceId]: {
+          status: report.passed ? "passed" : "failed",
+          report,
+        },
+      }));
+      void fetchBridgeDrift(bridgeConfig)
+        .then((nextDrift) => setDriftReport(nextDrift))
+        .catch(() => {});
+    } catch (err) {
+      setSliceVerifications((current) => ({
+        ...current,
+        [sliceId]: {
+          status: "failed",
+          error:
+            err instanceof Error
+              ? err.message
+              : "Could not verify slice over local bridge.",
+        },
+      }));
+    }
+  }
+
   function handleUpdateTaskModel(
     entryId: number,
     taskIndex: number,
@@ -636,14 +852,63 @@ export function BetaPrompt({
               ].slice(0, 2)
             : prunedAlternatives;
 
-        const nextTasks = item.plan.tasks.map((task, idx) =>
-          idx === taskIndex
+        const nextTasks = item.plan.tasks.map((task, idx) => {
+          if (idx !== taskIndex) return task;
+          const nextReviewer = pickCrossVendorReviewer(
+            nextModelId,
+            item.candidates,
+          );
+          const updatedContract = task.contract
             ? {
-                ...task,
-                model: nextModelId,
-                alternatives: nextAlternatives,
+                ...task.contract,
+                ...(nextReviewer ? { reviewerFamily: nextReviewer } : {}),
               }
-            : task,
+            : undefined;
+          return {
+            ...task,
+            model: nextModelId,
+            alternatives: nextAlternatives,
+            ...(updatedContract ? { contract: updatedContract } : {}),
+          };
+        });
+        return {
+          ...item,
+          plan: {
+            ...item.plan,
+            tasks: nextTasks,
+          },
+        };
+      });
+
+      if (changed) {
+        const threadId = activeThreadId ?? createThreadId();
+        if (!activeThreadId) setActiveThreadId(threadId);
+        persistThread(threadId, updated, repoContext);
+      }
+      return updated;
+    });
+  }
+
+  function handleUpdateTaskContract(
+    entryId: number,
+    taskIndex: number,
+    nextContract: SliceContractSpec,
+  ) {
+    setEntries((current) => {
+      let changed = false;
+      const updated = current.map((item) => {
+        if (
+          item.id !== entryId ||
+          item.role !== "assistant" ||
+          item.mode !== "plan"
+        ) {
+          return item;
+        }
+        const targetTask = item.plan.tasks[taskIndex];
+        if (!targetTask) return item;
+        changed = true;
+        const nextTasks = item.plan.tasks.map((task, idx) =>
+          idx === taskIndex ? { ...task, contract: nextContract } : task,
         );
         return {
           ...item,
@@ -727,6 +992,7 @@ export function BetaPrompt({
     isCold: boolean;
     attachments: BetaAttachment[];
     repoContextSnapshot: RepoContextSnapshot | null;
+    repoOutcomesSnapshot: RepoOutcomesSummary | null;
   }) {
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -761,6 +1027,9 @@ export function BetaPrompt({
       }
       if (params.repoContextSnapshot) {
         requestBody.repoContext = params.repoContextSnapshot;
+      }
+      if (params.repoOutcomesSnapshot) {
+        requestBody.repoOutcomes = params.repoOutcomesSnapshot;
       }
 
       const response = await fetch("/api/beta/turn", {
@@ -985,6 +1254,7 @@ export function BetaPrompt({
         isCold: Boolean(matchedOss && matchedOss.status !== "loaded"),
         attachments: preparedAttachments,
         repoContextSnapshot: repoContext,
+        repoOutcomesSnapshot: repoOutcomes,
       });
     };
 
@@ -1027,6 +1297,7 @@ export function BetaPrompt({
       isCold: Boolean(matchedOss && matchedOss.status !== "loaded"),
       attachments: lastTurnAttachmentsRef.current,
       repoContextSnapshot: repoContext,
+      repoOutcomesSnapshot: repoOutcomes,
     });
   }
 
@@ -1148,7 +1419,11 @@ export function BetaPrompt({
             aria-pressed={routingPrefs.mode === "open"}
             className={`${styles.toolRow} ${routingPrefs.mode === "open" ? styles.toolRowActive : ""}`}
             onClick={() =>
-              updateRoutingPrefs({ mode: "open", subscriptions: [] })
+              updateRoutingPrefs({
+                mode: "open",
+                subscriptions: [],
+                quotaMode: routingPrefs.quotaMode ?? "plenty",
+              })
             }
           >
             <div>
@@ -1181,6 +1456,27 @@ export function BetaPrompt({
                   <small>{item.description}</small>
                 </div>
                 <i aria-hidden="true">{checked ? "✓" : ""}</i>
+              </button>
+            );
+          })}
+
+          <div className={styles.toolsSubheading}>Frontier quota arbitrage</div>
+          {quotaModeCatalog.map((qItem) => {
+            const activeQuota =
+              (routingPrefs.quotaMode ?? "plenty") === qItem.id;
+            return (
+              <button
+                key={qItem.id}
+                type="button"
+                aria-pressed={activeQuota}
+                className={`${styles.toolRow} ${activeQuota ? styles.toolRowActive : ""}`}
+                onClick={() => selectQuotaMode(qItem.id)}
+              >
+                <div>
+                  <span>{qItem.label}</span>
+                  <small>{qItem.description}</small>
+                </div>
+                <i aria-hidden="true">{activeQuota ? "✓" : ""}</i>
               </button>
             );
           })}
@@ -1350,13 +1646,19 @@ export function BetaPrompt({
         <button
           type="button"
           ref={repoButtonRef}
-          className={`${styles.settingsButton} ${repoContext ? styles.repoButtonActive : ""}`}
+          className={`${styles.settingsButton} ${
+            bridgeConfig || repoContext || repoOutcomes
+              ? styles.repoButtonActive
+              : ""
+          }`}
           aria-expanded={repoOpen}
           aria-controls={repoPanelId}
           aria-label={
-            repoContext
-              ? `Repository context attached: ${repoContext.repoName}`
-              : "Attach local repository context"
+            bridgeConfig
+              ? `Local bridge connected: ${bridgeRepoName ?? "repo"}`
+              : repoContext
+                ? `Repository context attached: ${repoContext.repoName}`
+                : "Attach local repository context"
           }
           onClick={() => {
             setRepoOpen((open) => !open);
@@ -1378,8 +1680,10 @@ export function BetaPrompt({
           >
             <path d="M2.75 5.25A1.75 1.75 0 0 1 4.5 3.5h3l1.6 1.75h4.4a1.75 1.75 0 0 1 1.75 1.75v6A1.75 1.75 0 0 1 13.5 14.75h-9A1.75 1.75 0 0 1 2.75 13V5.25Z" />
           </svg>
-          <span>Repo</span>
-          {repoContext && <i className={styles.repoDot} aria-hidden="true" />}
+          <span>{bridgeConfig ? "Bridge · Live" : "Repo"}</span>
+          {(bridgeConfig || repoContext || repoOutcomes) && (
+            <i className={styles.repoDot} aria-hidden="true" />
+          )}
         </button>
 
         <div
@@ -1390,16 +1694,77 @@ export function BetaPrompt({
           hidden={!repoOpen}
         >
           <div className={styles.toolsMenuHeader}>
-            <strong>Local repository context</strong>
+            <strong>Local repository &amp; live bridge</strong>
             <p>
-              Import verified structural metadata (scripts, check commands,
-              frameworks, tracked paths)—never source code or .env files.
+              Pair over loopback for live context, 1-click plan apply, slice
+              verification, and drift radar—or import offline JSON snapshots.
             </p>
+          </div>
+
+          <div className={styles.bridgeBox}>
+            <span className={styles.repoStepLabel}>
+              Live Local Bridge (zero-copy)
+            </span>
+            <div className={styles.catalogRefreshRow}>
+              <code>{BRIDGE_COMMAND_SNIPPET}</code>
+              <button
+                type="button"
+                className={styles.miniCopyBtn}
+                onClick={() =>
+                  void copySnippet("bridge-cmd", BRIDGE_COMMAND_SNIPPET)
+                }
+              >
+                {copiedKey === "bridge-cmd" ? "Copied ✓" : "Copy"}
+              </button>
+            </div>
+            {bridgeConfig ? (
+              <div className={styles.repoSummaryBox}>
+                <div>
+                  <strong>
+                    Connected · {bridgeRepoName ?? bridgeConfig.baseUrl}
+                  </strong>
+                  <small>{bridgeConfig.baseUrl} · SSE live</small>
+                </div>
+                <button
+                  type="button"
+                  className={styles.textButton}
+                  onClick={handleDisconnectBridge}
+                >
+                  Disconnect
+                </button>
+              </div>
+            ) : (
+              <div className={styles.bridgeInputs}>
+                <input
+                  type="text"
+                  aria-label="Local bridge loopback URL"
+                  value={bridgeUrlInput}
+                  onChange={(e) => setBridgeUrlInput(e.target.value)}
+                  placeholder="http://127.0.0.1:4317"
+                />
+                <input
+                  type="password"
+                  autoComplete="off"
+                  aria-label="Local bridge pairing token"
+                  value={bridgeTokenInput}
+                  onChange={(e) => setBridgeTokenInput(e.target.value)}
+                  placeholder="Paste bridge pairing token…"
+                />
+                <button
+                  type="button"
+                  className={styles.primaryAction}
+                  disabled={bridgeBusy}
+                  onClick={() => void handleConnectBridge()}
+                >
+                  {bridgeBusy ? "Connecting…" : "Connect & sync repo"}
+                </button>
+              </div>
+            )}
           </div>
 
           <div className={styles.repoStep}>
             <span className={styles.repoStepLabel}>
-              1. Generate in your repo
+              Offline 1. Generate in your repo
             </span>
             <div className={styles.catalogRefreshRow}>
               <code>{REPO_EXPORT_COMMAND}</code>
@@ -1417,17 +1782,28 @@ export function BetaPrompt({
 
           <div className={styles.repoStep}>
             <span className={styles.repoStepLabel}>
-              2. Import exported JSON
+              Offline 2. Import context or outcomes JSON
             </span>
-            <button
-              type="button"
-              className={styles.ghostAction}
-              onClick={() => repoFileInputRef.current?.click()}
-            >
-              {repoContext
-                ? "Replace repo-context.json"
-                : "Import repo-context.json"}
-            </button>
+            <div className={styles.repoImportButtons}>
+              <button
+                type="button"
+                className={styles.ghostAction}
+                onClick={() => repoFileInputRef.current?.click()}
+              >
+                {repoContext
+                  ? "Replace repo-context.json"
+                  : "Import repo-context.json"}
+              </button>
+              <button
+                type="button"
+                className={styles.ghostAction}
+                onClick={() => outcomesFileInputRef.current?.click()}
+              >
+                {repoOutcomes
+                  ? `Outcomes (${repoOutcomes.totalRecordedRuns} runs)`
+                  : "Import outcomes-summary.json"}
+              </button>
+            </div>
             <input
               ref={repoFileInputRef}
               type="file"
@@ -1435,6 +1811,14 @@ export function BetaPrompt({
               aria-label="Import anvilmark repo context JSON"
               hidden
               onChange={handleRepoFileChange}
+            />
+            <input
+              ref={outcomesFileInputRef}
+              type="file"
+              accept=".json,application/json"
+              aria-label="Import anvilmark outcomes summary JSON"
+              hidden
+              onChange={handleOutcomesFileChange}
             />
           </div>
 
@@ -1654,8 +2038,26 @@ export function BetaPrompt({
                             candidates={entry.candidates}
                             catalogDate={entry.catalogDate}
                             strict={entry.strict}
+                            quotaMode={routingPrefs.quotaMode ?? "plenty"}
                             editedArchitectureIndices={
                               entry.editedArchitectureIndices ?? []
+                            }
+                            driftReport={driftReport}
+                            onRefreshDrift={
+                              bridgeConfig
+                                ? () => void handleRefreshDrift()
+                                : undefined
+                            }
+                            bridgeConnected={Boolean(bridgeConfig)}
+                            bridgeRepoName={bridgeRepoName}
+                            onApplyOverBridge={
+                              bridgeConfig ? handleApplyOverBridge : undefined
+                            }
+                            sliceVerifications={sliceVerifications}
+                            onVerifySlice={
+                              bridgeConfig
+                                ? (sliceId) => void handleVerifySlice(sliceId)
+                                : undefined
                             }
                             onSelectQuestion={(question) => {
                               setPrompt(`Regarding "${question}": `);
@@ -1666,6 +2068,13 @@ export function BetaPrompt({
                                 entry.id,
                                 taskIndex,
                                 nextModel,
+                              )
+                            }
+                            onUpdateTaskContract={(taskIndex, nextContract) =>
+                              handleUpdateTaskContract(
+                                entry.id,
+                                taskIndex,
+                                nextContract,
                               )
                             }
                             onSwapArchitectureDecision={(decisionIndex) =>
@@ -1728,35 +2137,68 @@ export function BetaPrompt({
       </section>
 
       <div className={styles.composerDock}>
-        {repoContext && (
+        {(bridgeConfig || repoContext || repoOutcomes) && (
           <div className={styles.repoChipBar}>
-            <div className={styles.repoChip} role="status">
-              <svg
-                aria-hidden="true"
-                width="13"
-                height="13"
-                viewBox="0 0 18 18"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M2.75 5.25A1.75 1.75 0 0 1 4.5 3.5h3l1.6 1.75h4.4a1.75 1.75 0 0 1 1.75 1.75v6A1.75 1.75 0 0 1 13.5 14.75h-9A1.75 1.75 0 0 1 2.75 13V5.25Z" />
-              </svg>
-              <span>
-                Repo: {repoContext.repoName} · {repoContext.totalTrackedFiles}{" "}
-                files
-              </span>
-              <button
-                type="button"
-                className={styles.repoChipClear}
-                aria-label="Clear repository context"
-                onClick={clearRepoContext}
-              >
-                ×
-              </button>
-            </div>
+            {bridgeConfig && (
+              <div className={styles.repoChip} role="status">
+                <span>
+                  Bridge: {bridgeRepoName ?? bridgeConfig.baseUrl} · Live
+                </span>
+                <button
+                  type="button"
+                  className={styles.repoChipClear}
+                  aria-label="Disconnect local bridge"
+                  onClick={handleDisconnectBridge}
+                >
+                  ×
+                </button>
+              </div>
+            )}
+            {repoContext && (
+              <div className={styles.repoChip} role="status">
+                <svg
+                  aria-hidden="true"
+                  width="13"
+                  height="13"
+                  viewBox="0 0 18 18"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M2.75 5.25A1.75 1.75 0 0 1 4.5 3.5h3l1.6 1.75h4.4a1.75 1.75 0 0 1 1.75 1.75v6A1.75 1.75 0 0 1 13.5 14.75h-9A1.75 1.75 0 0 1 2.75 13V5.25Z" />
+                </svg>
+                <span>
+                  Repo: {repoContext.repoName} · {repoContext.totalTrackedFiles}{" "}
+                  files
+                </span>
+                <button
+                  type="button"
+                  className={styles.repoChipClear}
+                  aria-label="Clear repository context"
+                  onClick={clearRepoContext}
+                >
+                  ×
+                </button>
+              </div>
+            )}
+            {repoOutcomes && (
+              <div className={styles.repoChip} role="status">
+                <span>
+                  Outcomes: {repoOutcomes.repoName} ·{" "}
+                  {repoOutcomes.totalRecordedRuns} runs
+                </span>
+                <button
+                  type="button"
+                  className={styles.repoChipClear}
+                  aria-label="Clear repository outcomes"
+                  onClick={() => setRepoOutcomes(null)}
+                >
+                  ×
+                </button>
+              </div>
+            )}
           </div>
         )}
 
