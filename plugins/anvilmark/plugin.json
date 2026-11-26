@@ -1,0 +1,12 @@
+{
+  "name": "anvilmark",
+  "displayName": "AnvilMark Control Plane",
+  "version": "0.1.0",
+  "description": "Local-first architecture planning, per-slice coding-model routing, deterministic slice conformance gates, and interactive Drift Radar Cockpit for multi-agent engineering.",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Open the AnvilMark Cockpit for this repository",
+    "Plan a new feature with AnvilMark, clarify open choices, and lock slice contracts",
+    "Execute and verify the next ready slice in our active AnvilMark plan"
+  ]
+}

@@ -36,6 +36,10 @@ import {
   exportContextCommand,
 } from "./commands/export-context.js";
 import { APPLY_PLAN_USAGE, applyPlanCommand } from "./commands/apply-plan.js";
+import { cockpitCommand } from "./commands/cockpit.js";
+import { connectCommand } from "./commands/connect.js";
+import { hooksCommand } from "./commands/hooks.js";
+import { nextCommand } from "./commands/next.js";
 import { INVENTORY_USAGE, inventoryCommand } from "./commands/inventory.js";
 import { LOGIN_USAGE, loginCommand } from "./commands/login.js";
 import { PUSH_USAGE, pushCommand } from "./commands/push.js";
@@ -76,6 +80,10 @@ Research and inventory (no project needed)
   quality         inspect public benchmarks and a model catalog
 
 Start
+  cockpit         mission control dashboard (also runs when invoked with no command)
+  connect         wire Claude Code, Codex, Cursor, VS Code & Antigravity MCP + skills
+  hooks           install or run Git pre-commit and Claude Stop guardrails
+  next            select or execute the next ready task slice in the active plan
   start           inspect an existing repository and create or resume a local draft
   development     connect architecture, coding-model choice, agent run and checks
   export-context  export structural repository metadata (no source, no secrets) for Studio planning
@@ -168,9 +176,21 @@ export async function run(
   options: { readonly storeFs?: StoreFs } = {},
 ): Promise<ExitCode> {
   const [command, ...rest] = argv;
-  if (command === undefined || command === "--help" || command === "-h") {
+  if (command === undefined) {
+    try {
+      return await cockpitCommand({
+        io,
+        args: [],
+        ...(options.storeFs === undefined ? {} : { storeFs: options.storeFs }),
+      });
+    } catch {
+      io.stdout(`${USAGE}\n`);
+      return EXIT.usage;
+    }
+  }
+  if (command === "--help" || command === "-h") {
     io.stdout(`${USAGE}\n`);
-    return command === undefined ? EXIT.usage : EXIT.ok;
+    return EXIT.ok;
   }
   if (command === "help") {
     const topic = rest[0];
@@ -273,6 +293,14 @@ export async function run(
         return await verifySliceCommand(context);
       case "apply-plan":
         return await applyPlanCommand(context);
+      case "cockpit":
+        return await cockpitCommand(context);
+      case "connect":
+        return await connectCommand(context);
+      case "hooks":
+        return await hooksCommand(context);
+      case "next":
+        return await nextCommand(context);
       case "login":
         return await loginCommand(context, sub);
       case "push":

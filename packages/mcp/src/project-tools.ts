@@ -1,4 +1,5 @@
 import { registerSliceTools } from "./slice-tools.js";
+import { registerLocalStudioTools } from "./local-studio-tools.js";
 import { registerHardwareTools } from "./hardware-tools.js";
 import { DecisionBriefInputSchema, draftDecisionBrief } from "./assessment.js";
 import {
@@ -67,6 +68,7 @@ export interface ProjectServerOptions {
   readonly sliceExecution?: boolean;
   readonly sliceReadOnly?: boolean;
   readonly sliceApprovedCommands?: readonly string[];
+  readonly localStudio?: boolean;
   /** Directory containing `.anvilmark/`. */
   readonly root: string;
   readonly projection: ProjectionName;
@@ -559,5 +561,6 @@ export function createProjectServer(options: ProjectServerOptions): McpServer {
   registerHardwareTools(server, options);
   if (options.sliceExecution || options.sliceReadOnly)
     registerSliceTools(server, options);
+  if (options.localStudio) registerLocalStudioTools(server, options);
   return server;
 }

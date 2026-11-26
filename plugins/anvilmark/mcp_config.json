@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "project": {
+      "command": "bash",
+      "args": ["${PLUGIN_ROOT}/bin/anvilmark-project-server"]
+    }
+  }
+}

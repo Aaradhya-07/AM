@@ -29,5 +29,48 @@ export {
   appendSliceOutcome,
   readSliceOutcomes,
   SliceOutcomeInputSchema,
+  aggregateOutcomes,
+  outcomesRepoName,
+  type RepoOutcomesSummary,
 } from "./commands/outcomes.js";
 export { sliceDigest } from "./commands/slice-worktree.js";
+export {
+  exportRepoContext,
+  type RepoContext,
+} from "./commands/export-context.js";
+export {
+  PLAN_HANDOFF_VERSION,
+  HandoffPlan,
+  PlanHandoffBundle,
+  SliceContractSchema,
+  applyPlan,
+  parseBundle,
+  renderCursorRule,
+  renderInstructionSection,
+  type AppliedFile,
+  type PlanTarget,
+  type SliceContractSpec,
+} from "./commands/apply-plan.js";
+export {
+  measureDrift,
+  type ArchitectureDriftReport,
+} from "./commands/drift.js";
+export { sliceWaves } from "./commands/slice-dag.js";
+export {
+  connectAgents,
+  type ConnectTarget,
+  type ConnectedArtifact,
+} from "./commands/connect.js";
+export {
+  installHooks,
+  uninstallHooks,
+  inspectHookStatus,
+  runHookGate,
+  type HookTarget,
+} from "./commands/hooks.js";
+export {
+  selectNextSlice,
+  inferRunnerForModel,
+  renderExecutableSliceBrief,
+} from "./commands/next.js";
+export { collectCockpitSnapshot } from "./commands/cockpit.js";

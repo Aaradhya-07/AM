@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_CANDIDATE="$(cd "${SCRIPT_DIR}/../../.." 2>/dev/null && pwd || true)"
+
+if [[ -n "${ANVILMARK_MCP_BIN:-}" && -f "${ANVILMARK_MCP_BIN}" ]]; then
+  SERVER_ENTRY="${ANVILMARK_MCP_BIN}"
+elif [[ -f "${REPO_CANDIDATE}/packages/mcp/bin/anvilmark-project-mcp.mjs" ]]; then
+  SERVER_ENTRY="${REPO_CANDIDATE}/packages/mcp/bin/anvilmark-project-mcp.mjs"
+elif [[ -f "/home/aaradhya07/Desktop/AM/packages/mcp/bin/anvilmark-project-mcp.mjs" ]]; then
+  SERVER_ENTRY="/home/aaradhya07/Desktop/AM/packages/mcp/bin/anvilmark-project-mcp.mjs"
+else
+  echo "anvilmark-project-server: cannot locate anvilmark-project-mcp.mjs" >&2
+  exit 2
+fi
+
+exec node "${SERVER_ENTRY}" \
+  --project-dir "${PWD}" \
+  --agent-assessment \
+  --slice-execution \
+  --local-studio \
+  --hardware-sizing \
+  "$@"
