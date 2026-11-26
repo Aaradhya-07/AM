@@ -5,6 +5,39 @@ architecture → model comparison → agent run → checks → review path. Its 
 expectations are declarations, not measured forecasts. It does not demonstrate
 cash savings or model quality.
 
+## Start from a rough request
+
+Use your coding agent to inspect the repository and draft the workflow. Give it
+this repository's `examples/development-pilot/plan.json` as the task-plan example:
+
+> Here's my rough request: [paste request]. Inspect the repo and ask me only
+> about choices that affect scope, behavior, or verification. Play back the goal
+> and acceptance criteria before planning. Draft one task for a small change,
+> or ordered phases with dependencies for larger work. Use candidate setups I
+> actually have access to. Label token estimates and explain the proposed
+> baseline for each task. Leave unresolved questions visible. Stop for review
+> before changing application code or approving anything.
+
+Ask the agent to write a workflow JSON file with `schema_version: 1`, the
+original `request`, the agreed `goal`, an `open_questions` array, and a
+`tasks` array of development plans. Add `task.acceptance` as an array of
+verifiable outcomes and optionally `evaluation.baseline_reason` as the plan
+author's rationale. In a multi-task draft, each plan needs a phase. Phase
+dependencies refer to earlier phase IDs in the same draft.
+
+```sh
+anvilmark development workflow --file workflow.json
+anvilmark development plan --file workflow.json --task TASK_ID
+anvilmark development recommend
+```
+
+The preview refreshes the local outcome index and shows a separately evaluated
+setup for each task. Review open questions before freezing a plan. Use the
+approval, scout, run, and review commands below to work through the tasks.
+The frozen acceptance criteria are added to the coding agent's handoff prompt.
+Close a prerequisite phase after reviewing and committing its result before
+running a dependent phase.
+
 ## Three-minute live demo
 
 From the Anvilmark checkout, build the CLI and start the guided tour.
@@ -23,7 +56,9 @@ the actual bundle. The tour prints the temporary project directory and the run
 ID. With `--keep`, the run records and bundle remain available under
 `.anvilmark/` in that project.
 
-1. **Show the plan and baseline.** Only `label.mjs` may change. The isolated
+1. **Show the request and the split.** The draft previews a normalization fix
+   and a test-only follow-up with different declared comparison baselines.
+   The tour executes the fix. Only `label.mjs` may change. The isolated
    baseline runs three tests. One passes and two fail. The plan requires the TAP
    failure marker for repeated punctuation, and the scout confirms it.
 2. **Run the patch.** The stand-in edits `label.mjs`. The same test command now

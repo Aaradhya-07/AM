@@ -4,3 +4,5 @@ node_modules/
 model-catalog.sqlite*
 **/.anvilmark/development/*.sqlite*
 **/.next/
+
+.env*.local

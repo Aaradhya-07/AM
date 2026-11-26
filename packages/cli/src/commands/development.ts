@@ -57,7 +57,7 @@ import {
   type SelectionEvidenceRecord,
 } from "./development-selection.js";
 
-export const DEVELOPMENT_USAGE = `anvilmark development <landscape|catalog|plan|approve|recommend|scout|run|review|timeline|close|report> [options]
+export const DEVELOPMENT_USAGE = `anvilmark development <landscape|workflow|catalog|plan|approve|recommend|scout|run|review|timeline|close|report> [options]
 
   landscape [--goal TEXT] [--json]
                              inspect repository design, working style, and recorded AI development
@@ -65,7 +65,11 @@ export const DEVELOPMENT_USAGE = `anvilmark development <landscape|catalog|plan|
   catalog list|show|history --id ID
                              inspect exact offers, snapshot history, and fact freshness
   plan --file PLAN.json       validate and save a development plan in .anvilmark/development/
+  plan --file WORKFLOW.json --task ID
+                             freeze one task from the workflow draft
   approve [--agent-test]     approve the exact plan; agent-test is excluded from outcome evidence
+  workflow --file WORKFLOW.json
+                             preview the brief, ordered tasks and per-task model choices
   recommend [--catalog-db FILE]
                              compare eligible setups with mapped research and local outcomes
   scout --prompt-file FILE    verify tracked file leads and baseline checks in an isolated checkout
@@ -79,7 +83,7 @@ export const DEVELOPMENT_USAGE = `anvilmark development <landscape|catalog|plan|
   close --run ID             seal a reviewed phase against its exact committed result
   report                     show the connected plan, comparison and recorded runs
 
-Options: --project-dir DIR (-C), --json (catalog, recommend, scout, timeline, report), --help`;
+Options: --project-dir DIR (-C), --json (workflow, catalog, recommend, scout, timeline, report), --help`;
 
 const Id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/);
 const Nonempty = z.string().trim().min(1);
@@ -197,6 +201,7 @@ const Plan = z.strictObject({
     id: Id,
     summary: Nonempty,
     profile: TaskProfile.optional(),
+    acceptance: z.array(Nonempty).min(1).optional(),
     checks: z.array(Check).min(1),
   }),
   phase: PhaseContract.optional(),
@@ -214,9 +219,17 @@ const Plan = z.strictObject({
   evaluation: z
     .strictObject({
       baseline_candidate_id: Id,
+      baseline_reason: Nonempty.optional(),
       max_acceptance_drop: z.number().min(0).max(1).optional(),
     })
     .optional(),
+});
+const WorkflowDraft = z.strictObject({
+  schema_version: z.literal(1),
+  request: Nonempty,
+  goal: Nonempty,
+  open_questions: z.array(Nonempty),
+  tasks: z.array(Plan).min(1),
 });
 const Handoff = z.strictObject({
   schema_version: z.literal(1),
@@ -854,7 +867,7 @@ function suggestion(
     (candidate) => candidate.id === plan.evaluation?.baseline_candidate_id,
   );
   if (baseline)
-    return `Provisional fixed baseline: ${baseline.id}; keep this reviewed comparison point until comparable accepted tasks establish another choice. Declared token and rate estimates do not establish task quality or cash savings.`;
+    return `Provisional fixed baseline: ${baseline.id}; use the plan's declared comparison point until comparable reviewed outcomes support a change. Token and rate estimates describe projected usage and cost.`;
   if (eligible.length === 1)
     return `Only eligible candidate: ${eligible[0]!.id}; task quality and total accepted-work cost are not established.`;
   return "No evidence-backed first-run winner. Review task risk and choose a fixed baseline; declared tokens or API rates alone do not predict accepted work or correction effort.";
@@ -892,6 +905,8 @@ function printPlan(
     context.io.stdout(
       `  Allowed changed files: ${JSON.stringify(plan.architecture.allowed_changed_paths)}.\n`,
     );
+  for (const criterion of plan.task.acceptance ?? [])
+    context.io.stdout(`  Done when: ${criterion}\n`);
   if (plan.phase) {
     context.io.stdout(`Phase: ${plan.phase.id} — ${plan.phase.outcome}\n`);
     context.io.stdout(`  Inputs: ${plan.phase.required_inputs.join("; ")}\n`);
@@ -1766,14 +1781,169 @@ function recommendation(
       : matched.standing === "baseline_retained"
         ? `Retain fixed baseline ${matched.baseline_candidate_id} for the next shadow comparison: ${matched.reason}. The person still chooses the setup.`
         : `${suggestion(plan, resolutions, now)} No evidence-backed model choice: ${matched.reason}.`;
+  const baseline = eligible.find(
+    (option) => option.id === plan.evaluation?.baseline_candidate_id,
+  );
+  const trial = eligible.find(
+    (option) => option.id === matched.trial_candidate_id,
+  );
+  const choice =
+    trial ?? baseline ?? (eligible.length === 1 ? eligible[0] : null);
   return {
     profile_key: key ?? null,
     options,
     matched_evidence: matched,
     selection,
+    assignment: {
+      standing: trial
+        ? "shadow_trial_candidate"
+        : baseline
+          ? "fixed_baseline"
+          : choice
+            ? "only_eligible"
+            : "unassigned",
+      candidate_id: choice?.id ?? null,
+      model: choice?.model ?? null,
+      declared_tokens: choice?.expected_tokens ?? null,
+      eligibility_reason: choice?.reason ?? null,
+      reason: selection,
+      declared_baseline_reason: baseline
+        ? (plan.evaluation?.baseline_reason ?? null)
+        : null,
+    },
     evidence_scope:
       "same repository and architecture part; exact task kind, language set and risk",
   };
+}
+
+function validateDevelopmentPlan(plan: DevelopmentPlan): void {
+  if (plan.phase) {
+    if (
+      plan.phase.depends_on.includes(plan.phase.id) ||
+      new Set(plan.phase.depends_on).size !== plan.phase.depends_on.length
+    )
+      throw new Error(
+        "phase prerequisites must be unique and cannot include this phase",
+      );
+    const checkNames = plannedChecks(plan).map((check) => check.name);
+    if (new Set(checkNames).size !== checkNames.length)
+      throw new Error("task and integration check names must be unique");
+  }
+  const candidateIds = new Set(
+    plan.candidates.map((candidate) => candidate.id),
+  );
+  if (candidateIds.size !== plan.candidates.length)
+    throw new Error("candidate ids must be unique");
+  if (
+    plan.evaluation &&
+    !candidateIds.has(plan.evaluation.baseline_candidate_id)
+  )
+    throw new Error("evaluation baseline candidate must be in this plan");
+}
+
+function printAssignment(
+  context: CommandContext,
+  assignment: ReturnType<typeof recommendation>["assignment"],
+): void {
+  context.io.stdout(
+    `  Model choice: ${assignment.model ? `${assignment.model} (${assignment.candidate_id})` : "unassigned"}\n  Why: ${assignment.reason}\n`,
+  );
+  if (assignment.eligibility_reason)
+    context.io.stdout(`  Compatibility: ${assignment.eligibility_reason}\n`);
+  if (assignment.declared_tokens !== null)
+    context.io.stdout(
+      `  Declared token estimate: ${assignment.declared_tokens}\n`,
+    );
+  if (assignment.declared_baseline_reason)
+    context.io.stdout(
+      `  Plan author's baseline rationale: ${assignment.declared_baseline_reason}\n`,
+    );
+}
+
+async function loadWorkflowDraft(file: string) {
+  const draft = WorkflowDraft.parse(JSON.parse(await readFile(file, "utf8")));
+  const tasks = new Set<string>();
+  const phases = new Set<string>();
+  for (const plan of draft.tasks) {
+    validateDevelopmentPlan(plan);
+    if (!plan.task.acceptance)
+      throw new Error(
+        `task ${plan.task.id} needs at least one acceptance criterion`,
+      );
+    if (tasks.has(plan.task.id))
+      throw new Error(`duplicate task ${plan.task.id}`);
+    tasks.add(plan.task.id);
+    if (!plan.phase) {
+      if (draft.tasks.length > 1)
+        throw new Error(
+          `task ${plan.task.id} needs a phase in a multi-task workflow`,
+        );
+      continue;
+    }
+    if (phases.has(plan.phase.id))
+      throw new Error(`duplicate phase ${plan.phase.id}`);
+    for (const prerequisite of plan.phase.depends_on)
+      if (!phases.has(prerequisite))
+        throw new Error(
+          `phase ${plan.phase.id} depends on ${prerequisite}, which must appear earlier in this workflow`,
+        );
+    phases.add(plan.phase.id);
+  }
+
+  return draft;
+}
+
+async function previewWorkflow(
+  root: string,
+  file: string,
+  context: CommandContext,
+  json: boolean,
+): Promise<ExitCode> {
+  const draft = await loadWorkflowDraft(file);
+  const { catalog, records } = await syncDevelopmentEvidence(root);
+  try {
+    const now = new Date(context.io.clock());
+    const previews = [];
+    for (const plan of draft.tasks) {
+      const resolutions = await resolveConfigurations(root, plan);
+      previews.push({
+        plan,
+        ...recommendation(plan, catalog, records, resolutions, now),
+      });
+    }
+    if (json) {
+      writeJson(context.io, { ...draft, status: "draft", tasks: previews });
+    } else {
+      context.io.stdout(
+        `Workflow draft\nRequest: ${draft.request}\nGoal: ${draft.goal}\n`,
+      );
+      for (const question of draft.open_questions)
+        context.io.stdout(`  Open question: ${question}\n`);
+      for (const [index, { plan, assignment }] of previews.entries()) {
+        context.io.stdout(
+          `\n${index + 1}. ${plan.task.summary} [${plan.task.id}]\n`,
+        );
+        if (plan.phase)
+          context.io.stdout(
+            `  Phase: ${plan.phase.id}; depends on ${plan.phase.depends_on.join(", ") || "none"}\n`,
+          );
+        for (const criterion of plan.task.acceptance ?? [])
+          context.io.stdout(`  Done when: ${criterion}\n`);
+        context.io.stdout(
+          `  Checks: ${plannedChecks(plan)
+            .map((check) => check.name)
+            .join(", ")}\n`,
+        );
+        printAssignment(context, assignment);
+      }
+      context.io.stdout(
+        "\nReview the brief and freeze each phase plan before handing it to an agent. This preview does not run tasks.\n",
+      );
+    }
+    return EXIT.ok;
+  } finally {
+    catalog.close();
+  }
 }
 
 async function mappedResearch(plan: DevelopmentPlan, path: string | null) {
@@ -1859,6 +2029,7 @@ export async function developmentCommand(
       "catalog-db": { type: "string" },
       goal: { type: "string" },
       id: { type: "string" },
+      task: { type: "string" },
       "agent-test": { type: "boolean" },
     },
     DEVELOPMENT_USAGE,
@@ -1879,6 +2050,13 @@ export async function developmentCommand(
     else context.io.stdout(`${renderDevelopmentLandscape(report)}\n`);
     return EXIT.ok;
   }
+  if (sub === "workflow")
+    return previewWorkflow(
+      root,
+      resolve(root, requiredOption(parsed, "file", DEVELOPMENT_USAGE)),
+      context,
+      flag(parsed, "json"),
+    );
   if (sub === "catalog") {
     const action = parsed.positionals[0];
     if (
@@ -1961,34 +2139,16 @@ export async function developmentCommand(
       root,
       requiredOption(parsed, "file", DEVELOPMENT_USAGE),
     );
-    const plan = Plan.parse(JSON.parse(await readFile(source, "utf8")));
-    if (plan.phase) {
-      if (
-        plan.phase.depends_on.includes(plan.phase.id) ||
-        new Set(plan.phase.depends_on).size !== plan.phase.depends_on.length
-      )
-        throw new Error(
-          "phase prerequisites must be unique and cannot include this phase",
-        );
-      const checkNames = [
-        ...plan.task.checks,
-        ...plan.phase.integration_checks,
-      ].map((check) => check.name);
-      if (new Set(checkNames).size !== checkNames.length)
-        throw new Error("task and integration check names must be unique");
-    }
-    if (
-      plan.evaluation &&
-      !plan.candidates.some(
-        (candidate) => candidate.id === plan.evaluation!.baseline_candidate_id,
-      )
-    )
-      throw new Error("evaluation baseline candidate must be in this plan");
-    if (
-      new Set(plan.candidates.map((candidate) => candidate.id)).size !==
-      plan.candidates.length
-    )
-      throw new Error("candidate ids must be unique");
+    const taskId = parsed.values.task;
+    const plan =
+      typeof taskId === "string"
+        ? (await loadWorkflowDraft(source)).tasks.find(
+            (entry) => entry.task.id === taskId,
+          )
+        : Plan.parse(JSON.parse(await readFile(source, "utf8")));
+    if (!plan)
+      throw new Error(`task ${taskId} is absent from the workflow draft`);
+    validateDevelopmentPlan(plan);
     const resolutions = await resolveConfigurations(root, plan);
     for (const candidate of plan.candidates) {
       if (
@@ -2061,13 +2221,14 @@ export async function developmentCommand(
         });
       } else {
         context.io.stdout(`Task: ${plan.task.id}. ${result.evidence_scope}.\n`);
+        printAssignment(context, result.assignment);
         for (const option of result.options) {
           const sample = option.comparable;
           const mapped = research.find(
             (item) => item.candidate_id === option.id,
           );
           context.io.stdout(
-            `  ${option.id}: ${option.standing}; ${sample.accepted} accepted, ${sample.rejected} rejected, ${sample.failed} failed, ${sample.unreviewed} awaiting review; ${sample.configured_only} configured-only model identities; ${sample.sample_cost_per_accepted === null ? "sample cash cost per accepted unknown" : `$${sample.sample_cost_per_accepted.toFixed(4)} estimated sample cost per accepted`}; public mapping ${mapped?.standing ?? "unmapped"} (${mapped?.observations.length ?? 0} source observations).\n`,
+            `  ${option.id} (${option.model}): ${option.standing}; ${option.reason}; ${option.expected_tokens} declared tokens; ${sample.accepted} accepted, ${sample.rejected} rejected, ${sample.failed} failed, ${sample.unreviewed} awaiting review; ${sample.configured_only} configured-only model identities; ${sample.sample_cost_per_accepted === null ? "sample cash cost per accepted unknown" : `$${sample.sample_cost_per_accepted.toFixed(4)} estimated sample cost per accepted`}; public mapping ${mapped?.standing ?? "unmapped"} (${mapped?.observations.length ?? 0} source observations).\n`,
           );
           printRestrictionStandings(context, option.restriction_standings);
           if (mapped?.snapshot && mapped.mapping)
@@ -2075,7 +2236,6 @@ export async function developmentCommand(
               `    Public source: ${mapped.snapshot.source_url} fetched ${mapped.snapshot.fetched_at}; rights ${mapped.snapshot.usage_rights ?? "source-specific"}. Identity: ${mapped.mapping.identity_note} Relevance: ${mapped.mapping.relevance_note}\n`,
             );
         }
-        context.io.stdout(`${result.selection}\n`);
         const matched = result.matched_evidence;
         context.io.stdout(
           `Matched comparison: ${matched.matched_tasks} distinct frozen tasks; ${matched.standing}. ${matched.reason}.\n`,
@@ -2186,10 +2346,13 @@ export async function developmentCommand(
       throw new Error(
         `Run needs a scout handoff that meets baseline expectations: ${unmet.join(", ")}`,
       );
-    const prompt =
+    const verifiedPrompt =
       handoff === null
         ? sourcePrompt
         : `${sourcePrompt.trimEnd()}\n\n${renderVerifiedHandoff(handoff)}\n`;
+    const prompt = plan.task.acceptance
+      ? `${verifiedPrompt.trimEnd()}\n\nAcceptance criteria from the frozen task plan:\n${plan.task.acceptance.map((criterion) => `- ${criterion}`).join("\n")}\n`
+      : verifiedPrompt;
     const approvalRecord = await currentApproval(root, hash);
     const approval = approvalRecord ? "current" : "missing_or_stale";
     if (approval !== "current")

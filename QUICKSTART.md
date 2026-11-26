@@ -1,5 +1,35 @@
 # ANVILMARK quickstart
 
+## Plan in the browser
+
+From an installed checkout, run `pnpm dev:web` and open
+`http://localhost:3000/plan`. Enter a request, add relevant context, and
+choose a planning provider and your available execution models. Review the
+draft and answer open questions in the context field before regenerating.
+Copy the full handoff into your repo's coding agent, or use the local-first
+prompt to plan directly there without calling the web planner.
+
+Gemini and OpenAI accept a key in the planner. For a private instance, set
+`ANVILMARK_GEMINI_API_KEY` in `packages/web/.env.local` to use a server-side
+Gemini key and restart the web app. Anyone who can access that instance can
+use its Gemini quota. To use Ollama, run it on the same
+machine as the web app, pull a model such as `qwen3:8b`, and start the site with:
+
+```sh
+ANVILMARK_PLANNER_ENDPOINT=http://127.0.0.1:11434/v1/chat/completions pnpm dev:web
+```
+
+Select **Configured endpoint**, enter the installed model ID, and leave the
+key blank for Ollama. The environment variable can also point to another
+trusted OpenAI-compatible chat completions endpoint. Set it on the web
+server, since the server makes the request. On a hosted deployment,
+`127.0.0.1` refers to the deployment, so run the site locally for laptop inference.
+
+Task costs use published standard rates for supported API model IDs and
+estimated input/output tokens. Subscription costs and unfamiliar model
+prices remain unknown. Strict mode includes defensive verification
+requirements in the handoff for the local agent to run and report.
+
 Start here to install the local tools and try an Atlas training project. The
 workflow prepares a decision for your review, generates architecture/context,
 and checks supported provider calls and declared data flows. No hosted

@@ -3,94 +3,60 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+
+import {
+  LiquidNavbar,
+  NimbusIcons,
+  type LiquidNavItem,
+} from "../../components/ui/liquid-glass-navbar";
+import styles from "./site-header.module.css";
 
 const links = [
-  { href: "/", label: "The product" },
-  { href: "/models", label: "Model research" },
-  { href: "/workspace", label: "Your records" },
-];
+  { href: "/", label: "Home", icon: NimbusIcons.home, fx: "glow" },
+  { href: "/beta", label: "Plan a change", icon: NimbusIcons.drop, fx: "drop" },
+  { href: "/models", label: "Models", icon: NimbusIcons.globe, fx: "spin" },
+  {
+    href: "/start",
+    label: "Work locally",
+    icon: NimbusIcons.plane,
+    fx: "plane",
+  },
+  {
+    href: "/workspace",
+    label: "Your records",
+    icon: NimbusIcons.user,
+    fx: "wave",
+  },
+] satisfies LiquidNavItem[];
 
-export function SiteHeader() {
+export function SiteHeader({ tone = "light" }: { tone?: "light" | "dark" }) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-  const toggle = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
-  useEffect(() => {
-    if (!open) return;
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-        toggle.current?.focus();
-      }
-    };
-    window.addEventListener("keydown", escape);
-    return () => window.removeEventListener("keydown", escape);
-  }, [open]);
+  const active = links.findIndex(
+    ({ href }) =>
+      pathname === href || (href === "/beta" && pathname === "/plan"),
+  );
+  const dark = tone === "dark";
+
   return (
-    <header className="alpha alpha-header">
-      <div className="alpha-shell alpha-header-inner">
-        <Link className="alpha-brand" href="/" aria-label="Anvilmark home">
+    <header className={`${styles.header} ${dark ? styles.dark : styles.light}`}>
+      <div className={styles.inner}>
+        <Link className={styles.brand} href="/" aria-label="AnvilMark home">
           <Image
-            src="/brand/logo-mark-monochrome-transparent.png"
-            width={42}
-            height={42}
+            src={
+              dark
+                ? "/brand/logo-mark-monochrome-reversed-transparent.png"
+                : "/brand/logo-mark-monochrome-transparent.png"
+            }
+            width={29}
+            height={29}
             alt=""
           />
           <span>
-            ANVILMARK<span className="alpha-version">ALPHA / 01</span>
+            AnvilMark <small>Beta</small>
           </span>
         </Link>
-        <nav className="alpha-desktop-nav" aria-label="Primary">
-          {links.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              aria-current={pathname === link.href ? "page" : undefined}
-            >
-              {link.label}
-            </Link>
-          ))}
-        </nav>
-        <Link
-          className="alpha-button alpha-button-small alpha-header-start"
-          href="/start"
-        >
-          Start locally <span aria-hidden="true">↗</span>
-        </Link>
-        <button
-          ref={toggle}
-          className="alpha-menu-toggle"
-          aria-expanded={open}
-          aria-controls="alpha-mobile-nav"
-          onClick={() => setOpen(!open)}
-        >
-          {open ? "Close −" : "Menu +"}
-        </button>
+        <LiquidNavbar tone={tone} items={links} active={active} />
       </div>
-      <nav
-        id="alpha-mobile-nav"
-        aria-label="Primary, mobile"
-        className="alpha-mobile-nav alpha-shell"
-        hidden={!open}
-      >
-        {links.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            onClick={() => setOpen(false)}
-            aria-current={pathname === link.href ? "page" : undefined}
-          >
-            {link.label}
-            <span aria-hidden="true">↗</span>
-          </Link>
-        ))}
-        <Link href="/start" onClick={() => setOpen(false)}>
-          Start locally <span aria-hidden="true">↗</span>
-        </Link>
-      </nav>
     </header>
   );
 }

@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { SiteHeader } from "./components/site-header";
 import { SiteFooter } from "./components/site-footer";
-import { AlphaMotion, DecisionObject } from "./components/alpha-interactions";
+import { AlphaMotion } from "./components/alpha-interactions";
+import { AsciiAquarium } from "../components/ui/ascii-aquarium";
+import styles from "./home.module.css";
 import { GITHUB_URL } from "./components/circuitry";
 
 const workflow = [
@@ -31,53 +33,36 @@ export default function HomePage() {
       <a href="#main" className="alpha-skip">
         Skip to content
       </a>
-      <SiteHeader />
+      <div className={styles.header}>
+        <SiteHeader tone="dark" />
+      </div>
       <main tabIndex={-1} id="main">
-        <section className="alpha-hero alpha-shell">
-          <div className="alpha-hero-copy">
-            <p className="alpha-label alpha-kicker">
-              <span className="alpha-tiny-cross" aria-hidden="true">
-                ✳
-              </span>{" "}
-              A DEVELOPMENT DECISION RECORD
-            </p>
-            <h1>
+        <section className={styles.hero} aria-labelledby="home-heading">
+          <div className={styles.aquarium} aria-hidden="true">
+            <AsciiAquarium style={{ minHeight: 0 }} />
+          </div>
+          <div className={`alpha-shell ${styles.heroCopy}`}>
+            <h1 id="home-heading">
               Good decisions.
               <br />
-              <span className="alpha-title-indent">Kept on</span>
-              <br />
-              <em>record.</em>
-              <span className="alpha-title-period" aria-hidden="true">
-                ↗
-              </span>
+              Kept on <em>record.</em>
             </h1>
-            <p className="alpha-hero-description">
-              Choose the setup. Keep the reasoning.
-              <br />
-              See what your coding agent actually delivered.
+            <p>
+              Plan the change, choose a model, and keep a record of what your
+              coding agent delivered.
             </p>
-            <div className="alpha-hero-actions">
-              <Link href="/start" className="alpha-button">
+            <div className={styles.actions}>
+              <Link href="/beta" className={styles.primaryAction}>
+                Plan a change <span aria-hidden="true">↗</span>
+              </Link>
+              <Link href="/start" className={styles.secondaryAction}>
                 Start locally <span aria-hidden="true">↗</span>
               </Link>
-              <a className="alpha-text-link" href="#the-method">
-                Meet the method <span aria-hidden="true">↓</span>
-              </a>
             </div>
-            <p className="alpha-label alpha-hero-footnote">
-              FREE TO USE · BRING YOUR OWN AGENT
-            </p>
           </div>
-          <DecisionObject />
-          <div className="alpha-hero-baseline">
-            <span className="alpha-label">INTENT → CHOICE → OUTCOME</span>
-            <span className="alpha-label">
-              A LITTLE MORE INTENTION. A LOT MORE CONTEXT.
-            </span>
-            <a href="#the-method" aria-label="Scroll to the method">
-              ↓
-            </a>
-          </div>
+          <a className={styles.methodLink} href="#the-method">
+            Meet the method <span aria-hidden="true">↓</span>
+          </a>
         </section>
         <section id="the-method" className="alpha-method alpha-shell">
           <div className="alpha-section-intro" data-alpha-reveal>

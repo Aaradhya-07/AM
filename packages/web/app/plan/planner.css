@@ -1,0 +1,213 @@
+.planning {
+  max-width: 1120px;
+  padding-block: clamp(2.5rem, 6vw, 5.5rem);
+  overflow-wrap: anywhere;
+}
+.planning-heading {
+  margin-bottom: 2rem;
+}
+.planning-heading h1 {
+  font-size: clamp(2.75rem, 7vw, 5.5rem);
+  line-height: 1;
+  margin: 0 0 0.8rem;
+  letter-spacing: -0.055em;
+}
+.planning-heading p {
+  font-size: 1.125rem;
+  max-width: 64ch;
+}
+.planning-input,
+.planning-card {
+  color: #202521;
+  background: #fffefa;
+  border: 1px solid #d7ddd3;
+  padding: clamp(1rem, 3vw, 2rem);
+  border-radius: 0.8rem;
+  margin-bottom: 1.25rem;
+}
+.planning fieldset {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  margin: 0;
+}
+.planning h2 {
+  font-size: clamp(1.35rem, 3vw, 1.85rem);
+  margin: 0 0 0.7rem;
+  line-height: 1.2;
+}
+.planning-input h2 {
+  margin-top: 1.4rem;
+}
+.planning h3 {
+  font-size: 1.12rem;
+  margin: 0 0 0.45rem;
+  font-weight: 700;
+}
+.planning h4 {
+  margin: 0.85rem 0 0.25rem;
+  font-weight: 700;
+}
+.planning p {
+  margin: 0 0 0.7rem;
+}
+.planning label {
+  display: block;
+  font-weight: 650;
+  margin-bottom: 0.35rem;
+}
+.planning small,
+.planning-note {
+  color: #4b5c51;
+  font-size: 0.88rem;
+  font-weight: 400;
+}
+.planning input:not([type="checkbox"]),
+.planning select,
+.planning textarea {
+  color: #202521;
+  background: #fff;
+  border: 1px solid #a4b1a5;
+  border-radius: 0.35rem;
+  margin: 0.28rem 0 0.75rem;
+  padding: 0.65rem 0.75rem;
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  font-weight: 400;
+}
+.planning textarea {
+  resize: vertical;
+}
+.planning .planning-toggle {
+  display: flex;
+  align-items: start;
+  gap: 0.65rem;
+  margin-block: 0.45rem 1rem;
+}
+.planning-toggle input {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-top: 0.2rem;
+  accent-color: #176044;
+  flex-shrink: 0;
+}
+.planning-toggle small {
+  display: block;
+}
+.planning-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.planning-model-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 9rem minmax(0, 1fr) auto;
+  gap: 0.6rem;
+  align-items: center;
+}
+.planning-models {
+  border-top: 1px solid #d7ddd3;
+  border-bottom: 1px solid #d7ddd3;
+  padding: 0.8rem 0;
+  margin: 1rem 0;
+}
+.planning summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.planning details > p {
+  margin-top: 0.65rem;
+}
+.planning a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.planning button {
+  cursor: pointer;
+  border-radius: 0.4rem;
+  padding: 0.6rem 0.9rem;
+  font-weight: 700;
+}
+.planning button:disabled,
+.planning fieldset:disabled button {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+.planning-primary {
+  color: #fff;
+  background: #176044;
+  border: 1px solid #176044;
+}
+.planning-secondary {
+  color: #17553f;
+  background: #f4f7f0;
+  border: 1px solid #a4b1a5;
+}
+.planning :is(button, input, select, textarea, summary, a):focus-visible {
+  outline: 2px solid #176044;
+  outline-offset: 3px;
+}
+.planning-subcard {
+  padding: 1rem;
+  border: 1px solid #d7ddd3;
+  border-radius: 0.5rem;
+  background: #f7f8f3;
+}
+.planning-subcard + .planning-subcard {
+  margin-top: 0.65rem;
+}
+.planning-grid .planning-subcard {
+  margin-top: 0;
+}
+.planning-tasks {
+  display: grid;
+  gap: 0.8rem;
+  padding-inline-start: 1.5rem;
+  margin: 1rem 0 0;
+  list-style: decimal;
+}
+.planning-tasks > li::marker {
+  color: #176044;
+  font-weight: 700;
+}
+.planning ul {
+  list-style: disc;
+  padding-inline-start: 1.25rem;
+  margin: 0 0 0.75rem;
+}
+.planning-flows {
+  margin-top: 1rem;
+}
+.planning-flows > div {
+  border-left: 3px solid #176044;
+  padding: 0.65rem 1rem;
+  background: #f3f5ee;
+  margin-top: 0.45rem;
+}
+.planning-flows p {
+  margin: 0;
+}
+.planning .planning-error {
+  color: #932b25;
+  margin-top: 0.7rem;
+}
+.planning .planning-copy-status {
+  position: sticky;
+  bottom: 1rem;
+  background: #174b37;
+  color: white;
+  padding: 0.65rem 1rem;
+  border-radius: 0.4rem;
+  width: fit-content;
+}
+@media (max-width: 700px) {
+  .planning-grid,
+  .planning-model-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .planning-model-row {
+    padding-block: 0.6rem;
+    border-top: 1px solid #d7ddd3;
+  }
+}

@@ -71,6 +71,94 @@ async function repository() {
 }
 
 describe("development pilot", () => {
+  it("explains per-task model choices and freezes the selected workflow task", async () => {
+    const root = await tempDir();
+    const file = join(root, "workflow.json");
+    const phase = {
+      id: "phase.fix",
+      outcome: "Labels normalize consistently",
+      required_inputs: ["Existing normalizer"],
+      interface_commitments: ["Preserve the export"],
+      non_goals: [],
+      depends_on: [] as string[],
+      integration_checks: [
+        { name: "integration", argv: ["node", "integration.mjs"] },
+      ],
+      max_attempts: 1,
+      escalation: "Review the plan",
+    };
+    const acceptance = ["Repeated punctuation collapses."];
+    const tasks = [
+      {
+        ...plan,
+        phase,
+        task: { ...plan.task, acceptance },
+        evaluation: {
+          baseline_candidate_id: "strong",
+          baseline_reason: "Use the declared behavior-change baseline.",
+        },
+      },
+      {
+        ...plan,
+        phase: { ...phase, id: "phase.coverage", depends_on: [phase.id] },
+        task: {
+          ...plan.task,
+          id: "task.coverage",
+          acceptance: ["Add regression coverage."],
+        },
+        restrictions: { ...plan.restrictions, allowed_models: ["gpt-6-luna"] },
+      },
+    ];
+    const draft = {
+      schema_version: 1,
+      request: "Fix labels",
+      goal: "Normalize punctuation",
+      open_questions: [],
+      tasks,
+    };
+    await writeFile(file, JSON.stringify(draft));
+    const preview = scriptedIo({ cwd: root });
+    expect(
+      await cli(["development", "workflow", "--file", file, "--json"], preview),
+    ).toBe(0);
+    expect(JSON.parse(preview.out())).toMatchObject({
+      status: "draft",
+      tasks: [
+        {
+          assignment: {
+            standing: "fixed_baseline",
+            candidate_id: "strong",
+            model: "gpt-6-sol",
+            declared_baseline_reason: tasks[0]!.evaluation?.baseline_reason,
+          },
+        },
+        {
+          assignment: {
+            standing: "only_eligible",
+            candidate_id: "fast",
+            model: "gpt-6-luna",
+          },
+        },
+      ],
+    });
+    const freeze = scriptedIo({ cwd: root });
+    expect(
+      await cli(
+        ["development", "plan", "--file", file, "--task", plan.task.id],
+        freeze,
+      ),
+    ).toBe(0);
+    expect(freeze.out()).toContain(acceptance[0]);
+    await writeFile(
+      file,
+      JSON.stringify({ ...draft, tasks: [...tasks].reverse() }),
+    );
+    const invalid = scriptedIo({ cwd: root });
+    expect(
+      await cli(["development", "workflow", "--file", file], invalid),
+    ).not.toBe(0);
+    expect(invalid.err()).toContain("must appear earlier");
+  });
   it("requires a declared fixed baseline and exposes matched-evidence abstention", async () => {
     const { root } = await repository();
     await writeFile(

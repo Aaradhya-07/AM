@@ -1,0 +1,7 @@
+[     425ms] [WARNING] [.WebGL-0x2934000a2a00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels @ file:///tmp/anvilmark-nav.html:1
+[     445ms] [WARNING] [.WebGL-0x2934000a2a00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels @ file:///tmp/anvilmark-nav.html:1
+[     459ms] [WARNING] [.WebGL-0x2934000a2a00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels @ file:///tmp/anvilmark-nav.html:1
+[     471ms] [WARNING] [.WebGL-0x2934000a2a00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat) @ file:///tmp/anvilmark-nav.html:1
+[  229035ms] [WARNING] Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true. See: https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently @ :3
+[  229522ms] [WARNING] Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true. See: https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently @ :3
+[  285569ms] [WARNING] Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true. See: https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently @ :2

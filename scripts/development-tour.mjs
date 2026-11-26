@@ -142,6 +142,12 @@ try {
   for (const name of ["label.mjs", "check.mjs", "prompt.txt"])
     copyFileSync(join(fixture, name), join(project, name));
   const plan = JSON.parse(readFileSync(join(fixture, "plan.json"), "utf8"));
+  plan.task.acceptance = [
+    "Repeated punctuation collapses to one separator.",
+    "Existing label behavior and the public export still work.",
+  ];
+  plan.evaluation.baseline_reason =
+    "The patch alters normalization behavior; use the fixture's designated comparison baseline for this change.";
   plan.architecture.allowed_changed_paths = ["label.mjs"];
   plan.phase = {
     id: "phase.label-normalization",
@@ -168,9 +174,51 @@ try {
     escalation:
       "Stop and ask a person to revise the plan after a failed attempt",
   };
+  const followUp = {
+    ...plan,
+    architecture: {
+      ...plan.architecture,
+      allowed_changed_paths: ["check.mjs"],
+    },
+    task: {
+      ...plan.task,
+      id: "task.cover-separator-edges",
+      summary: "Add regression coverage for punctuation at label boundaries.",
+      profile: { ...plan.task.profile, kind: "test" },
+      checks: [{ name: "label-test", argv: ["node", "--test", "check.mjs"] }],
+      acceptance: [
+        "A regression test covers leading and trailing punctuation.",
+      ],
+    },
+    phase: {
+      ...plan.phase,
+      id: "phase.separator-regression",
+      outcome: "The normalization boundary behavior has regression coverage",
+      required_inputs: ["The reviewed label normalization fix"],
+      non_goals: ["No production code changes"],
+      depends_on: [plan.phase.id],
+    },
+    evaluation: {
+      ...plan.evaluation,
+      baseline_candidate_id: "fast",
+      baseline_reason:
+        "The follow-up adds a narrow test with stable behavior and a test-only file boundary; use the lighter declared setup as its comparison baseline.",
+    },
+  };
   writeFileSync(
-    join(project, "plan.json"),
-    `${JSON.stringify(plan, null, 2)}\n`,
+    join(project, "workflow.json"),
+    `${JSON.stringify(
+      {
+        schema_version: 1,
+        request:
+          "Labels look wrong when people type a lot of punctuation. Fix it and make sure it stays fixed.",
+        goal: "Normalize repeated separators while preserving the public API and adding boundary regression coverage.",
+        open_questions: [],
+        tasks: [plan, followUp],
+      },
+      null,
+      2,
+    )}\n`,
   );
   command("git", ["init", "-q", project]);
   command("git", ["-C", project, "config", "user.name", "Anvilmark Tour"]);
@@ -188,15 +236,21 @@ try {
     "label.mjs",
     "check.mjs",
     "prompt.txt",
-    "plan.json",
+    "workflow.json",
   ]);
   command("git", ["-C", project, "commit", "-qm", "Freeze demo baseline"]);
+
+  await next(
+    "Turn the request into ordered tasks",
+    "This prepared brief separates the behavior change from a test-only follow-up. Anvilmark evaluates each task separately and explains the proposed setup. The tour executes only the first task.",
+  );
+  dev("workflow", ["--file", "workflow.json"]);
 
   await next(
     "Freeze the plan",
     "The approved architecture permits changes only to label.mjs. The test and bundle commands are part of the frozen plan.",
   );
-  dev("plan", ["--file", "plan.json"]);
+  dev("plan", ["--file", "workflow.json", "--task", plan.task.id]);
   await next(
     "Verify the agent handoff",
     "The scout fixes the Git base commit, hashes file leads, and runs the baseline check in a separate checkout. A failed check is an observation, not a diagnosis.",
@@ -224,7 +278,7 @@ try {
     "run",
     [
       "--candidate",
-      "strong",
+      plan.evaluation.baseline_candidate_id,
       "--prompt-file",
       "prompt.txt",
       "--handoff",

@@ -1,0 +1,170 @@
+.header {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 40;
+  color: #f7f4ef;
+  color-scheme: dark;
+}
+
+.hero {
+  position: relative;
+  isolation: isolate;
+  min-height: 100svh;
+  overflow: clip;
+  display: grid;
+  align-items: center;
+  background: #000;
+  color: #f7f4ef;
+  color-scheme: dark;
+}
+
+.aquarium {
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+}
+
+.hero::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background:
+    linear-gradient(90deg, #000e 0%, #000a 28%, #0003 55%, transparent 77%),
+    linear-gradient(180deg, #0009, transparent 28%, transparent 86%, #000b);
+  pointer-events: none;
+  content: "";
+}
+
+.heroCopy {
+  display: grid;
+  gap: 24px;
+  justify-items: start;
+  padding-block: 140px 120px;
+  pointer-events: none;
+}
+
+.hero h1 {
+  max-width: 12ch;
+  font-size: clamp(3.5rem, 8vw, 8.2rem);
+  line-height: 0.91;
+  letter-spacing: -0.082em;
+  text-wrap: initial;
+}
+
+.hero h1 em {
+  color: #e9bc89;
+}
+
+.heroCopy p {
+  max-width: 31rem;
+  color: #ded6cc;
+  font-size: clamp(16px, 2vw, 20px);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.primaryAction,
+.secondaryAction {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 17px;
+  padding-inline: 16px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.primaryAction {
+  background: #f3ede3;
+  color: #17120f;
+}
+
+.primaryAction:hover {
+  background: #ffdcaf;
+}
+
+.secondaryAction {
+  border-color: #ffffff55;
+  background: #111016c9;
+  color: #f3ede3;
+}
+
+.secondaryAction:hover {
+  border-color: #ffffffab;
+  background: #242029;
+}
+
+.methodLink {
+  position: absolute;
+  bottom: clamp(24px, 5vh, 50px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  color: #ded6cc;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.hero a:focus-visible {
+  outline: 2px solid #ffc68a;
+  outline-offset: 4px;
+}
+
+@media (max-width: 650px) {
+  .hero {
+    align-items: start;
+  }
+
+  .hero::before {
+    background: linear-gradient(
+      180deg,
+      #000b 0%,
+      #000d 24%,
+      #0007 51%,
+      transparent 76%,
+      #0008
+    );
+  }
+
+  .heroCopy {
+    gap: 20px;
+    padding-block: 155px 190px;
+  }
+
+  .hero h1 {
+    font-size: clamp(3rem, 12.5vw, 5rem);
+  }
+
+  .actions {
+    gap: 8px;
+  }
+
+  .primaryAction,
+  .secondaryAction {
+    gap: 10px;
+    padding-inline: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primaryAction,
+  .secondaryAction {
+    transition: none;
+  }
+}

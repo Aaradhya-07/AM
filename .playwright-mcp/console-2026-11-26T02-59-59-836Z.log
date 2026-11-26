@@ -1,0 +1,11 @@
+[  149682ms] ReferenceError: process is not defined
+    at BetaPage (file:///tmp/anvilmark-beta-preview.html:28560:33)
+    at renderWithHooks (file:///tmp/anvilmark-beta-preview.html:4851:27)
+    at updateFunctionComponent (file:///tmp/anvilmark-beta-preview.html:6482:21)
+    at beginWork (file:///tmp/anvilmark-beta-preview.html:7093:20)
+    at performUnitOfWork (file:///tmp/anvilmark-beta-preview.html:9898:20)
+    at workLoopSync (file:///tmp/anvilmark-beta-preview.html:9796:43)
+    at renderRootSync (file:///tmp/anvilmark-beta-preview.html:9780:13)
+    at performWorkOnRoot (file:///tmp/anvilmark-beta-preview.html:9455:46)
+    at performWorkOnRootViaSchedulerTask (file:///tmp/anvilmark-beta-preview.html:10459:9)
+    at MessagePort.performWorkUntilDeadline (file:///tmp/anvilmark-beta-preview.html:829:50)

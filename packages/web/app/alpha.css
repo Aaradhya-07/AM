@@ -71,54 +71,6 @@
 .alpha-muted {
   color: var(--muted);
 }
-.alpha-header {
-  background: var(--paper);
-  border-bottom: 1px solid var(--rule);
-  position: relative;
-  z-index: 40;
-  color-scheme: light;
-}
-.alpha-header-inner {
-  min-height: 96px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-}
-.alpha-brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 17px;
-  letter-spacing: 0.12em;
-  font-weight: 600;
-  line-height: 1.3;
-}
-.alpha-brand img {
-  width: 38px;
-  height: 38px;
-  object-fit: contain;
-}
-.alpha-version {
-  display: block;
-  font-family: var(--font-mono), monospace;
-  font-size: 9px;
-  font-weight: 400;
-  letter-spacing: 0.1em;
-  color: var(--muted);
-  margin-top: 3px;
-}
-.alpha-desktop-nav {
-  display: flex;
-  align-items: center;
-  gap: 32px;
-  font-size: 13px;
-}
-.alpha-desktop-nav a {
-  padding-block: 12px;
-  position: relative;
-}
-.alpha-desktop-nav a::after,
 .alpha-text-link::after {
   content: "";
   height: 1px;
@@ -131,8 +83,6 @@
   transform-origin: left;
   transition: transform 160ms ease;
 }
-.alpha-desktop-nav a:hover::after,
-.alpha-desktop-nav a[aria-current]::after,
 .alpha-text-link:hover::after {
   transform: scaleX(1);
 }
@@ -179,24 +129,6 @@
   gap: 22px;
   font-size: 13px;
   font-weight: 500;
-}
-.alpha-menu-toggle {
-  display: none;
-  min-height: 44px;
-  background: none;
-  border: 1px solid var(--rule);
-  padding: 8px 14px;
-  font-size: 12px !important;
-}
-.alpha-mobile-nav:not([hidden]) {
-  display: grid;
-  padding-block: 10px 20px;
-}
-.alpha-mobile-nav a {
-  display: flex;
-  justify-content: space-between;
-  padding: 15px 0;
-  border-top: 1px solid var(--rule);
 }
 .alpha-skip {
   position: fixed;
@@ -1037,9 +969,6 @@
   .alpha-shell {
     width: calc(100% - 64px);
   }
-  .alpha-desktop-nav {
-    gap: 20px;
-  }
   .alpha-hero {
     column-gap: 4%;
   }
@@ -1068,16 +997,6 @@
   }
 }
 @media (max-width: 960px) {
-  .alpha-desktop-nav,
-  .alpha-header-start {
-    display: none;
-  }
-  .alpha-menu-toggle {
-    display: block;
-  }
-  .alpha-header-inner {
-    min-height: 80px;
-  }
   .alpha-hero {
     min-height: 0;
     padding-top: 42px;
@@ -1171,17 +1090,6 @@
 @media (max-width: 640px) {
   .alpha-shell {
     width: calc(100% - 40px);
-  }
-  .alpha-header-inner {
-    min-height: 76px;
-  }
-  .alpha-brand {
-    font-size: 15px;
-    gap: 9px;
-  }
-  .alpha-brand img {
-    width: 33px;
-    height: 33px;
   }
   .alpha-hero {
     display: block;
