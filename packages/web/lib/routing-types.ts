@@ -81,6 +81,22 @@ export interface RoutingCatalogSnapshot {
   candidates: RoutableCandidate[];
 }
 
+export interface CatalogSourceFreshness {
+  id: string;
+  fetchedAt: string;
+}
+
+export const catalogRefreshCommand =
+  "pnpm --filter @anvilmark/web catalog:refresh" as const;
+
+export interface CatalogFreshness {
+  fetchedAt: string;
+  ageDays: number;
+  isStale: boolean;
+  sources: CatalogSourceFreshness[];
+  refreshCommand: typeof catalogRefreshCommand;
+}
+
 export function formatRoutingSummary(prefs: RoutingPreferences): string {
   if (prefs.mode === "open" || prefs.subscriptions.length === 0) {
     return "Open best-fit";

@@ -22,6 +22,22 @@ const baseInput: BetaTurnInput = {
   routingPrefs: { mode: "open", subscriptions: [] },
 };
 
+function makeModelsResponse(
+  models: Array<{ id: string; status: "loaded" | "unloaded" }> = [
+    { id: "qwen3.5-9b", status: "loaded" },
+  ],
+) {
+  return new Response(
+    JSON.stringify({
+      data: models.map((item) => ({
+        id: item.id,
+        status: { value: item.status },
+      })),
+    }),
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  );
+}
+
 function makeUpstreamJson(payload: unknown) {
   return new Response(
     JSON.stringify({
@@ -38,6 +54,12 @@ function submitTurn(body: BetaTurnInput) {
       body: JSON.stringify(body),
     }),
   );
+}
+
+function countCompletionCalls(fetchMock: ReturnType<typeof vi.fn>): number {
+  return fetchMock.mock.calls.filter(([url]) =>
+    String(url).includes("/chat/completions"),
+  ).length;
 }
 
 afterEach(() => {
@@ -90,15 +112,18 @@ describe("3-mode /api/beta/turn & SQLite routing catalog", () => {
       "ANVILMARK_PLANNER_ENDPOINT",
       "http://am-server:8080/v1/chat/completions",
     );
-    const fetchMock = vi.fn().mockResolvedValueOnce(
-      makeUpstreamJson({
-        mode: "chat",
-        reply:
-          "Hey! I help turn rough software ideas into vetted architecture decisions, bounded task slices, and cost-smart model picks. What are you planning to build today?",
-        questions: [],
-        elevatedBrief: "",
-      }),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(makeModelsResponse())
+      .mockResolvedValueOnce(
+        makeUpstreamJson({
+          mode: "chat",
+          reply:
+            "Hey! I help turn rough software ideas into vetted architecture decisions, bounded task slices, and cost-smart model picks. What are you planning to build today?",
+          questions: [],
+          elevatedBrief: "",
+        }),
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     const response = await submitTurn(baseInput);
@@ -106,7 +131,7 @@ describe("3-mode /api/beta/turn & SQLite routing catalog", () => {
     const data = await response.json();
     expect(data.mode).toBe("chat");
     expect(data.reply).toContain("What are you planning to build today?");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(countCompletionCalls(fetchMock)).toBe(1);
   });
 
   it("returns structured clarification questions for underspecified prompts", async () => {
@@ -114,30 +139,33 @@ describe("3-mode /api/beta/turn & SQLite routing catalog", () => {
       "ANVILMARK_PLANNER_ENDPOINT",
       "http://am-server:8080/v1/chat/completions",
     );
-    const fetchMock = vi.fn().mockResolvedValueOnce(
-      makeUpstreamJson({
-        mode: "clarify",
-        reply:
-          "Happy to help plan a todo app—let's pin down a couple of basics before choosing an architecture.",
-        questions: [
-          {
-            id: "audience",
-            question: "Who will use this todo app?",
-            why: "Determines whether we need auth and shared workspaces.",
-            options: ["Personal local app", "Small team with shared lists"],
-            allowMultiple: false,
-          },
-          {
-            id: "platform",
-            question: "Which platform are you targeting?",
-            why: "Sets the runtime and UI framework.",
-            options: ["Web app", "CLI", "Mobile"],
-            allowMultiple: false,
-          },
-        ],
-        elevatedBrief: "",
-      }),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(makeModelsResponse())
+      .mockResolvedValueOnce(
+        makeUpstreamJson({
+          mode: "clarify",
+          reply:
+            "Happy to help plan a todo app—let's pin down a couple of basics before choosing an architecture.",
+          questions: [
+            {
+              id: "audience",
+              question: "Who will use this todo app?",
+              why: "Determines whether we need auth and shared workspaces.",
+              options: ["Personal local app", "Small team with shared lists"],
+              allowMultiple: false,
+            },
+            {
+              id: "platform",
+              question: "Which platform are you targeting?",
+              why: "Sets the runtime and UI framework.",
+              options: ["Web app", "CLI", "Mobile"],
+              allowMultiple: false,
+            },
+          ],
+          elevatedBrief: "",
+        }),
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     const response = await submitTurn({
@@ -148,7 +176,7 @@ describe("3-mode /api/beta/turn & SQLite routing catalog", () => {
     const data = await response.json();
     expect(data.mode).toBe("clarify");
     expect(data.questions).toHaveLength(2);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(countCompletionCalls(fetchMock)).toBe(1);
   });
 
   it("synthesizes an elevated plan with subscription routing and builds Master + Slice prompts", async () => {
@@ -213,6 +241,7 @@ describe("3-mode /api/beta/turn & SQLite routing catalog", () => {
 
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(makeModelsResponse())
       .mockResolvedValueOnce(
         makeUpstreamJson({
           mode: "plan",

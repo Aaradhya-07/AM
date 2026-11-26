@@ -2,10 +2,13 @@ import { DatabaseSync } from "node:sqlite";
 
 import { modelDatabasePath } from "./model-catalog-db";
 import {
+  catalogRefreshCommand,
   computePlanSavingsSummary,
   defaultRoutingPreferences,
   estimateTaskUsd,
   subscriptionIds,
+  type CatalogFreshness,
+  type CatalogSourceFreshness,
   type RoutableCandidate,
   type RoutingCatalogSnapshot,
   type RoutingPreferences,
@@ -14,10 +17,13 @@ import {
 import type { SelfHostedModel } from "./self-hosted-models";
 
 export {
+  catalogRefreshCommand,
   computePlanSavingsSummary,
   defaultRoutingPreferences,
   estimateTaskUsd,
   subscriptionIds,
+  type CatalogFreshness,
+  type CatalogSourceFreshness,
   type RoutableCandidate,
   type RoutingCatalogSnapshot,
   type RoutingPreferences,
@@ -392,4 +398,55 @@ export function resolveRoutingPool(
   }
 
   return { fetchedAt, candidates: selected.slice(0, 8) };
+}
+
+const fallbackCatalogFetchedAt = "2026-10-27T00:00:00.000Z";
+const catalogStaleThresholdDays = 14;
+
+export function getCatalogFreshness(now: Date = new Date()): CatalogFreshness {
+  let sources: CatalogSourceFreshness[] = [];
+  let fetchedAt = fallbackCatalogFetchedAt;
+
+  let db: DatabaseSync | null = null;
+  try {
+    db = new DatabaseSync(modelDatabasePath(), { readOnly: true });
+    const rows = db
+      .prepare("SELECT id, fetched_at FROM catalog_sources ORDER BY id")
+      .all() as Array<{ id?: unknown; fetched_at?: unknown }>;
+
+    sources = rows
+      .filter(
+        (row): row is { id: string; fetched_at: string } =>
+          typeof row.id === "string" && typeof row.fetched_at === "string",
+      )
+      .map((row) => ({
+        id: row.id,
+        fetchedAt: row.fetched_at,
+      }));
+
+    const latest = [...sources].sort((a, b) =>
+      b.fetchedAt.localeCompare(a.fetchedAt),
+    )[0];
+    if (latest) {
+      fetchedAt = latest.fetchedAt;
+    }
+  } catch {
+    sources = [];
+    fetchedAt = fallbackCatalogFetchedAt;
+  } finally {
+    db?.close();
+  }
+
+  const parsedMs = Date.parse(fetchedAt);
+  const ageDays = Number.isFinite(parsedMs)
+    ? Math.max(0, Math.floor((now.getTime() - parsedMs) / 86_400_000))
+    : 0;
+
+  return {
+    fetchedAt,
+    ageDays,
+    isStale: ageDays > catalogStaleThresholdDays,
+    sources,
+    refreshCommand: catalogRefreshCommand,
+  };
 }
