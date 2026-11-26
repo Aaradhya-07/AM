@@ -5,6 +5,38 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BetaPrompt } from "../app/beta/prompt";
 import type { GeneratedPlan } from "../lib/planner";
+import type { RoutableCandidate } from "../lib/routing-types";
+
+const sampleCandidates: RoutableCandidate[] = [
+  {
+    model: "claude-sonnet-5-5",
+    label: "Claude Sonnet 5.5",
+    provider: "Anthropic",
+    tier: "balanced",
+    billing: "api",
+    inputUsdPerMillion: 2,
+    outputUsdPerMillion: 10,
+    sourceUrl: "https://platform.claude.com/docs/en/about-claude/pricing",
+    arenaAgentRank: 2,
+    arenaCodingScore: 1510,
+    catalogDate: "2026-10-27",
+    strengths: "Strong multi-file coding workhorse.",
+  },
+  {
+    model: "claude-haiku-5-5",
+    label: "Claude Haiku 5.5",
+    provider: "Anthropic",
+    tier: "fast",
+    billing: "api",
+    inputUsdPerMillion: 0.1,
+    outputUsdPerMillion: 0.5,
+    sourceUrl: "https://platform.claude.com/docs/en/models/haiku-5-5/overview",
+    arenaAgentRank: null,
+    arenaCodingScore: null,
+    catalogDate: "2026-10-27",
+    strengths: "Fast low-cost tier for bounded schemas and tests.",
+  },
+];
 
 const samplePlan: GeneratedPlan = {
   title: "Safe CSV imports",
@@ -39,11 +71,11 @@ const samplePlan: GeneratedPlan = {
       dependsOn: [],
       acceptance: ["Re-uploading the same CSV keeps row count unchanged."],
       checks: ["Run database migration and import integration tests."],
-      model: "gpt-5-mini",
+      model: "claude-haiku-5-5",
       why: "Well-bounded schema and repository change.",
       alternatives: [
         {
-          model: "gpt-5",
+          model: "claude-sonnet-5-5",
           tradeoff: "Useful if legacy duplicate cleanup is complex.",
         },
       ],
@@ -74,6 +106,7 @@ beforeEach(() => {
       removeEventListener: vi.fn(),
     }),
   });
+  Element.prototype.scrollIntoView = vi.fn();
 });
 
 afterEach(() => {
@@ -82,14 +115,17 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-describe("BetaPrompt in-page planner workflow", () => {
-  it("transitions to active mode, shows working state, hits /api/plan, and renders the plan", async () => {
-    let resolveFetch!: (response: Response) => void;
-    const fetchMock = vi.fn(
-      () =>
-        new Promise<Response>((resolve) => {
-          resolveFetch = resolve;
+describe("BetaPrompt 3-mode conversational UI", () => {
+  it("handles short natural language greetings (mode: chat) without minLength block", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          mode: "chat",
+          reply:
+            "Hey! I help turn ideas into vetted architecture plans and model-routed agent prompts. What are you planning to build today?",
         }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -98,101 +134,19 @@ describe("BetaPrompt in-page planner workflow", () => {
     const root = createRoot(host);
 
     await act(async () => {
-      root.render(<BetaPrompt configured={false} serverGemini />);
-    });
-
-    const main = host.querySelector("main")!;
-    expect(main.getAttribute("data-active")).toBe("false");
-    expect(host.textContent).toContain("What are you");
-
-    const textarea = host.querySelector("textarea")!;
-    await act(async () => {
-      setNativeValue(
-        textarea,
-        "Add idempotent CSV imports with preview and duplicate protection.",
+      root.render(
+        <BetaPrompt
+          configured
+          selfHostedModels={[
+            { id: "qwen3.5-9b", label: "Qwen 3.5 9B", status: "loaded" },
+          ]}
+        />,
       );
-    });
-
-    const form = textarea.closest("form")!;
-    await act(async () => {
-      form.dispatchEvent(
-        new Event("submit", { bubbles: true, cancelable: true }),
-      );
-    });
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [
-      string,
-      RequestInit,
-    ];
-    expect(url).toBe("/api/plan");
-    expect(init.method).toBe("POST");
-    expect(main.getAttribute("data-active")).toBe("true");
-    expect(host.textContent).toContain("Building your plan");
-    expect(host.textContent).toContain(
-      "Add idempotent CSV imports with preview and duplicate protection.",
-    );
-
-    await act(async () => {
-      resolveFetch(
-        new Response(JSON.stringify({ plan: samplePlan }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      );
-    });
-
-    expect(host.textContent).toContain("Safe CSV imports");
-    expect(host.textContent).toContain("Scoped uniqueness index");
-    expect(host.textContent).toContain("Add scoped uniqueness constraint");
-    expect(host.textContent).not.toContain("Building your plan");
-
-    const newPlanButton = Array.from(host.querySelectorAll("button")).find(
-      (button) => button.textContent?.trim() === "New plan",
-    );
-    expect(newPlanButton).toBeTruthy();
-    await act(async () => {
-      newPlanButton!.click();
-    });
-    expect(main.getAttribute("data-active")).toBe("false");
-
-    await act(async () => root.unmount());
-  });
-
-  it("shows an inline API key form when /api/plan requires a key and retries with the entered key", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ error: "Enter your provider API key." }),
-          {
-            status: 400,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ plan: samplePlan }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      );
-    vi.stubGlobal("fetch", fetchMock);
-
-    const host = document.createElement("div");
-    document.body.appendChild(host);
-    const root = createRoot(host);
-
-    await act(async () => {
-      root.render(<BetaPrompt configured={false} serverGemini={false} />);
     });
 
     const textarea = host.querySelector("textarea")!;
     await act(async () => {
-      setNativeValue(
-        textarea,
-        "Add idempotent CSV imports with preview and duplicate protection.",
-      );
+      setNativeValue(textarea, "hi");
     });
     await act(async () => {
       textarea
@@ -202,48 +156,61 @@ describe("BetaPrompt in-page planner workflow", () => {
         );
     });
 
-    expect(host.textContent).toContain("Enter your provider API key.");
-    const keyInput = host.querySelector<HTMLInputElement>("#beta-inline-key")!;
-    expect(keyInput).toBeTruthy();
-
-    await act(async () => {
-      setNativeValue(keyInput, "test-gemini-key");
-    });
-    await act(async () => {
-      keyInput
-        .closest("form")!
-        .dispatchEvent(
-          new Event("submit", { bubbles: true, cancelable: true }),
-        );
-    });
-
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const secondBody = JSON.parse(
-      String(
-        (fetchMock.mock.calls[1] as unknown as [string, RequestInit])[1].body,
-      ),
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/beta/turn",
+      expect.objectContaining({ method: "POST" }),
     );
-    expect(secondBody.key).toBe("test-gemini-key");
-    expect(host.textContent).toContain("Safe CSV imports");
+    expect(host.textContent).toContain("What are you planning to build today?");
+    expect(host.textContent).not.toContain("Shift to local development");
 
     await act(async () => root.unmount());
   });
 
-  it("lists discovered self-hosted OSS models and submits directly with provider configured", async () => {
+  it("renders interactive clarification options (mode: clarify) and synthesizes plan + Local Handoff Studio on answer", async () => {
+    let turnCount = 0;
     const fetchMock = vi.fn().mockImplementation((url: string) => {
-      if (url === "/api/plan") {
+      if (url === "/api/plan/models") {
         return Promise.resolve(
-          new Response(JSON.stringify({ plan: samplePlan }), {
+          new Response(JSON.stringify({ configured: true, models: [] }), {
             status: 200,
             headers: { "Content-Type": "application/json" },
           }),
         );
       }
+      turnCount += 1;
+      if (turnCount === 1) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              mode: "clarify",
+              reply: "Let's clarify two quick details for your todo app first.",
+              questions: [
+                {
+                  id: "scope",
+                  question: "Who is this todo app for?",
+                  why: "Decides auth and sync architecture.",
+                  options: ["Solo local use", "Team workspace"],
+                  allowMultiple: false,
+                },
+              ],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
       return Promise.resolve(
-        new Response(JSON.stringify({ configured: true, models: [] }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
+        new Response(
+          JSON.stringify({
+            mode: "plan",
+            reply: "Here is your sharpened plan and model routing.",
+            plan: samplePlan,
+            candidates: sampleCandidates,
+            catalogDate: "2026-10-27",
+            strict: false,
+            request: { idea: "Todo app", context: "" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
       );
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -258,21 +225,14 @@ describe("BetaPrompt in-page planner workflow", () => {
           configured
           selfHostedModels={[
             { id: "qwen3.5-9b", label: "Qwen 3.5 9B", status: "loaded" },
-            { id: "gemma-4-12b", label: "Gemma 4 12B", status: "unloaded" },
           ]}
         />,
       );
     });
 
-    expect(host.textContent).toContain("Qwen 3.5 9B");
-    expect(host.textContent).toContain("Gemma 4 12B");
-
     const textarea = host.querySelector("textarea")!;
     await act(async () => {
-      setNativeValue(
-        textarea,
-        "Add idempotent CSV imports with preview and duplicate protection.",
-      );
+      setNativeValue(textarea, "build a todo app");
     });
     await act(async () => {
       textarea
@@ -282,15 +242,39 @@ describe("BetaPrompt in-page planner workflow", () => {
         );
     });
 
-    const planCall = fetchMock.mock.calls.find(
-      (call) => call[0] === "/api/plan",
-    ) as [string, RequestInit];
-    expect(planCall).toBeTruthy();
-    const payload = JSON.parse(String(planCall[1].body));
-    expect(payload.provider).toBe("configured");
-    expect(payload.model).toBe("qwen3.5-9b");
-    expect(payload.key).toBe("");
+    expect(host.textContent).toContain("Who is this todo app for?");
+    const chip = Array.from(host.querySelectorAll("button")).find(
+      (b) => b.textContent?.trim() === "Team workspace",
+    )!;
+    expect(chip).toBeTruthy();
+
+    await act(async () => {
+      chip.click();
+    });
+
+    const buildBtn = Array.from(host.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Build plan with selections"),
+    )!;
+    expect(buildBtn).toBeTruthy();
+
+    await act(async () => {
+      buildBtn
+        .closest("form")!
+        .dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true }),
+        );
+    });
+
+    const secondTurnCall = fetchMock.mock.calls.filter(
+      (c) => c[0] === "/api/beta/turn",
+    )[1] as [string, RequestInit];
+    const sentPayload = JSON.parse(String(secondTurnCall[1].body));
+    expect(sentPayload.forcePlan).toBe(true);
+
     expect(host.textContent).toContain("Safe CSV imports");
+    expect(host.textContent).toContain("Shift to local development");
+    expect(host.textContent).toContain("Master agent prompt");
+    expect(host.textContent).toContain("Per-task slice prompts (1)");
 
     await act(async () => root.unmount());
   });

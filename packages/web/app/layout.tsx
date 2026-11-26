@@ -31,13 +31,14 @@ const mono = IBM_Plex_Mono({
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
 const socialImage = "/brand/logo-horizontal-on-light.png";
 
+const title = "AnvilMark — From idea to build plan";
 const description =
-  "Anvilmark is a free, local-first development decision record. Connect bounded tasks, coding-agent and model choices, recorded runs, checks, human review and cost evidence. Bring your own agent.";
+  "Turn a software idea or change into a build plan. Review the architecture, tasks, and model recommendations, then hand the plan to your coding agent.";
 
 export const metadata: Metadata = {
   ...(siteUrl ? { metadataBase: new URL(siteUrl) } : {}),
   title: {
-    default: "Anvilmark — Good decisions. Kept on record.",
+    default: title,
     template: "%s · ANVILMARK",
   },
   description,
@@ -63,14 +64,14 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "ANVILMARK",
-    title: "Anvilmark — Good decisions. Kept on record.",
+    title,
     description,
     ...(siteUrl
       ? {
           images: [
             {
               url: socialImage,
-              alt: "Anvilmark — a local-first development decision record.",
+              alt: "AnvilMark logo",
             },
           ],
         }
@@ -78,7 +79,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Anvilmark — Good decisions. Kept on record.",
+    title,
     description,
     ...(siteUrl ? { images: [socialImage] } : {}),
   },

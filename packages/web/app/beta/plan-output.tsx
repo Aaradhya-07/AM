@@ -2,118 +2,276 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 
+import type { ClarificationQuestionItem } from "../../lib/beta-turn";
 import {
-  estimateCost,
-  makeHandoff,
-  ratesChecked,
   strictChecks,
   type GeneratedPlan,
   type PlanningInput,
 } from "../../lib/planner";
+import {
+  computePlanSavingsSummary,
+  estimateTaskUsd,
+  subscriptionCatalog,
+  type RoutableCandidate,
+  type RoutingPreferences,
+  type SubscriptionId,
+} from "../../lib/routing-types";
+import { LocalHandoffStudio } from "./handoff-studio";
 import styles from "./beta.module.css";
 
-type Candidate = PlanningInput["candidates"][number];
-
-const workingStages = [
-  "Sending your brief to the planning model…",
-  "Mapping scope, assumptions, and open questions…",
-  "Weighing architecture decisions and tradeoffs…",
-  "Sequencing implementation tasks and checks…",
-  "Validating plan schema and model routing…",
+const thinkingPhrases = [
+  "Thinking…",
+  "Evaluating scope & missing constraints…",
+  "Comparing architecture & model tradeoffs…",
+  "Structuring task slices & agent handoff…",
 ] as const;
 
-export function WorkingCard({
+export function AssistantAvatar({ active = false }: { active?: boolean }) {
+  return (
+    <span
+      className={`${styles.avatar} ${active ? styles.avatarActive : ""}`}
+      aria-hidden="true"
+    >
+      <svg width="15" height="15" viewBox="0 0 18 18" fill="none">
+        <path
+          d="M9 2L11.1 6.9L16 9L11.1 11.1L9 16L6.9 11.1L2 9L6.9 6.9L9 2Z"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
+  );
+}
+
+export function ThinkingRow({
   providerLabel,
-  modelId,
-  effortLabel,
-  isRefinement,
   coldLoading = false,
 }: {
   providerLabel: string;
-  modelId: string;
-  effortLabel: string;
-  isRefinement: boolean;
   coldLoading?: boolean;
 }) {
-  const [stageIndex, setStageIndex] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
-  const stages = coldLoading
-    ? [
-        `Loading ${providerLabel} on am-server and preparing your brief…`,
-        ...workingStages.slice(1),
-      ]
-    : workingStages;
 
   useEffect(() => {
     const started = Date.now();
-    const tick = window.setInterval(() => {
-      const nextElapsed = Date.now() - started;
-      setElapsedMs(nextElapsed);
-      setStageIndex(
-        Math.min(
-          stages.length - 1,
-          Math.floor(nextElapsed / (coldLoading ? 3600 : 2400)),
-        ),
-      );
+    const timer = window.setInterval(() => {
+      setElapsedMs(Date.now() - started);
     }, 100);
-    return () => window.clearInterval(tick);
-  }, [coldLoading, stages.length]);
+    return () => window.clearInterval(timer);
+  }, []);
 
-  const seconds = (elapsedMs / 1000).toFixed(1);
+  const phrases = coldLoading
+    ? [`Loading ${providerLabel} on am-server…`, ...thinkingPhrases.slice(1)]
+    : thinkingPhrases;
+  const index = Math.min(phrases.length - 1, Math.floor(elapsedMs / 3200));
 
   return (
     <div
-      className={styles.workingCard}
+      className={styles.assistantRow}
       role="status"
       aria-live="polite"
-      aria-label="Generating plan"
+      aria-label="Generating response"
     >
-      <div className={styles.workingTrace} aria-hidden="true" />
-      <div className={styles.workingHeader}>
-        <div className={styles.pixelLoader} aria-hidden="true">
-          {Array.from({ length: 9 }, (_, index) => (
-            <span
-              key={index}
-              className={styles.pixelCell}
-              style={{
-                animationDelay: `${((index % 3) + Math.floor(index / 3)) * 110}ms`,
-              }}
-            />
-          ))}
-        </div>
-        <div className={styles.workingCopy}>
-          <p className={styles.workingTitle}>
-            {isRefinement ? "Refining your plan" : "Building your plan"}
-          </p>
-          <p className={styles.workingStage} key={stageIndex}>
-            {stages[stageIndex]}
-          </p>
-        </div>
-        <div className={styles.workingMeta}>
-          <span className={styles.metaChip}>
-            {modelId && modelId !== providerLabel
-              ? `${providerLabel} · ${modelId}`
-              : providerLabel}
+      <AssistantAvatar active />
+      <div className={styles.thinkingBody}>
+        <span className={styles.shimmerText} key={index}>
+          {phrases[index]}
+        </span>
+        {elapsedMs >= 1500 && (
+          <span className={styles.thinkingTimer}>
+            {(elapsedMs / 1000).toFixed(1)}s
           </span>
-          <span className={styles.metaChip}>{effortLabel}</span>
-          <span className={styles.timer}>{seconds}s</span>
-        </div>
-      </div>
-      <div className={styles.skeletonGrid} aria-hidden="true">
-        <div className={styles.skeletonLineWide} />
-        <div className={styles.skeletonLineMid} />
-        <div className={styles.skeletonCards}>
-          <div className={styles.skeletonCard}>
-            <span />
-            <span />
-          </div>
-          <div className={styles.skeletonCard}>
-            <span />
-            <span />
-          </div>
-        </div>
+        )}
       </div>
     </div>
+  );
+}
+
+export function ClarificationWidget({
+  questions,
+  answered,
+  routingPrefs,
+  onRoutingPrefsChange,
+  onSubmitAnswers,
+  onSkipDefaults,
+}: {
+  questions: readonly ClarificationQuestionItem[];
+  answered: boolean;
+  routingPrefs: RoutingPreferences;
+  onRoutingPrefsChange: (next: RoutingPreferences) => void;
+  onSubmitAnswers: (summary: string) => void;
+  onSkipDefaults: () => void;
+}) {
+  const [selected, setSelected] = useState<Record<string, string[]>>({});
+  const [customNotes, setCustomNotes] = useState("");
+
+  function toggleOption(question: ClarificationQuestionItem, option: string) {
+    if (answered) return;
+    setSelected((current) => {
+      const existing = current[question.id] ?? [];
+      if (question.allowMultiple) {
+        const next = existing.includes(option)
+          ? existing.filter((item) => item !== option)
+          : [...existing, option];
+        return { ...current, [question.id]: next };
+      }
+      return {
+        ...current,
+        [question.id]: existing[0] === option ? [] : [option],
+      };
+    });
+  }
+
+  function toggleSubscription(subId: SubscriptionId) {
+    if (answered) return;
+    const exists = routingPrefs.subscriptions.includes(subId);
+    const nextSubs = exists
+      ? routingPrefs.subscriptions.filter((id) => id !== subId)
+      : [...routingPrefs.subscriptions, subId];
+    onRoutingPrefsChange({
+      mode: nextSubs.length > 0 ? "subscriptions" : "open",
+      subscriptions: nextSubs,
+    });
+  }
+
+  const hasAnySelection =
+    Object.values(selected).some((items) => items.length > 0) ||
+    customNotes.trim().length > 0;
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (answered) return;
+    const lines: string[] = [];
+    for (const q of questions) {
+      const picks = selected[q.id];
+      if (picks && picks.length > 0) {
+        lines.push(`- ${q.question}: ${picks.join(", ")}`);
+      }
+    }
+    if (customNotes.trim()) {
+      lines.push(`- Additional context: ${customNotes.trim()}`);
+    }
+    if (lines.length === 0) {
+      onSkipDefaults();
+      return;
+    }
+    onSubmitAnswers(lines.join("\n"));
+  }
+
+  if (answered) {
+    return (
+      <div className={styles.clarifyCollapsed}>
+        <span>Clarification choices applied ✓</span>
+      </div>
+    );
+  }
+
+  return (
+    <form className={styles.clarifyCard} onSubmit={submit}>
+      <div className={styles.clarifyList}>
+        {questions.map((q, idx) => {
+          const picks = selected[q.id] ?? [];
+          return (
+            <div className={styles.clarifyItem} key={q.id}>
+              <div className={styles.clarifyPrompt}>
+                <span className={styles.clarifyIndex}>
+                  {String(idx + 1).padStart(2, "0")}
+                </span>
+                <div>
+                  <h4>{q.question}</h4>
+                  <p>{q.why}</p>
+                </div>
+              </div>
+              <div className={styles.optionChips}>
+                {q.options.map((opt) => {
+                  const active = picks.includes(opt);
+                  return (
+                    <button
+                      key={opt}
+                      type="button"
+                      aria-pressed={active}
+                      className={`${styles.optionChip} ${active ? styles.optionChipActive : ""}`}
+                      onClick={() => toggleOption(q, opt)}
+                    >
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+
+        <div className={styles.clarifyItem}>
+          <div className={styles.clarifyPrompt}>
+            <span className={styles.clarifyIndex}>AI</span>
+            <div>
+              <h4>Which coding subscriptions or tools do you use?</h4>
+              <p>
+                Tailors task-by-task model picks to subscriptions you already
+                pay for, or chooses openly for best quality & cost.
+              </p>
+            </div>
+          </div>
+          <div className={styles.optionChips}>
+            <button
+              type="button"
+              aria-pressed={routingPrefs.mode === "open"}
+              className={`${styles.optionChip} ${routingPrefs.mode === "open" ? styles.optionChipActive : ""}`}
+              onClick={() =>
+                onRoutingPrefsChange({ mode: "open", subscriptions: [] })
+              }
+            >
+              Open best-fit (unrestricted)
+            </button>
+            {subscriptionCatalog.map((sub) => {
+              const isSelected =
+                routingPrefs.mode === "subscriptions" &&
+                routingPrefs.subscriptions.includes(sub.id);
+              return (
+                <button
+                  key={sub.id}
+                  type="button"
+                  aria-pressed={isSelected}
+                  className={`${styles.optionChip} ${isSelected ? styles.optionChipActive : ""}`}
+                  onClick={() => toggleSubscription(sub.id)}
+                >
+                  {sub.shortLabel}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className={styles.clarifyNotesRow}>
+        <input
+          type="text"
+          value={customNotes}
+          onChange={(event) => setCustomNotes(event.target.value)}
+          placeholder="Optional: add stack details, constraints, or anything else…"
+          maxLength={600}
+        />
+      </div>
+
+      <div className={styles.clarifyFooter}>
+        <button type="submit" className={styles.primaryAction}>
+          {hasAnySelection
+            ? "Build plan with selections →"
+            : "Continue with sensible defaults →"}
+        </button>
+        {hasAnySelection && (
+          <button
+            type="button"
+            className={styles.ghostAction}
+            onClick={onSkipDefaults}
+          >
+            Skip & use defaults
+          </button>
+        )}
+      </div>
+    </form>
   );
 }
 
@@ -125,8 +283,6 @@ export function ErrorCard({
   apiKey,
   onApiKeyChange,
   onRetry,
-  onCopyLocalPrompt,
-  copiedLocal,
 }: {
   error: string;
   needsKey: boolean;
@@ -135,8 +291,6 @@ export function ErrorCard({
   apiKey: string;
   onApiKeyChange: (next: string) => void;
   onRetry: (overrideKey?: string) => void;
-  onCopyLocalPrompt: () => void;
-  copiedLocal: boolean;
 }) {
   const [inlineKey, setInlineKey] = useState(apiKey);
 
@@ -159,8 +313,8 @@ export function ErrorCard({
         <div>
           <h3>
             {needsKey
-              ? `Connect a ${providerLabel} API key to generate this plan`
-              : "Could not complete this plan"}
+              ? `Connect a ${providerLabel} API key to continue`
+              : "Could not complete this turn"}
           </h3>
           <p>{error}</p>
         </div>
@@ -187,26 +341,13 @@ export function ErrorCard({
             className={styles.primaryAction}
             disabled={!inlineKey.trim()}
           >
-            Generate plan
+            Continue
           </button>
         </form>
       )}
 
-      {needsKey && (
-        <p className={styles.keyNote}>
-          Sent only to {providerLabel} through this server and never saved. For
-          a local default, set{" "}
-          <code>
-            {provider === "openai"
-              ? "ANVILMARK_OPENAI_API_KEY"
-              : "ANVILMARK_GEMINI_API_KEY"}
-          </code>{" "}
-          in <code>packages/web/.env.local</code>.
-        </p>
-      )}
-
-      <div className={styles.errorActions}>
-        {!needsKey && (
+      {!needsKey && (
+        <div className={styles.errorActions}>
           <button
             type="button"
             className={styles.primaryAction}
@@ -214,90 +355,81 @@ export function ErrorCard({
           >
             Try again
           </button>
-        )}
-        <button
-          type="button"
-          className={styles.ghostAction}
-          onClick={onCopyLocalPrompt}
-        >
-          {copiedLocal
-            ? "Copied local-first prompt ✓"
-            : "Copy local-first prompt"}
-        </button>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
 
-export function PlanResultView({
+export function PlanArtifactView({
   plan,
-  strict,
   candidates,
-  request,
+  catalogDate,
+  strict,
   onSelectQuestion,
-  onCopyHandoff,
-  copiedHandoff,
 }: {
   plan: GeneratedPlan;
+  candidates: readonly RoutableCandidate[];
+  catalogDate: string;
   strict: boolean;
-  candidates: Candidate[];
-  request: { idea: string; context: string };
   onSelectQuestion: (question: string) => void;
-  onCopyHandoff: () => void;
-  copiedHandoff: boolean;
 }) {
-  const [handoffOpen, setHandoffOpen] = useState(false);
-
-  const totalInput = plan.tasks.reduce(
-    (sum, task) => sum + task.inputTokens,
+  const totalTokens = plan.tasks.reduce(
+    (sum, t) => sum + t.inputTokens + t.outputTokens,
     0,
   );
-  const totalOutput = plan.tasks.reduce(
-    (sum, task) => sum + task.outputTokens,
-    0,
-  );
-  const taskCosts = plan.tasks.map((task) => {
-    const candidate = candidates.find((item) => item.model === task.model);
-    return candidate ? estimateCost(task, candidate) : null;
-  });
-  const knownCost = taskCosts.every(Boolean)
-    ? taskCosts.reduce((sum, item) => sum + (item?.usd ?? 0), 0)
-    : null;
-  const handoff = makeHandoff(plan, strict, request);
+  const savings = computePlanSavingsSummary(plan.tasks, candidates);
 
   return (
-    <article className={styles.planResult} aria-label="Generated plan">
-      <section className={styles.planSection}>
-        <div className={styles.planHeading}>
+    <div className={styles.planArtifact}>
+      <div className={styles.blueprintCard}>
+        <header className={styles.blueprintHeader}>
           <div>
-            <span className={styles.sectionEyebrow}>Overview</span>
+            <span className={styles.sectionEyebrow}>
+              Architecture & task plan
+            </span>
             <h2>{plan.title}</h2>
           </div>
           <div className={styles.summaryStats}>
             <span>
-              {plan.tasks.length} {plan.tasks.length === 1 ? "task" : "tasks"}
+              {plan.tasks.length} {plan.tasks.length === 1 ? "slice" : "slices"}
             </span>
             <span>
               {plan.architecture.length}{" "}
               {plan.architecture.length === 1 ? "decision" : "decisions"}
             </span>
-            <span>~{(totalInput + totalOutput).toLocaleString()} tokens</span>
-            {knownCost !== null && <span>~${knownCost.toFixed(4)} est.</span>}
+            <span>~{totalTokens.toLocaleString()} tokens</span>
           </div>
-        </div>
+        </header>
 
         <p className={styles.planGoal}>{plan.goal}</p>
         <p className={styles.planAudience}>
-          <strong>Who it’s for</strong> {plan.users}
+          <strong>Target users</strong> {plan.users}
         </p>
+
+        {savings && savings.frontierBaselineUsd > 0 && (
+          <div className={styles.savingsBanner}>
+            <div>
+              <strong>
+                Routed API-equivalent est.: ${savings.routedUsd.toFixed(4)}
+              </strong>
+              <span>
+                {savings.savedPercent > 0
+                  ? ` · ~${savings.savedPercent}% lower than running every slice on ${savings.frontierModelLabel} ($${savings.frontierBaselineUsd.toFixed(4)})`
+                  : ` · Matched against ${savings.frontierModelLabel}`}
+              </span>
+            </div>
+            <small>Catalog snapshot {catalogDate}</small>
+          </div>
+        )}
 
         <div className={styles.planGrid}>
           <PlanList title="In scope" values={plan.scope} />
-          <PlanList title="Out of scope" values={plan.nonGoals} />
+          <PlanList title="Explicit non-goals" values={plan.nonGoals} />
           <PlanList title="Assumptions" values={plan.assumptions} />
           {plan.questions.length > 0 && (
             <div className={styles.planSubcard}>
-              <h4>Open questions</h4>
+              <h4>Open refinements</h4>
               <ul className={styles.questionList}>
                 {plan.questions.map((question, index) => (
                   <li key={index}>
@@ -305,11 +437,10 @@ export function PlanResultView({
                       type="button"
                       className={styles.questionChip}
                       onClick={() => onSelectQuestion(question)}
-                      title="Click to answer this question in the prompt box below"
                     >
                       <span>{question}</span>
                       <span className={styles.questionReply} aria-hidden="true">
-                        Reply ↵
+                        Answer ↵
                       </span>
                     </button>
                   </li>
@@ -318,227 +449,230 @@ export function PlanResultView({
             </div>
           )}
         </div>
-      </section>
 
-      <section className={styles.planSection}>
-        <div className={styles.sectionHeader}>
-          <span className={styles.sectionEyebrow}>Architecture</span>
-          <h3>Architecture decisions</h3>
-          <p className={styles.sectionNote}>
-            Proposed from your brief. Confirm against the actual repository
-            before editing code.
-          </p>
-        </div>
+        <hr className={styles.divider} />
 
-        <div className={styles.planGrid}>
-          {plan.architecture.map((choice, index) => (
-            <div className={styles.planSubcard} key={index}>
-              <h4>{choice.title}</h4>
-              <p className={styles.decisionBody}>{choice.decision}</p>
-              <dl className={styles.decisionMeta}>
-                <div>
-                  <dt>Why</dt>
-                  <dd>{choice.why}</dd>
-                </div>
-                <div>
-                  <dt>Alternative</dt>
-                  <dd>{choice.alternative}</dd>
-                </div>
-                <div>
-                  <dt>Tradeoff</dt>
-                  <dd>{choice.tradeoff}</dd>
-                </div>
-              </dl>
-            </div>
-          ))}
-        </div>
-
-        {plan.flows.length > 0 && (
-          <div className={styles.flowsBlock}>
-            <h4>Data flows</h4>
-            <div className={styles.flowsList}>
-              {plan.flows.map((flow, index) => (
-                <div className={styles.flowRow} key={index}>
-                  <strong>
-                    {flow.from} → {flow.to}
-                  </strong>
-                  <p>
-                    {flow.data} · <span>{flow.boundary}</span>
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </section>
-
-      <section className={styles.planSection}>
-        <div className={styles.sectionHeader}>
-          <span className={styles.sectionEyebrow}>Execution</span>
-          <h3>Implementation tasks</h3>
-          <p className={styles.sectionNote}>
-            Token and cost estimates cover one attempt and exclude retries.
-            Published rates checked {ratesChecked}.
-          </p>
-        </div>
-
-        <ol className={styles.taskList}>
-          {plan.tasks.map((task, index) => {
-            const candidate = candidates.find(
-              (item) => item.model === task.model,
-            );
-            const selection = candidate ? estimateCost(task, candidate) : null;
-            return (
-              <li key={task.id} className={styles.taskCard}>
-                <div className={styles.taskHeader}>
-                  <span className={styles.taskIndex}>
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <div className={styles.taskTitleGroup}>
-                    <h4>{task.title}</h4>
-                    <p>{task.outcome}</p>
-                  </div>
-                  <span className={styles.modelBadge}>{task.model}</span>
-                </div>
-
-                {task.dependsOn.length > 0 && (
-                  <p className={styles.taskDeps}>
-                    <strong>After</strong>{" "}
-                    {task.dependsOn
-                      .map(
-                        (id) =>
-                          plan.tasks.find((entry) => entry.id === id)?.title ??
-                          id,
-                      )
-                      .join(", ")}
-                  </p>
-                )}
-
-                <div className={styles.planGrid}>
-                  <PlanList
-                    title="Done when"
-                    values={task.acceptance}
-                    compact
-                  />
-                  <PlanList
-                    title="Checks to run"
-                    values={task.checks}
-                    compact
-                  />
-                </div>
-
-                <div className={styles.taskFooter}>
-                  <p>
-                    <strong>Model fit</strong> {task.why}
-                  </p>
-                  {task.alternatives.length > 0 && (
-                    <p>
-                      <strong>Alternatives</strong>{" "}
-                      {task.alternatives
-                        .map((item) => `${item.model} (${item.tradeoff})`)
-                        .join(" · ")}
-                    </p>
-                  )}
-                  <p className={styles.taskTokens}>
-                    <span>
-                      {task.inputTokens.toLocaleString()} in /{" "}
-                      {task.outputTokens.toLocaleString()} out
-                    </span>
-                    <span>
-                      {selection ? (
-                        <>
-                          ${selection.usd.toFixed(4)} USD ·{" "}
-                          <a
-                            href={selection.source}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                          >
-                            Published rates
-                          </a>
-                        </>
-                      ) : candidate?.billing === "subscription" ? (
-                        "Subscription cost unknown"
-                      ) : candidate?.billing === "local" ? (
-                        "Local compute unestimated"
-                      ) : (
-                        "No sourced rate"
-                      )}
-                    </span>
-                  </p>
-                  <p className={styles.taskBasis}>{task.estimateBasis}</p>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
-      </section>
-
-      {(strict || plan.security.length > 0) && (
-        <section className={styles.planSection}>
+        <section className={styles.blueprintBlock}>
           <div className={styles.sectionHeader}>
-            <span className={styles.sectionEyebrow}>Verification</span>
-            <h3>
-              {strict ? "Strict security review" : "Security considerations"}
-            </h3>
-            <p className={styles.sectionNote}>
-              Verification is pending until your local coding agent runs checks
-              in the repository.
-            </p>
+            <span className={styles.sectionEyebrow}>Architecture</span>
+            <h3>Key decisions & rejected alternatives</h3>
           </div>
           <div className={styles.planGrid}>
-            {plan.security.map((item, index) => (
+            {plan.architecture.map((choice, index) => (
               <div className={styles.planSubcard} key={index}>
-                <h4>{item.risk}</h4>
-                <p className={styles.decisionBody}>{item.control}</p>
-                <p className={styles.verifyLine}>
-                  <strong>Verify</strong> {item.verification}
-                </p>
+                <h4>{choice.title}</h4>
+                <p className={styles.decisionBody}>{choice.decision}</p>
+                <dl className={styles.decisionMeta}>
+                  <div>
+                    <dt>Why</dt>
+                    <dd>{choice.why}</dd>
+                  </div>
+                  <div>
+                    <dt>Rejected alternative</dt>
+                    <dd>{choice.alternative}</dd>
+                  </div>
+                  <div>
+                    <dt>Tradeoff</dt>
+                    <dd>{choice.tradeoff}</dd>
+                  </div>
+                </dl>
               </div>
             ))}
           </div>
-          {strict && (
-            <div className={styles.strictChecklist}>
-              <PlanList title="Required review steps" values={strictChecks} />
+
+          {plan.flows.length > 0 && (
+            <div className={styles.flowsBlock}>
+              <h4>Data flows & boundaries</h4>
+              <div className={styles.flowsList}>
+                {plan.flows.map((flow, index) => (
+                  <div className={styles.flowRow} key={index}>
+                    <strong>
+                      {flow.from} → {flow.to}
+                    </strong>
+                    <p>
+                      {flow.data} · <span>{flow.boundary}</span>
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </section>
-      )}
 
-      <section className={styles.handoffSection}>
-        <div className={styles.handoffTop}>
-          <div>
-            <span className={styles.sectionEyebrow}>Agent handoff</span>
-            <h3>Continue in your repository</h3>
+        <hr className={styles.divider} />
+
+        <section className={styles.blueprintBlock}>
+          <div className={styles.sectionHeader}>
+            <span className={styles.sectionEyebrow}>
+              Execution & model routing
+            </span>
+            <h3>Ordered task slices</h3>
             <p className={styles.sectionNote}>
-              Paste this structured brief into Claude Code or Codex to inspect
-              the codebase and execute task by task.
+              Each slice is matched to the lowest-cost eligible model tier that
+              clears its scope and risk bar.
             </p>
           </div>
-          <div className={styles.handoffButtons}>
-            <button
-              type="button"
-              className={styles.primaryAction}
-              onClick={onCopyHandoff}
-            >
-              {copiedHandoff ? "Copied handoff ✓" : "Copy agent handoff"}
-            </button>
-            <button
-              type="button"
-              className={styles.ghostAction}
-              aria-expanded={handoffOpen}
-              onClick={() => setHandoffOpen((current) => !current)}
-            >
-              {handoffOpen ? "Hide prompt" : "Preview prompt"}
-            </button>
-          </div>
-        </div>
-        {handoffOpen && (
-          <pre className={styles.handoffPreview}>
-            <code>{handoff}</code>
-          </pre>
+
+          <ol className={styles.taskList}>
+            {plan.tasks.map((task, index) => {
+              const candidate = candidates.find((c) => c.model === task.model);
+              const taskUsd = candidate
+                ? estimateTaskUsd(task, candidate)
+                : null;
+              return (
+                <li key={task.id} className={styles.taskCard}>
+                  <div className={styles.taskHeader}>
+                    <span className={styles.taskIndex}>
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <div className={styles.taskTitleGroup}>
+                      <h4>{task.title}</h4>
+                      <p>{task.outcome}</p>
+                    </div>
+                    <div className={styles.taskBadges}>
+                      {candidate && (
+                        <span
+                          className={`${styles.tierPill} ${
+                            candidate.tier === "frontier"
+                              ? styles.tierFrontier
+                              : candidate.tier === "balanced"
+                                ? styles.tierBalanced
+                                : styles.tierFast
+                          }`}
+                        >
+                          {candidate.tier}
+                        </span>
+                      )}
+                      <span className={styles.modelBadge}>
+                        {candidate?.label ?? task.model}
+                      </span>
+                    </div>
+                  </div>
+
+                  {task.dependsOn.length > 0 && (
+                    <p className={styles.taskDeps}>
+                      <strong>Depends on</strong>{" "}
+                      {task.dependsOn
+                        .map(
+                          (id) =>
+                            plan.tasks.find((entry) => entry.id === id)
+                              ?.title ?? id,
+                        )
+                        .join(", ")}
+                    </p>
+                  )}
+
+                  <div className={styles.planGrid}>
+                    <PlanList
+                      title="Done when"
+                      values={task.acceptance}
+                      compact
+                    />
+                    <PlanList
+                      title="Verification checks"
+                      values={task.checks}
+                      compact
+                    />
+                  </div>
+
+                  <div className={styles.taskFooter}>
+                    <p>
+                      <strong>Why {candidate?.label ?? task.model}</strong>{" "}
+                      {task.why}
+                    </p>
+                    {task.alternatives.length > 0 && (
+                      <p>
+                        <strong>Fallbacks</strong>{" "}
+                        {task.alternatives
+                          .map((item) => {
+                            const altLabel =
+                              candidates.find((c) => c.model === item.model)
+                                ?.label ?? item.model;
+                            return `${altLabel} (${item.tradeoff})`;
+                          })
+                          .join(" · ")}
+                      </p>
+                    )}
+                    <p className={styles.taskTokens}>
+                      <span>
+                        {task.inputTokens.toLocaleString()} in /{" "}
+                        {task.outputTokens.toLocaleString()} out
+                      </span>
+                      <span>
+                        {candidate?.billing === "local" ? (
+                          "$0.00 local OSS compute"
+                        ) : candidate?.billing === "subscription" &&
+                          taskUsd !== null ? (
+                          `Included in subscription (~$${taskUsd.toFixed(4)} API eq.)`
+                        ) : taskUsd !== null ? (
+                          <>
+                            ~${taskUsd.toFixed(4)} USD
+                            {candidate?.arenaAgentRank
+                              ? ` · Agent Arena #${candidate.arenaAgentRank}`
+                              : ""}
+                            {candidate?.sourceUrl ? (
+                              <>
+                                {" · "}
+                                <a
+                                  href={candidate.sourceUrl}
+                                  target="_blank"
+                                  rel="noreferrer noopener"
+                                >
+                                  Rates
+                                </a>
+                              </>
+                            ) : null}
+                          </>
+                        ) : (
+                          "Unpriced setup"
+                        )}
+                      </span>
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+
+        {(strict || plan.security.length > 0) && (
+          <>
+            <hr className={styles.divider} />
+            <section className={styles.blueprintBlock}>
+              <div className={styles.sectionHeader}>
+                <span className={styles.sectionEyebrow}>Security</span>
+                <h3>
+                  {strict
+                    ? "Strict security verification"
+                    : "Security controls"}
+                </h3>
+              </div>
+              <div className={styles.planGrid}>
+                {plan.security.map((item, index) => (
+                  <div className={styles.planSubcard} key={index}>
+                    <h4>{item.risk}</h4>
+                    <p className={styles.decisionBody}>{item.control}</p>
+                    <p className={styles.verifyLine}>
+                      <strong>Verify</strong> {item.verification}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              {strict && (
+                <div className={styles.strictChecklist}>
+                  <PlanList
+                    title="Required review gates"
+                    values={strictChecks}
+                  />
+                </div>
+              )}
+            </section>
+          </>
         )}
-      </section>
-    </article>
+      </div>
+
+      <LocalHandoffStudio plan={plan} candidates={candidates} strict={strict} />
+    </div>
   );
 }
 

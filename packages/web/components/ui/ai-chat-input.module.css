@@ -5,18 +5,18 @@
   --composer-muted: #b4acbb;
   --composer-focus: #eac6a6;
   width: 100%;
-  max-width: 36rem;
+  max-width: 40rem;
   margin-inline: auto;
   transition: max-width 480ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .composer:focus-within {
-  max-width: 40rem;
+  max-width: 43rem;
 }
 
 .settled,
 .settled:focus-within {
-  max-width: 52rem;
+  max-width: 50rem;
 }
 
 .surface {

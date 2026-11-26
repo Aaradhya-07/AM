@@ -6,25 +6,34 @@ import {
   PromptInput,
   type PromptOption,
 } from "../../components/ui/ai-chat-input";
+import { betaEfforts, betaIdeaMax } from "../../lib/beta-draft";
+import type {
+  BetaTurnResponse,
+  ClarificationQuestionItem,
+} from "../../lib/beta-turn";
+import type { GeneratedPlan, PlanningInput } from "../../lib/planner";
 import {
-  betaEfforts,
-  betaIdeaMax,
-  betaIdeaMin,
-  betaPlanningDepth,
-} from "../../lib/beta-draft";
-import {
-  makeHandoff,
-  strictChecks,
-  type GeneratedPlan,
-  type PlanningInput,
-} from "../../lib/planner";
+  defaultRoutingPreferences,
+  formatRoutingSummary,
+  routingPrefsStorageKey,
+  subscriptionCatalog,
+  subscriptionIds,
+  type RoutableCandidate,
+  type RoutingPreferences,
+  type SubscriptionId,
+} from "../../lib/routing-types";
 import type { SelfHostedModel } from "../../lib/self-hosted-models";
-import { ErrorCard, PlanResultView, WorkingCard } from "./plan-output";
+import {
+  AssistantAvatar,
+  ClarificationWidget,
+  ErrorCard,
+  PlanArtifactView,
+  ThinkingRow,
+} from "./plan-output";
 import styles from "./beta.module.css";
 
 type Provider = PlanningInput["provider"];
 type Effort = (typeof betaEfforts)[number]["id"];
-type Candidate = PlanningInput["candidates"][number];
 
 const examples = [
   {
@@ -32,8 +41,8 @@ const examples = [
     idea: "Build an internal dashboard that shows which scheduled jobs are failing, who owns them, and how to retry a failed job safely.",
   },
   {
-    label: "Integrate a local LLM",
-    idea: "Connect a self-hosted LLM to my web app so users can generate structured project plans. Include timeouts and a way to check whether the endpoint is healthy.",
+    label: "Clarify a rough idea",
+    idea: "Build a todo app for a small engineering team.",
   },
   {
     label: "Plan a feature",
@@ -41,43 +50,35 @@ const examples = [
   },
 ];
 
-const defaultCandidates: Candidate[] = [
-  {
-    model: "gpt-5-mini",
-    billing: "api",
-    notes: "Use for narrow, well-specified tasks if available.",
-  },
-  {
-    model: "gpt-5",
-    billing: "api",
-    notes:
-      "Consider for larger changes or ambiguous architecture if available.",
-  },
-];
-
-interface PromptTurn {
-  id: number;
-  text: string;
-  providerLabel: string;
-  effortLabel: string;
-}
-
-interface PlanSession {
-  baseIdea: string;
-  refinements: string[];
-  turns: PromptTurn[];
-  plan: GeneratedPlan | null;
-  request: { idea: string; context: string } | null;
-  strict: boolean;
-  provider: Provider;
-  providerLabel: string;
-  modelId: string;
-  coldLoading: boolean;
-  effort: Effort;
-  effortLabel: string;
-  error: string;
-  needsKey: boolean;
-}
+type ThreadEntry =
+  | {
+      id: number;
+      role: "user";
+      content: string;
+    }
+  | {
+      id: number;
+      role: "assistant";
+      mode: "chat";
+      reply: string;
+    }
+  | {
+      id: number;
+      role: "assistant";
+      mode: "clarify";
+      reply: string;
+      questions: ClarificationQuestionItem[];
+    }
+  | {
+      id: number;
+      role: "assistant";
+      mode: "plan";
+      reply: string;
+      plan: GeneratedPlan;
+      candidates: RoutableCandidate[];
+      catalogDate: string;
+      strict: boolean;
+    };
 
 export interface BetaPromptProps {
   configured: boolean;
@@ -88,28 +89,6 @@ export interface BetaPromptProps {
 }
 
 const configuredPrefix = "configured:";
-
-function buildContext(effort: Effort, refinements: string[]): string {
-  return [
-    `Planning depth: ${betaPlanningDepth[effort]}`,
-    ...refinements.map((item, index) => `Follow-up ${index + 1}: ${item}`),
-  ].join("\n\n");
-}
-
-function buildLocalFirstPrompt(
-  idea: string,
-  context: string,
-  strict: boolean,
-): string {
-  return [
-    "Help me turn this rough request into a reviewed implementation plan. Inspect this repository and its instructions first. Use available AnvilMark planning tools if connected. Ask only questions that change scope, architecture, or verification. Explain architecture decisions and alternatives. Identify ordered tasks, acceptance checks and model suggestions, and show the plan for approval before changing application code.",
-    `My request:\n${idea.trim()}`,
-    context.trim() ? `Context:\n${context.trim()}` : "",
-    strict ? `Strict verification:\n- ${strictChecks.join("\n- ")}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-}
 
 function isKeyError(status: number, message: string): boolean {
   return (
@@ -132,6 +111,29 @@ function parseSelection(selection: string): {
     return { provider: selection, explicitModelId: null };
   }
   return { provider: "google", explicitModelId: null };
+}
+
+function parseStoredRoutingPrefs(
+  raw: string | null,
+): RoutingPreferences | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as {
+      mode?: unknown;
+      subscriptions?: unknown;
+    };
+    if (parsed.mode !== "open" && parsed.mode !== "subscriptions") return null;
+    const validSet = new Set<string>(subscriptionIds);
+    const subs = Array.isArray(parsed.subscriptions)
+      ? parsed.subscriptions.filter(
+          (item): item is SubscriptionId =>
+            typeof item === "string" && validSet.has(item),
+        )
+      : [];
+    return { mode: parsed.mode, subscriptions: subs };
+  } catch {
+    return null;
+  }
 }
 
 export function BetaPrompt({
@@ -202,6 +204,7 @@ export function BetaPrompt({
   const [prompt, setPrompt] = useState("");
   const [focusTrigger, setFocusTrigger] = useState(0);
   const [selection, setSelection] = useState<string>(models[0].id);
+  const [lastEffort, setLastEffort] = useState<Effort>("medium");
   const [modelIds, setModelIds] =
     useState<Record<Provider, string>>(defaultModelIds);
   const [apiKeys, setApiKeys] = useState<Record<Provider, string>>({
@@ -210,23 +213,37 @@ export function BetaPrompt({
     configured: "",
   });
   const [strict, setStrict] = useState(false);
+  const [routingPrefs, setRoutingPrefs] = useState<RoutingPreferences>(
+    defaultRoutingPreferences,
+  );
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [session, setSession] = useState<PlanSession | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [copiedHandoff, setCopiedHandoff] = useState(false);
-  const [copiedLocal, setCopiedLocal] = useState(false);
 
+  const [entries, setEntries] = useState<ThreadEntry[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [coldLoading, setColdLoading] = useState(false);
+  const [turnError, setTurnError] = useState<{
+    message: string;
+    needsKey: boolean;
+    forcePlan: boolean;
+  } | null>(null);
+
+  const toolsRef = useRef<HTMLDivElement>(null);
+  const toolsButtonRef = useRef<HTMLButtonElement>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
-  const outputScrollRef = useRef<HTMLDivElement>(null);
+  const threadScrollRef = useRef<HTMLDivElement>(null);
+  const threadBottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const turnCounter = useRef(0);
+  const entryIdRef = useRef(0);
+
+  const toolsMenuId = useId();
   const settingsPanelId = useId();
   const modelInputId = useId();
   const keyInputId = useId();
 
   const { provider, explicitModelId } = parseSelection(selection);
-  const active = session !== null;
+  const active = entries.length > 0;
   const activeKey = apiKeys[provider];
   const activeModelId = (
     explicitModelId ??
@@ -242,37 +259,74 @@ export function BetaPrompt({
   const keyReady =
     provider === "configured" || hasServerKey || activeKey.trim().length > 0;
 
+  const latestPlanEntry = [...entries]
+    .reverse()
+    .find(
+      (
+        item,
+      ): item is Extract<ThreadEntry, { role: "assistant"; mode: "plan" }> =>
+        item.role === "assistant" && item.mode === "plan",
+    );
+
   useEffect(() => {
+    try {
+      const saved = parseStoredRoutingPrefs(
+        window.localStorage.getItem(routingPrefsStorageKey),
+      );
+      if (saved) setRoutingPrefs(saved);
+    } catch {
+      // Storage unavailable in restricted browser mode.
+    }
     return () => {
       abortRef.current?.abort();
     };
   }, []);
 
+  function updateRoutingPrefs(next: RoutingPreferences) {
+    setRoutingPrefs(next);
+    try {
+      window.localStorage.setItem(routingPrefsStorageKey, JSON.stringify(next));
+    } catch {
+      // Ignore storage quota / privacy block.
+    }
+  }
+
+  function toggleSubscription(subId: SubscriptionId) {
+    const exists = routingPrefs.subscriptions.includes(subId);
+    const nextSubs = exists
+      ? routingPrefs.subscriptions.filter((id) => id !== subId)
+      : [...routingPrefs.subscriptions, subId];
+    updateRoutingPrefs({
+      mode: nextSubs.length > 0 ? "subscriptions" : "open",
+      subscriptions: nextSubs,
+    });
+  }
+
   useEffect(() => {
-    if (!settingsOpen) return;
+    if (!settingsOpen && !toolsOpen) return;
     const closeOutside = (event: PointerEvent) => {
-      if (
-        event.target instanceof Node &&
-        !settingsRef.current?.contains(event.target)
-      ) {
+      if (!(event.target instanceof Node)) return;
+      if (settingsOpen && !settingsRef.current?.contains(event.target)) {
         setSettingsOpen(false);
+      }
+      if (toolsOpen && !toolsRef.current?.contains(event.target)) {
+        setToolsOpen(false);
       }
     };
     document.addEventListener("pointerdown", closeOutside);
     return () => document.removeEventListener("pointerdown", closeOutside);
-  }, [settingsOpen]);
+  }, [settingsOpen, toolsOpen]);
 
   useEffect(() => {
-    const container = outputScrollRef.current;
-    if (!container || !active) return;
+    if (!active) return;
     const reduced = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
-    container.scrollTo({
-      top: busy ? container.scrollHeight : 0,
+    threadBottomRef.current?.scrollIntoView({
       behavior: reduced ? "auto" : "smooth",
+      block: "end",
     });
-  }, [active, busy, session?.turns.length, session?.plan]);
+  }, [active, entries.length, busy, turnError]);
 
   async function refreshSelfHostedModels() {
     if (!configured) return;
@@ -284,63 +338,66 @@ export function BetaPrompt({
         setOssModels(data.models as SelfHostedModel[]);
       }
     } catch {
-      // Keep the existing model list if the status refresh fails.
+      // Keep existing OSS list if refresh fails.
     }
   }
 
-  async function requestPlan(params: {
-    baseIdea: string;
-    refinements: string[];
-    turns: PromptTurn[];
+  function serializeMessages(list: readonly ThreadEntry[]) {
+    return list.slice(-20).map((entry) => {
+      if (entry.role === "user") {
+        return { role: "user" as const, content: entry.content };
+      }
+      if (entry.mode === "clarify") {
+        const qList = entry.questions.map((q) => `- ${q.question}`).join("\n");
+        return {
+          role: "assistant" as const,
+          content: `${entry.reply}\n\nClarifying questions asked:\n${qList}`,
+        };
+      }
+      if (entry.mode === "plan") {
+        return {
+          role: "assistant" as const,
+          content: `${entry.reply}\n\nGenerated plan "${entry.plan.title}": ${entry.plan.goal}`,
+        };
+      }
+      return { role: "assistant" as const, content: entry.reply };
+    });
+  }
+
+  async function runTurn(params: {
+    nextEntries: ThreadEntry[];
     provider: Provider;
-    providerLabel: string;
     modelId: string;
-    coldLoading: boolean;
     effort: Effort;
-    effortLabel: string;
     key: string;
     strict: boolean;
-    previousPlan: GeneratedPlan | null;
-    previousRequest: { idea: string; context: string } | null;
+    forcePlan: boolean;
+    prefs: RoutingPreferences;
+    isCold: boolean;
   }) {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
-    const context = buildContext(params.effort, params.refinements);
+    setEntries(params.nextEntries);
     setBusy(true);
-    setCopiedHandoff(false);
-    setCopiedLocal(false);
-    setSession({
-      baseIdea: params.baseIdea,
-      refinements: params.refinements,
-      turns: params.turns,
-      plan: params.previousPlan,
-      request: params.previousRequest,
-      strict: params.strict,
-      provider: params.provider,
-      providerLabel: params.providerLabel,
-      modelId: params.modelId,
-      coldLoading: params.coldLoading,
-      effort: params.effort,
-      effortLabel: params.effortLabel,
-      error: "",
-      needsKey: false,
-    });
+    setColdLoading(params.isCold);
+    setTurnError(null);
 
     try {
-      const response = await fetch("/api/plan", {
+      const response = await fetch("/api/beta/turn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
-          idea: params.baseIdea,
-          context,
+          messages: serializeMessages(params.nextEntries),
+          effort: params.effort,
           strict: params.strict,
+          forcePlan: params.forcePlan,
           provider: params.provider,
           model: params.modelId,
           key: params.key.trim(),
-          candidates: defaultCandidates,
+          routingPrefs: params.prefs,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -348,74 +405,99 @@ export function BetaPrompt({
         const message =
           typeof data?.error === "string"
             ? data.error
-            : "Could not generate a plan.";
-        setSession((current) =>
-          current
-            ? {
-                ...current,
-                error: message,
-                needsKey: isKeyError(response.status, message),
-              }
-            : current,
-        );
+            : "Could not complete this turn.";
+        setTurnError({
+          message,
+          needsKey: isKeyError(response.status, message),
+          forcePlan: params.forcePlan,
+        });
         return;
       }
-      setSession((current) =>
-        current
+
+      const turn = data as BetaTurnResponse | undefined;
+      if (
+        !turn ||
+        (turn.mode !== "chat" &&
+          turn.mode !== "clarify" &&
+          (turn.mode !== "plan" || !turn.plan))
+      ) {
+        setTurnError({
+          message: "Received an invalid response from the planner.",
+          needsKey: false,
+          forcePlan: params.forcePlan,
+        });
+        return;
+      }
+
+      const assistantId = ++entryIdRef.current;
+      const newEntry: ThreadEntry =
+        turn.mode === "chat"
           ? {
-              ...current,
-              plan: data.plan as GeneratedPlan,
-              request: { idea: params.baseIdea, context },
-              error: "",
-              needsKey: false,
+              id: assistantId,
+              role: "assistant",
+              mode: "chat",
+              reply: turn.reply,
             }
-          : current,
-      );
+          : turn.mode === "clarify"
+            ? {
+                id: assistantId,
+                role: "assistant",
+                mode: "clarify",
+                reply: turn.reply,
+                questions: turn.questions,
+              }
+            : {
+                id: assistantId,
+                role: "assistant",
+                mode: "plan",
+                reply: turn.reply,
+                plan: turn.plan,
+                candidates: turn.candidates,
+                catalogDate: turn.catalogDate,
+                strict: turn.strict,
+              };
+      setEntries((current) => [...current, newEntry]);
+
       if (params.provider === "configured") {
         void refreshSelfHostedModels();
       }
     } catch (failure) {
       if (failure instanceof Error && failure.name === "AbortError") {
-        setSession((current) =>
-          current
-            ? {
-                ...current,
-                error: "Request cancelled.",
-                needsKey: false,
-              }
-            : current,
-        );
+        setTurnError({
+          message: "Generation stopped.",
+          needsKey: false,
+          forcePlan: params.forcePlan,
+        });
         return;
       }
-      setSession((current) =>
-        current
-          ? {
-              ...current,
-              error:
-                failure instanceof Error
-                  ? failure.message
-                  : "Could not reach the planner model.",
-              needsKey: false,
-            }
-          : current,
-      );
+      setTurnError({
+        message:
+          failure instanceof Error
+            ? failure.message
+            : "Could not reach the planning model.",
+        needsKey: false,
+        forcePlan: params.forcePlan,
+      });
     } finally {
       if (abortRef.current === controller) {
         abortRef.current = null;
         setBusy(false);
+        setColdLoading(false);
       }
     }
   }
 
-  function handleSubmit(
-    value: string,
-    meta: { model: string; effort: string; attachments: File[] },
+  function submitUserMessage(
+    text: string,
+    options: {
+      selectedModel?: string;
+      effort?: Effort;
+      forcePlan?: boolean;
+    } = {},
   ) {
-    const parsed = parseSelection(meta.model);
-    const selectedEffort = meta.effort as Effort;
-    const option = models.find((item) => item.id === meta.model) ?? models[0];
-    const selectedEffortLabel =
-      betaEfforts.find((item) => item.id === selectedEffort)?.label ?? "Medium";
+    const modelChoice = options.selectedModel ?? selection;
+    const chosenEffort = options.effort ?? lastEffort;
+    const parsed = parseSelection(modelChoice);
     const resolvedModelId = (
       parsed.explicitModelId ??
       modelIds[parsed.provider] ??
@@ -425,198 +507,283 @@ export function BetaPrompt({
       parsed.provider === "configured"
         ? ossModels.find((item) => item.id === resolvedModelId)
         : undefined;
-    const coldLoading = Boolean(matchedOss && matchedOss.status !== "loaded");
 
-    setSelection(meta.model);
+    setSelection(modelChoice);
+    setLastEffort(chosenEffort);
     setSettingsOpen(false);
+    setToolsOpen(false);
     setPrompt("");
 
-    const nextTurn: PromptTurn = {
-      id: ++turnCounter.current,
-      text: value,
-      providerLabel: option.label,
-      effortLabel: selectedEffortLabel,
+    const userEntry: ThreadEntry = {
+      id: ++entryIdRef.current,
+      role: "user",
+      content: text,
     };
 
-    const isFollowUp = session !== null;
-    const baseIdea = isFollowUp ? session.baseIdea : value;
-    const refinements = isFollowUp ? [...session.refinements, value] : [];
-    const turns = isFollowUp ? [...session.turns, nextTurn] : [nextTurn];
-
-    void requestPlan({
-      baseIdea,
-      refinements,
-      turns,
+    void runTurn({
+      nextEntries: [...entries, userEntry],
       provider: parsed.provider,
-      providerLabel: option.label,
       modelId: resolvedModelId,
-      coldLoading,
-      effort: selectedEffort,
-      effortLabel: selectedEffortLabel,
+      effort: chosenEffort,
       key: apiKeys[parsed.provider],
       strict,
-      previousPlan: isFollowUp ? session.plan : null,
-      previousRequest: isFollowUp ? session.request : null,
+      forcePlan: Boolean(options.forcePlan),
+      prefs: routingPrefs,
+      isCold: Boolean(matchedOss && matchedOss.status !== "loaded"),
+    });
+  }
+
+  function handleComposerSubmit(
+    value: string,
+    meta: { model: string; effort: string; attachments: File[] },
+  ) {
+    submitUserMessage(value, {
+      selectedModel: meta.model,
+      effort: meta.effort as Effort,
+      forcePlan: false,
     });
   }
 
   function handleRetry(overrideKey?: string) {
-    if (!session) return;
+    if (entries.length === 0) return;
     const matchedOss =
       provider === "configured"
         ? ossModels.find((item) => item.id === activeModelId)
         : undefined;
-    void requestPlan({
-      baseIdea: session.baseIdea,
-      refinements: session.refinements,
-      turns: session.turns,
+    void runTurn({
+      nextEntries: entries,
       provider,
-      providerLabel,
       modelId: activeModelId,
-      coldLoading: Boolean(matchedOss && matchedOss.status !== "loaded"),
-      effort: session.effort,
-      effortLabel: session.effortLabel,
+      effort: lastEffort,
       key: overrideKey ?? apiKeys[provider],
       strict,
-      previousPlan: session.plan,
-      previousRequest: session.request,
+      forcePlan: turnError?.forcePlan ?? false,
+      prefs: routingPrefs,
+      isCold: Boolean(matchedOss && matchedOss.status !== "loaded"),
     });
-  }
-
-  function handleCancel() {
-    abortRef.current?.abort();
   }
 
   function handleReset() {
     abortRef.current?.abort();
     abortRef.current = null;
     setBusy(false);
-    setSession(null);
+    setColdLoading(false);
+    setEntries([]);
+    setTurnError(null);
     setPrompt("");
-    setCopiedHandoff(false);
-    setCopiedLocal(false);
   }
 
-  async function copyText(text: string, kind: "handoff" | "local") {
-    try {
-      await navigator.clipboard.writeText(text);
-      if (kind === "handoff") {
-        setCopiedHandoff(true);
-        window.setTimeout(() => setCopiedHandoff(false), 2400);
-      } else {
-        setCopiedLocal(true);
-        window.setTimeout(() => setCopiedLocal(false), 2400);
-      }
-    } catch {
-      // Clipboard unavailable in restricted browser contexts.
-    }
-  }
-
-  const settingsControl = (
-    <div
-      className={styles.settingsPicker}
-      ref={settingsRef}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget))
-          setSettingsOpen(false);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && settingsOpen) {
-          setSettingsOpen(false);
-          settingsButtonRef.current?.focus();
-        }
-      }}
-    >
-      <button
-        type="button"
-        ref={settingsButtonRef}
-        className={`${styles.settingsButton} ${!keyReady ? styles.settingsAttention : ""}`}
-        aria-expanded={settingsOpen}
-        aria-controls={settingsPanelId}
-        aria-label="Model settings and API key"
-        onClick={() => setSettingsOpen((open) => !open)}
-      >
-        <svg
-          aria-hidden="true"
-          width="15"
-          height="15"
-          viewBox="0 0 18 18"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <circle cx="6.5" cy="11.5" r="3.25" />
-          <path d="m9 9 6-6m-2.5 2.5 2 2M13 5l1.8 1.8" />
-        </svg>
-        <span>{keyReady ? "Config" : "API key"}</span>
-        {strict && <i className={styles.strictDot} aria-hidden="true" />}
-      </button>
+  const toolbarControls = (
+    <>
       <div
-        id={settingsPanelId}
-        className={styles.settingsMenu}
-        role="group"
-        aria-label="Planner settings"
-        hidden={!settingsOpen}
+        className={styles.settingsPicker}
+        ref={toolsRef}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget))
+            setToolsOpen(false);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && toolsOpen) {
+            setToolsOpen(false);
+            toolsButtonRef.current?.focus();
+          }
+        }}
       >
-        <div className={styles.settingsField}>
-          <label htmlFor={modelInputId}>
-            {provider === "configured"
-              ? "Server model ID"
-              : `${providerLabel} model ID`}
-          </label>
-          <input
-            id={modelInputId}
-            type="text"
-            maxLength={120}
-            value={activeModelId}
-            readOnly={Boolean(explicitModelId)}
-            onChange={(event) => {
-              const next = event.target.value;
-              setModelIds((current) => ({ ...current, [provider]: next }));
-            }}
-          />
+        <button
+          type="button"
+          ref={toolsButtonRef}
+          className={styles.settingsButton}
+          aria-expanded={toolsOpen}
+          aria-controls={toolsMenuId}
+          aria-label={`Task model routing: ${formatRoutingSummary(routingPrefs)}`}
+          onClick={() => {
+            setToolsOpen((open) => !open);
+            setSettingsOpen(false);
+          }}
+        >
+          <svg
+            aria-hidden="true"
+            width="15"
+            height="15"
+            viewBox="0 0 18 18"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M3 5h8M14 5h1M3 9h3m4 0h5M3 13h9m3 0h0" />
+            <circle cx="12.5" cy="5" r="1.5" />
+            <circle cx="8" cy="9" r="1.5" />
+            <circle cx="13.5" cy="13" r="1.5" />
+          </svg>
+          <span>{formatRoutingSummary(routingPrefs)}</span>
+        </button>
+
+        <div
+          id={toolsMenuId}
+          className={styles.toolsMenu}
+          role="group"
+          aria-label="Coding subscriptions and routing preferences"
+          hidden={!toolsOpen}
+        >
+          <div className={styles.toolsMenuHeader}>
+            <strong>Task model routing</strong>
+            <p>
+              Pick the subscriptions or IDEs you use so plans recommend models
+              you already have—or keep Open best-fit.
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-pressed={routingPrefs.mode === "open"}
+            className={`${styles.toolRow} ${routingPrefs.mode === "open" ? styles.toolRowActive : ""}`}
+            onClick={() =>
+              updateRoutingPrefs({ mode: "open", subscriptions: [] })
+            }
+          >
+            <div>
+              <span>Open best-fit (unrestricted)</span>
+              <small>
+                Routes across latest Arena & catalog leaders for best quality /
+                cost
+              </small>
+            </div>
+            <i aria-hidden="true">{routingPrefs.mode === "open" ? "✓" : ""}</i>
+          </button>
+
+          <div className={styles.toolsSubheading}>My subscriptions & tools</div>
+          {subscriptionCatalog.map((item) => {
+            const checked =
+              routingPrefs.mode === "subscriptions" &&
+              routingPrefs.subscriptions.includes(item.id);
+            return (
+              <button
+                key={item.id}
+                type="button"
+                aria-pressed={checked}
+                className={`${styles.toolRow} ${checked ? styles.toolRowActive : ""}`}
+                onClick={() => toggleSubscription(item.id)}
+              >
+                <div>
+                  <span>{item.label}</span>
+                  <small>{item.description}</small>
+                </div>
+                <i aria-hidden="true">{checked ? "✓" : ""}</i>
+              </button>
+            );
+          })}
         </div>
-        {provider !== "configured" && (
+      </div>
+
+      <div
+        className={styles.settingsPicker}
+        ref={settingsRef}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget))
+            setSettingsOpen(false);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && settingsOpen) {
+            setSettingsOpen(false);
+            settingsButtonRef.current?.focus();
+          }
+        }}
+      >
+        <button
+          type="button"
+          ref={settingsButtonRef}
+          className={`${styles.settingsButton} ${!keyReady ? styles.settingsAttention : ""}`}
+          aria-expanded={settingsOpen}
+          aria-controls={settingsPanelId}
+          aria-label="Model settings and API key"
+          onClick={() => {
+            setSettingsOpen((open) => !open);
+            setToolsOpen(false);
+          }}
+        >
+          <svg
+            aria-hidden="true"
+            width="15"
+            height="15"
+            viewBox="0 0 18 18"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="6.5" cy="11.5" r="3.25" />
+            <path d="m9 9 6-6m-2.5 2.5 2 2M13 5l1.8 1.8" />
+          </svg>
+          <span>{keyReady ? "Config" : "API key"}</span>
+          {strict && <i className={styles.strictDot} aria-hidden="true" />}
+        </button>
+        <div
+          id={settingsPanelId}
+          className={styles.settingsMenu}
+          role="group"
+          aria-label="Planner settings"
+          hidden={!settingsOpen}
+        >
           <div className={styles.settingsField}>
-            <label htmlFor={keyInputId}>
-              API key{" "}
-              <small>{hasServerKey ? "Server key ready" : "Required"}</small>
+            <label htmlFor={modelInputId}>
+              {provider === "configured"
+                ? "Server model ID"
+                : `${providerLabel} model ID`}
             </label>
             <input
-              id={keyInputId}
-              type="password"
-              autoComplete="off"
-              maxLength={512}
-              value={activeKey}
-              placeholder={
-                hasServerKey
-                  ? "Using server key (optional override)"
-                  : `Paste your ${providerLabel} key`
-              }
+              id={modelInputId}
+              type="text"
+              maxLength={120}
+              value={activeModelId}
+              readOnly={Boolean(explicitModelId)}
               onChange={(event) => {
                 const next = event.target.value;
-                setApiKeys((current) => ({ ...current, [provider]: next }));
+                setModelIds((current) => ({ ...current, [provider]: next }));
               }}
             />
           </div>
-        )}
-        <label className={styles.strictToggle}>
-          <input
-            type="checkbox"
-            checked={strict}
-            onChange={(event) => setStrict(event.target.checked)}
-          />
-          <span>Strict security review</span>
-        </label>
-        <p className={styles.settingsHint}>
-          {provider === "configured"
-            ? "Runs directly on your configured OSS server with no cloud API key."
-            : "Keys stay in memory for this tab only and are never saved."}
-        </p>
+          {provider !== "configured" && (
+            <div className={styles.settingsField}>
+              <label htmlFor={keyInputId}>
+                API key{" "}
+                <small>{hasServerKey ? "Server key ready" : "Required"}</small>
+              </label>
+              <input
+                id={keyInputId}
+                type="password"
+                autoComplete="off"
+                maxLength={512}
+                value={activeKey}
+                placeholder={
+                  hasServerKey
+                    ? "Using server key (optional override)"
+                    : `Paste your ${providerLabel} key`
+                }
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setApiKeys((current) => ({ ...current, [provider]: next }));
+                }}
+              />
+            </div>
+          )}
+          <label className={styles.strictToggle}>
+            <input
+              type="checkbox"
+              checked={strict}
+              onChange={(event) => setStrict(event.target.checked)}
+            />
+            <span>Strict security review</span>
+          </label>
+          <p className={styles.settingsHint}>
+            {provider === "configured"
+              ? "Runs directly on your OSS server over Tailscale."
+              : "Keys stay in memory for this tab only and are never saved."}
+          </p>
+        </div>
       </div>
-    </div>
+    </>
   );
 
   return (
@@ -634,145 +801,127 @@ export function BetaPrompt({
             <br className={styles.break} /> building?
           </h1>
           <p>
-            Start with an idea. We’ll turn it into a plan your coding agent can
-            use.
+            Start with an idea. We’ll clarify what matters, lock architecture
+            decisions, route each task to the right model, and build your agent
+            prompt.
           </p>
         </div>
       </div>
 
       <section
-        className={styles.outputArea}
-        aria-label="Plan output"
+        className={styles.threadArea}
+        aria-label="Conversation"
         aria-hidden={!active}
       >
-        {session && (
-          <div className={styles.outputBox}>
-            <header className={styles.outputBar}>
-              <div className={styles.outputBarLeft}>
-                <span
-                  className={`${styles.statusOrb} ${
-                    busy
-                      ? styles.statusOrbBusy
-                      : session.error
-                        ? styles.statusOrbError
-                        : styles.statusOrbReady
-                  }`}
-                  aria-hidden="true"
-                />
-                <span className={styles.outputTitle}>
-                  {busy
-                    ? "Generating plan…"
-                    : session.plan
-                      ? session.plan.title
-                      : "Planning session"}
+        {active && (
+          <>
+            <header className={styles.sessionHeader}>
+              <div className={styles.sessionMeta}>
+                <span className={styles.sessionTitle}>
+                  {latestPlanEntry
+                    ? latestPlanEntry.plan.title
+                    : "Planning conversation"}
                 </span>
-                <span className={styles.outputBadge}>
-                  {session.providerLabel} · {session.effortLabel}
+                <span className={styles.sessionPill}>
+                  Routing: {formatRoutingSummary(routingPrefs)}
                 </span>
               </div>
-              <div className={styles.outputBarActions}>
-                {session.plan && session.request && (
-                  <button
-                    type="button"
-                    className={styles.barAction}
-                    onClick={() =>
-                      void copyText(
-                        makeHandoff(
-                          session.plan!,
-                          session.strict,
-                          session.request!,
-                        ),
-                        "handoff",
-                      )
-                    }
-                  >
-                    {copiedHandoff ? "Copied ✓" : "Copy handoff"}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className={styles.barAction}
-                  onClick={handleReset}
-                >
-                  New plan
-                </button>
-              </div>
+              <button
+                type="button"
+                className={styles.newChatButton}
+                onClick={handleReset}
+              >
+                New chat
+              </button>
             </header>
 
-            <div className={styles.outputScroll} ref={outputScrollRef}>
-              <div className={styles.promptHistory}>
-                {session.turns.map((turn, index) => (
-                  <div className={styles.userTurn} key={turn.id}>
-                    <span className={styles.turnTag}>
-                      {index === 0 ? "Your prompt" : `Refinement ${index}`}
-                    </span>
-                    <p>{turn.text}</p>
-                  </div>
-                ))}
-              </div>
+            <div className={styles.threadScroll} ref={threadScrollRef}>
+              <div className={styles.threadList}>
+                {entries.map((entry, idx) => {
+                  if (entry.role === "user") {
+                    return (
+                      <div className={styles.userRow} key={entry.id}>
+                        <div className={styles.userBubble}>{entry.content}</div>
+                      </div>
+                    );
+                  }
 
-              {session.plan && session.request && (
-                <div className={busy ? styles.planDimmed : undefined}>
-                  <PlanResultView
-                    plan={session.plan}
-                    strict={session.strict}
-                    candidates={defaultCandidates}
-                    request={session.request}
-                    onSelectQuestion={(question) => {
-                      setPrompt(`Regarding "${question}": `);
-                      setFocusTrigger((count) => count + 1);
-                    }}
-                    onCopyHandoff={() =>
-                      void copyText(
-                        makeHandoff(
-                          session.plan!,
-                          session.strict,
-                          session.request!,
-                        ),
-                        "handoff",
-                      )
-                    }
-                    copiedHandoff={copiedHandoff}
+                  const hasLaterEntry = idx < entries.length - 1;
+
+                  return (
+                    <div className={styles.assistantRow} key={entry.id}>
+                      <AssistantAvatar />
+                      <div className={styles.assistantContent}>
+                        <p className={styles.assistantProse}>{entry.reply}</p>
+
+                        {entry.mode === "clarify" && (
+                          <ClarificationWidget
+                            questions={entry.questions}
+                            answered={hasLaterEntry || busy}
+                            routingPrefs={routingPrefs}
+                            onRoutingPrefsChange={updateRoutingPrefs}
+                            onSubmitAnswers={(summary) =>
+                              submitUserMessage(summary, { forcePlan: true })
+                            }
+                            onSkipDefaults={() =>
+                              submitUserMessage(
+                                "Use clean, pragmatic defaults for v1 and generate the implementation plan.",
+                                { forcePlan: true },
+                              )
+                            }
+                          />
+                        )}
+
+                        {entry.mode === "plan" && (
+                          <PlanArtifactView
+                            plan={entry.plan}
+                            candidates={entry.candidates}
+                            catalogDate={entry.catalogDate}
+                            strict={entry.strict}
+                            onSelectQuestion={(question) => {
+                              setPrompt(`Regarding "${question}": `);
+                              setFocusTrigger((count) => count + 1);
+                            }}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {busy && (
+                  <ThinkingRow
+                    providerLabel={providerLabel}
+                    coldLoading={coldLoading}
                   />
-                </div>
-              )}
+                )}
 
-              {busy && (
-                <WorkingCard
-                  providerLabel={session.providerLabel}
-                  modelId={session.modelId}
-                  effortLabel={session.effortLabel}
-                  isRefinement={session.plan !== null}
-                  coldLoading={session.coldLoading}
-                />
-              )}
+                {!busy && turnError && (
+                  <div className={styles.assistantRow}>
+                    <AssistantAvatar />
+                    <div className={styles.assistantContent}>
+                      <ErrorCard
+                        error={turnError.message}
+                        needsKey={turnError.needsKey}
+                        provider={provider}
+                        providerLabel={providerLabel}
+                        apiKey={activeKey}
+                        onApiKeyChange={(next) =>
+                          setApiKeys((current) => ({
+                            ...current,
+                            [provider]: next,
+                          }))
+                        }
+                        onRetry={handleRetry}
+                      />
+                    </div>
+                  </div>
+                )}
 
-              {!busy && session.error && (
-                <ErrorCard
-                  error={session.error}
-                  needsKey={session.needsKey}
-                  provider={provider}
-                  providerLabel={providerLabel}
-                  apiKey={activeKey}
-                  onApiKeyChange={(next) =>
-                    setApiKeys((current) => ({ ...current, [provider]: next }))
-                  }
-                  onRetry={handleRetry}
-                  onCopyLocalPrompt={() =>
-                    void copyText(
-                      buildLocalFirstPrompt(
-                        session.baseIdea,
-                        buildContext(session.effort, session.refinements),
-                        strict,
-                      ),
-                      "local",
-                    )
-                  }
-                  copiedLocal={copiedLocal}
-                />
-              )}
+                <div ref={threadBottomRef} className={styles.scrollAnchor} />
+              </div>
             </div>
-          </div>
+          </>
         )}
       </section>
 
@@ -780,29 +929,29 @@ export function BetaPrompt({
         <PromptInput
           value={prompt}
           onChange={setPrompt}
-          onSubmit={handleSubmit}
+          onSubmit={handleComposerSubmit}
           models={models}
           efforts={betaEfforts}
           model={selection}
           onModelChange={setSelection}
           placeholder={
             active
-              ? "Answer open questions or refine this plan…"
-              : "Describe what you want to build…"
+              ? "Reply, refine decisions, or ask anything…"
+              : "Ask anything or describe what you want to build…"
           }
-          submitLabel={active ? "Refine plan" : "Generate plan"}
-          minLength={active ? 2 : betaIdeaMin}
+          submitLabel={active ? "Send message" : "Send"}
+          minLength={1}
           maxLength={betaIdeaMax}
           settled={active}
           busy={busy}
-          onCancel={handleCancel}
-          toolbarExtra={settingsControl}
+          onCancel={() => abortRef.current?.abort()}
+          toolbarExtra={toolbarControls}
           focusTrigger={focusTrigger}
         />
 
         <div className={styles.examplesWrap} aria-hidden={active}>
           <div className={styles.examplesInner}>
-            <ul className={styles.examples} aria-label="Example ideas">
+            <ul className={styles.examples} aria-label="Example prompts">
               {examples.map((example) => (
                 <li key={example.label}>
                   <button
