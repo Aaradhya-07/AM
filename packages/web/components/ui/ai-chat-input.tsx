@@ -117,8 +117,14 @@ export interface PromptInputProps {
   focusTrigger?: number;
 }
 
-const maxAttachments = 6;
+const maxAttachments = 4;
 const maxImageBytes = 10 * 1024 * 1024;
+const supportedImageTypes = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+]);
 
 export function PromptInput({
   value,
@@ -209,6 +215,13 @@ export function PromptInput({
     return () => document.removeEventListener("pointerdown", closeOutside);
   }, [modelOpen]);
 
+  function clearAttachments() {
+    attachmentUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    attachmentUrls.current.clear();
+    setAttachments([]);
+    setPreview(null);
+  }
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (listening || busy) return;
@@ -218,11 +231,13 @@ export function PromptInput({
       textarea.current?.focus();
       return;
     }
+    const submittedFiles = attachments.map(({ file }) => file);
     setMessage("");
+    clearAttachments();
     onSubmit(idea, {
       model: selectedModel.id,
       effort: effort.id,
-      attachments: attachments.map(({ file }) => file),
+      attachments: submittedFiles,
     });
   }
 
@@ -240,7 +255,8 @@ export function PromptInput({
   function addAttachments(files: FileList) {
     const next = Array.from(files)
       .filter(
-        (file) => file.type.startsWith("image/") && file.size <= maxImageBytes,
+        (file) =>
+          supportedImageTypes.has(file.type) && file.size <= maxImageBytes,
       )
       .slice(0, maxAttachments - attachments.length)
       .map((file) => {
@@ -251,7 +267,7 @@ export function PromptInput({
     setAttachments([...attachments, ...next]);
     setMessage(
       next.length < files.length
-        ? "You can add up to six images, each 10 MB or smaller."
+        ? "Add up to 4 images (PNG, JPEG, WEBP, or GIF), each 10 MB or smaller."
         : "",
     );
   }
@@ -333,7 +349,6 @@ export function PromptInput({
                   aria-label={`Preview ${attachment.file.name}`}
                   onClick={() => setPreview(attachment)}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element -- Browser-local image preview. */}
                   <img src={attachment.url} alt="" />
                 </button>
                 <button
@@ -477,7 +492,7 @@ export function PromptInput({
                 ref={fileInput}
                 type="file"
                 multiple
-                accept="image/*"
+                accept="image/png,image/jpeg,image/webp,image/gif"
                 hidden
                 onChange={(event) => {
                   if (event.target.files?.length)
@@ -531,8 +546,8 @@ export function PromptInput({
         )}
         {attachments.length > 0 && (
           <p className={styles.message}>
-            Images are previewed here. Describe any details you want the planner
-            to use.
+            {attachments.length} {attachments.length === 1 ? "image" : "images"}{" "}
+            ready to attach to this turn (auto-resized if needed).
           </p>
         )}
       </form>
@@ -555,7 +570,6 @@ export function PromptInput({
             >
               <Icon name="close" />
             </button>
-            {/* eslint-disable-next-line @next/next/no-img-element -- Browser-local image preview. */}
             <img src={preview.url} alt={preview.file.name} />
             <figcaption>{preview.file.name}</figcaption>
           </figure>

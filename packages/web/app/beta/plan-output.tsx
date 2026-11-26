@@ -2,7 +2,10 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 
-import type { ClarificationQuestionItem } from "../../lib/beta-turn";
+import type {
+  BetaTurnProgressSection,
+  ClarificationQuestionItem,
+} from "../../lib/beta-turn";
 import {
   strictChecks,
   type GeneratedPlan,
@@ -16,6 +19,7 @@ import {
   type RoutingPreferences,
   type SubscriptionId,
 } from "../../lib/routing-types";
+import { FlowGraph } from "./flow-graph";
 import { LocalHandoffStudio } from "./handoff-studio";
 import styles from "./beta.module.css";
 
@@ -25,6 +29,17 @@ const thinkingPhrases = [
   "Comparing architecture & model tradeoffs…",
   "Structuring task slices & agent handoff…",
 ] as const;
+
+const progressSections: readonly {
+  id: BetaTurnProgressSection;
+  label: string;
+}[] = [
+  { id: "overview", label: "Overview" },
+  { id: "architecture", label: "Architecture" },
+  { id: "flows", label: "Data flows" },
+  { id: "tasks", label: "Task slices" },
+  { id: "security", label: "Security" },
+];
 
 export function AssistantAvatar({ active = false }: { active?: boolean }) {
   return (
@@ -47,9 +62,13 @@ export function AssistantAvatar({ active = false }: { active?: boolean }) {
 export function ThinkingRow({
   providerLabel,
   coldLoading = false,
+  statusMessage,
+  statusModel,
 }: {
   providerLabel: string;
-  coldLoading?: boolean;
+  coldLoading?: boolean | undefined;
+  statusMessage?: string | null | undefined;
+  statusModel?: string | null | undefined;
 }) {
   const [elapsedMs, setElapsedMs] = useState(0);
 
@@ -65,6 +84,7 @@ export function ThinkingRow({
     ? [`Loading ${providerLabel} on am-server…`, ...thinkingPhrases.slice(1)]
     : thinkingPhrases;
   const index = Math.min(phrases.length - 1, Math.floor(elapsedMs / 3200));
+  const activeText = statusMessage?.trim() || phrases[index];
 
   return (
     <div
@@ -75,14 +95,117 @@ export function ThinkingRow({
     >
       <AssistantAvatar active />
       <div className={styles.thinkingBody}>
-        <span className={styles.shimmerText} key={index}>
-          {phrases[index]}
+        <span className={styles.shimmerText} key={activeText}>
+          {activeText}
         </span>
+        {statusModel && (
+          <span className={styles.streamModelPill}>{statusModel}</span>
+        )}
         {elapsedMs >= 1500 && (
           <span className={styles.thinkingTimer}>
             {(elapsedMs / 1000).toFixed(1)}s
           </span>
         )}
+      </div>
+    </div>
+  );
+}
+
+export function StreamingSynthesisRow({
+  architectReply,
+  statusMessage,
+  statusModel,
+  progressSection,
+  progressChars,
+}: {
+  architectReply: string;
+  statusMessage: string | null;
+  statusModel: string | null;
+  progressSection: BetaTurnProgressSection | null;
+  progressChars: number;
+}) {
+  const [elapsedMs, setElapsedMs] = useState(0);
+
+  useEffect(() => {
+    const started = Date.now();
+    const timer = window.setInterval(() => {
+      setElapsedMs(Date.now() - started);
+    }, 100);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const activeSection: BetaTurnProgressSection = progressSection ?? "overview";
+  const activeIndex = Math.max(
+    0,
+    progressSections.findIndex((item) => item.id === activeSection),
+  );
+
+  return (
+    <div className={styles.assistantRow} data-streaming="true">
+      <AssistantAvatar active />
+      <div className={styles.assistantContent}>
+        <p className={styles.assistantProse}>{architectReply}</p>
+
+        <div
+          className={styles.synthesisProgressCard}
+          role="status"
+          aria-live="polite"
+          aria-label="Synthesizing implementation plan"
+        >
+          <div className={styles.synthesisProgressTop}>
+            <span className={styles.shimmerText}>
+              {statusMessage?.trim() ||
+                "Synthesizing architecture decisions, slices, and model routing…"}
+            </span>
+            <div className={styles.synthesisProgressMeta}>
+              {statusModel && (
+                <span className={styles.streamModelPill}>{statusModel}</span>
+              )}
+              <span className={styles.streamCharsBadge}>
+                {progressChars.toLocaleString()} chars
+              </span>
+              {elapsedMs >= 1000 && (
+                <span className={styles.thinkingTimer}>
+                  {(elapsedMs / 1000).toFixed(1)}s
+                </span>
+              )}
+            </div>
+          </div>
+
+          <ol
+            className={styles.progressPills}
+            aria-label="Plan synthesis stages"
+          >
+            {progressSections.map((step, index) => {
+              const state =
+                index < activeIndex
+                  ? "done"
+                  : index === activeIndex
+                    ? "active"
+                    : "pending";
+              return (
+                <li
+                  key={step.id}
+                  data-stage={step.id}
+                  data-state={state}
+                  aria-current={state === "active" ? "step" : undefined}
+                  className={`${styles.progressPill} ${
+                    state === "active"
+                      ? styles.progressPillActive
+                      : state === "done"
+                        ? styles.progressPillDone
+                        : ""
+                  }`}
+                >
+                  <span className={styles.progressPillDot} aria-hidden="true">
+                    {state === "done" ? "✓" : ""}
+                  </span>
+                  <span>{step.label}</span>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
       </div>
     </div>
   );
@@ -210,7 +333,7 @@ export function ClarificationWidget({
               <h4>Which coding subscriptions or tools do you use?</h4>
               <p>
                 Tailors task-by-task model picks to subscriptions you already
-                pay for, or chooses openly for best quality & cost.
+                pay for, or chooses openly for best quality &amp; cost.
               </p>
             </div>
           </div>
@@ -267,7 +390,7 @@ export function ClarificationWidget({
             className={styles.ghostAction}
             onClick={onSkipDefaults}
           >
-            Skip & use defaults
+            Skip &amp; use defaults
           </button>
         )}
       </div>
@@ -366,19 +489,27 @@ export function PlanArtifactView({
   candidates,
   catalogDate,
   strict,
+  editedArchitectureIndices = [],
   onSelectQuestion,
+  onUpdateTaskModel,
+  onSwapArchitectureDecision,
 }: {
   plan: GeneratedPlan;
   candidates: readonly RoutableCandidate[];
   catalogDate: string;
   strict: boolean;
+  editedArchitectureIndices?: readonly number[] | undefined;
   onSelectQuestion: (question: string) => void;
+  onUpdateTaskModel?:
+    ((taskIndex: number, nextModel: string) => void) | undefined;
+  onSwapArchitectureDecision?: ((decisionIndex: number) => void) | undefined;
 }) {
   const totalTokens = plan.tasks.reduce(
     (sum, t) => sum + t.inputTokens + t.outputTokens,
     0,
   );
   const savings = computePlanSavingsSummary(plan.tasks, candidates);
+  const editedSet = new Set(editedArchitectureIndices);
 
   return (
     <div className={styles.planArtifact}>
@@ -386,7 +517,7 @@ export function PlanArtifactView({
         <header className={styles.blueprintHeader}>
           <div>
             <span className={styles.sectionEyebrow}>
-              Architecture & task plan
+              Architecture &amp; task plan
             </span>
             <h2>{plan.title}</h2>
           </div>
@@ -455,48 +586,52 @@ export function PlanArtifactView({
         <section className={styles.blueprintBlock}>
           <div className={styles.sectionHeader}>
             <span className={styles.sectionEyebrow}>Architecture</span>
-            <h3>Key decisions & rejected alternatives</h3>
+            <h3>Key decisions &amp; rejected alternatives</h3>
           </div>
           <div className={styles.planGrid}>
-            {plan.architecture.map((choice, index) => (
-              <div className={styles.planSubcard} key={index}>
-                <h4>{choice.title}</h4>
-                <p className={styles.decisionBody}>{choice.decision}</p>
-                <dl className={styles.decisionMeta}>
-                  <div>
-                    <dt>Why</dt>
-                    <dd>{choice.why}</dd>
+            {plan.architecture.map((choice, index) => {
+              const isEdited = editedSet.has(index);
+              return (
+                <div className={styles.planSubcard} key={index}>
+                  <div className={styles.decisionHeader}>
+                    <div className={styles.decisionTitleRow}>
+                      <h4>{choice.title}</h4>
+                      {isEdited && (
+                        <span className={styles.editedBadge}>Edited</span>
+                      )}
+                    </div>
+                    {onSwapArchitectureDecision && (
+                      <button
+                        type="button"
+                        className={styles.swapDecisionBtn}
+                        aria-label={`Swap ${choice.title} with alternative`}
+                        onClick={() => onSwapArchitectureDecision(index)}
+                      >
+                        Swap with alternative ⇄
+                      </button>
+                    )}
                   </div>
-                  <div>
-                    <dt>Rejected alternative</dt>
-                    <dd>{choice.alternative}</dd>
-                  </div>
-                  <div>
-                    <dt>Tradeoff</dt>
-                    <dd>{choice.tradeoff}</dd>
-                  </div>
-                </dl>
-              </div>
-            ))}
+                  <p className={styles.decisionBody}>{choice.decision}</p>
+                  <dl className={styles.decisionMeta}>
+                    <div>
+                      <dt>Why</dt>
+                      <dd>{choice.why}</dd>
+                    </div>
+                    <div>
+                      <dt>Rejected alternative</dt>
+                      <dd>{choice.alternative}</dd>
+                    </div>
+                    <div>
+                      <dt>Tradeoff</dt>
+                      <dd>{choice.tradeoff}</dd>
+                    </div>
+                  </dl>
+                </div>
+              );
+            })}
           </div>
 
-          {plan.flows.length > 0 && (
-            <div className={styles.flowsBlock}>
-              <h4>Data flows & boundaries</h4>
-              <div className={styles.flowsList}>
-                {plan.flows.map((flow, index) => (
-                  <div className={styles.flowRow} key={index}>
-                    <strong>
-                      {flow.from} → {flow.to}
-                    </strong>
-                    <p>
-                      {flow.data} · <span>{flow.boundary}</span>
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <FlowGraph flows={plan.flows} />
         </section>
 
         <hr className={styles.divider} />
@@ -504,12 +639,13 @@ export function PlanArtifactView({
         <section className={styles.blueprintBlock}>
           <div className={styles.sectionHeader}>
             <span className={styles.sectionEyebrow}>
-              Execution & model routing
+              Execution &amp; model routing
             </span>
             <h3>Ordered task slices</h3>
             <p className={styles.sectionNote}>
               Each slice is matched to the lowest-cost eligible model tier that
-              clears its scope and risk bar.
+              clears its scope and risk bar. Switch any slice model below to
+              recalculate cost and Handoff Studio exports live.
             </p>
           </div>
 
@@ -519,6 +655,9 @@ export function PlanArtifactView({
               const taskUsd = candidate
                 ? estimateTaskUsd(task, candidate)
                 : null;
+              const hasCandidateInList = candidates.some(
+                (c) => c.model === task.model,
+              );
               return (
                 <li key={task.id} className={styles.taskCard}>
                   <div className={styles.taskHeader}>
@@ -543,9 +682,29 @@ export function PlanArtifactView({
                           {candidate.tier}
                         </span>
                       )}
-                      <span className={styles.modelBadge}>
-                        {candidate?.label ?? task.model}
-                      </span>
+                      {onUpdateTaskModel && candidates.length > 0 ? (
+                        <select
+                          className={styles.modelSelect}
+                          aria-label={`Model for ${task.title}`}
+                          value={task.model}
+                          onChange={(event) =>
+                            onUpdateTaskModel(index, event.target.value)
+                          }
+                        >
+                          {!hasCandidateInList && (
+                            <option value={task.model}>{task.model}</option>
+                          )}
+                          {candidates.map((option) => (
+                            <option key={option.model} value={option.model}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className={styles.modelBadge}>
+                          {candidate?.label ?? task.model}
+                        </span>
+                      )}
                     </div>
                   </div>
 

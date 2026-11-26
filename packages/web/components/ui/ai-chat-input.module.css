@@ -90,9 +90,11 @@
 
 .toolbar {
   justify-content: space-between;
+  gap: 8px;
 }
 .options {
   min-width: 0;
+  flex-wrap: wrap;
 }
 .actions {
   flex-shrink: 0;

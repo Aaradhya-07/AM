@@ -22,7 +22,7 @@
   transition: opacity 600ms ease;
 }
 
-.page :is(button, input, a):focus-visible {
+.page :is(button, input, select, a):focus-visible {
   outline: 2px solid #eac6a6;
   outline-offset: 2px;
 }
@@ -1347,10 +1347,18 @@
   background: #100f16;
   display: flex;
   gap: 18px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.handoffTabs::-webkit-scrollbar {
+  display: none;
 }
 
 .handoffTab {
   position: relative;
+  flex: none;
+  white-space: nowrap;
   padding: 11px 2px;
   color: #9d94ab;
   font-size: 13px;
@@ -1488,6 +1496,986 @@
 }
 
 /* --------------------------------------------------------------------------
+   Wave 2 Studio UX: Streaming, In-Place Plan Editing, Flow Graph,
+   Repo Context, Multimodal Thumbnails, Multi-IDE CLI & History Drawer
+   -------------------------------------------------------------------------- */
+
+.idleTopBar {
+  flex: none;
+  width: min(100% - 32px, 50rem);
+  margin: 8px auto 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.sessionActions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.historyButton {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #dfd8e6;
+  font-size: 12px;
+  font-weight: 500;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+}
+
+.historyButton:hover,
+.historyButton[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(234, 198, 166, 0.45);
+  color: #fff;
+}
+
+.historyCountPill {
+  padding: 0 6px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(234, 198, 166, 0.16);
+  color: #eac6a6;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Multimodal user thumbnails */
+.userAttachmentGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+
+.userAttachmentItem {
+  margin: 0;
+  width: 74px;
+  display: grid;
+  gap: 4px;
+}
+
+.userAttachmentThumb {
+  width: 74px;
+  height: 58px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  object-fit: cover;
+  background: #14121b;
+}
+
+.userAttachmentItem figcaption {
+  color: #ada4b8;
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.userAttachmentPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #cfc6da;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+}
+
+/* Live SSE synthesis progress card */
+.streamModelPill {
+  padding: 2px 8px;
+  border: 1px solid #353044;
+  border-radius: 999px;
+  background: #191723;
+  color: #bdb3ca;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+}
+
+.synthesisProgressCard {
+  padding: 13px 15px;
+  border: 1px solid #2e293b;
+  border-radius: 16px;
+  background: rgba(20, 18, 27, 0.92);
+  display: grid;
+  gap: 11px;
+}
+
+.synthesisProgressTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.synthesisProgressMeta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.streamCharsBadge {
+  padding: 2px 8px;
+  border: 1px solid rgba(234, 198, 166, 0.3);
+  border-radius: 999px;
+  background: rgba(234, 198, 166, 0.08);
+  color: #eac6a6;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.progressPills {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.progressPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid #2c2838;
+  border-radius: 999px;
+  background: #14121c;
+  color: #877e96;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    color 180ms ease;
+}
+
+.progressPillDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid #443e54;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+}
+
+.progressPillActive {
+  border-color: rgba(234, 198, 166, 0.65);
+  background: rgba(234, 198, 166, 0.12);
+  color: #f9efe5;
+}
+
+.progressPillActive .progressPillDot {
+  border-color: #eac6a6;
+  background: #eac6a6;
+  box-shadow: 0 0 8px rgba(234, 198, 166, 0.6);
+}
+
+.progressPillDone {
+  border-color: #2b4d3a;
+  background: rgba(19, 40, 29, 0.72);
+  color: #9ce0b6;
+}
+
+.progressPillDone .progressPillDot {
+  border-color: #2f5b43;
+  background: #173424;
+  color: #9ce0b6;
+}
+
+/* Routing menu profile sync & catalog freshness */
+.toolsHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.profileSyncBadge {
+  padding: 2px 7px;
+  border: 1px solid #2f5b43;
+  border-radius: 999px;
+  background: #13281d;
+  color: #9ce0b6;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.catalogFreshnessBox {
+  margin-top: 4px;
+  padding: 9px 10px;
+  border-top: 1px solid #2c2838;
+  border-radius: 10px;
+  background: #131119;
+  display: grid;
+  gap: 7px;
+}
+
+.catalogFreshnessTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #a89fb4;
+  font-size: 11px;
+}
+
+.catalogFreshnessTop strong {
+  color: #e9e2f0;
+  font-weight: 500;
+}
+
+.freshBadge,
+.staleBadge {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+}
+
+.freshBadge {
+  border: 1px solid #2b543e;
+  background: #13281d;
+  color: #9ce0b6;
+}
+
+.staleBadge {
+  border: 1px solid #6b4d2a;
+  background: #2b1f12;
+  color: #f3c892;
+}
+
+.catalogRefreshRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  padding: 6px 8px;
+  border: 1px solid #2e2a3a;
+  border-radius: 9px;
+  background: #0d0c12;
+}
+
+.catalogRefreshRow code {
+  min-width: 0;
+  overflow-x: auto;
+  color: #eac6a6;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.miniCopyBtn {
+  flex: none;
+  padding: 3px 8px;
+  border: 1px solid #3d374c;
+  border-radius: 7px;
+  background: #1c1926;
+  color: #ece6f2;
+  font-size: 11px;
+  font-weight: 500;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease;
+}
+
+.miniCopyBtn:hover {
+  border-color: #6b5f80;
+  background: #282336;
+}
+
+/* Repo context button, popover & active chip */
+.repoButtonActive {
+  color: #9ce0b6;
+}
+
+.repoDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #9ce0b6;
+}
+
+.repoMenu:not([hidden]) {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  z-index: 30;
+  width: min(350px, calc(100vw - 48px));
+  padding: 12px;
+  border: 1px solid #393446;
+  border-radius: 16px;
+  background: #1b1923;
+  color: #f4f0f4;
+  box-shadow: 0 16px 46px rgba(0, 0, 0, 0.78);
+  display: grid;
+  gap: 10px;
+  text-align: left;
+  animation: fadeUp 160ms ease-out;
+}
+
+.repoStep {
+  display: grid;
+  gap: 6px;
+}
+
+.repoStepLabel {
+  color: #9b92a8;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.repoError {
+  margin: 0;
+  padding: 7px 9px;
+  border: 1px solid #5f333a;
+  border-radius: 9px;
+  background: rgba(42, 20, 25, 0.72);
+  color: #f3c6c0;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.repoSummaryBox {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #2b4d3a;
+  border-radius: 10px;
+  background: rgba(19, 40, 29, 0.65);
+}
+
+.repoSummaryBox strong {
+  display: block;
+  color: #e9f7ee;
+  font-size: 12.5px;
+}
+
+.repoSummaryBox small {
+  color: #98c9ab;
+  font-size: 11px;
+}
+
+.repoChipBar {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 8px;
+}
+
+.repoChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 5px 8px 5px 11px;
+  border: 1px solid #2e5640;
+  border-radius: 999px;
+  background: rgba(17, 36, 26, 0.88);
+  color: #bcebd0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11.5px;
+}
+
+.repoChip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repoChipClear {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: #dcf6e6;
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 150ms ease;
+}
+
+.repoChipClear:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* In-place architecture decision swap & model select switcher */
+.decisionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+  flex-wrap: wrap;
+}
+
+.decisionTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.decisionTitleRow h4 {
+  margin: 0 !important;
+}
+
+.editedBadge {
+  padding: 1px 7px;
+  border: 1px solid rgba(234, 198, 166, 0.45);
+  border-radius: 999px;
+  background: rgba(234, 198, 166, 0.13);
+  color: #eac6a6;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.swapDecisionBtn {
+  flex: none;
+  padding: 3px 9px;
+  border: 1px solid #393349;
+  border-radius: 999px;
+  background: #201c2c;
+  color: #d8cfe6;
+  font-size: 11px;
+  font-weight: 500;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease,
+    color 150ms ease;
+}
+
+.swapDecisionBtn:hover {
+  border-color: #eac6a688;
+  background: #292338;
+  color: #fff;
+}
+
+.modelSelect {
+  appearance: none;
+  padding: 4px 26px 4px 10px;
+  border: 1px solid #483e5e;
+  border-radius: 999px;
+  background-color: #211c2c;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 18 18' fill='none' stroke='%23dcd1fc' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 7 4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  color: #e4dbff;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+
+.modelSelect:hover {
+  border-color: #eac6a699;
+  background-color: #2a2338;
+}
+
+.modelSelect option {
+  background: #181621;
+  color: #f3eef7;
+}
+
+/* Visual Trust-Boundary & Data-Flow Graph */
+.flowGraph {
+  margin-top: 4px;
+  padding: 13px 14px;
+  border: 1px solid #262332;
+  border-radius: 14px;
+  background: #16141f;
+  display: grid;
+  gap: 11px;
+}
+
+.flowGraphHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.flowGraphHeader h4 {
+  margin: 0;
+  color: #eee8f5;
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.flowGraphCount {
+  padding: 2px 8px;
+  border: 1px solid #302b3e;
+  border-radius: 999px;
+  background: #1d1a29;
+  color: #afa5bd;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+}
+
+.flowDiagramList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 9px;
+}
+
+.flowEdgeCard {
+  padding: 11px 12px;
+  border: 1px solid #292536;
+  border-radius: 12px;
+  background: #12101a;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(170px, 1.35fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.flowNode {
+  padding: 8px 11px;
+  border: 1px solid #332e44;
+  border-radius: 11px;
+  background: #1a1825;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.flowNodeSource {
+  border-color: #3a344c;
+}
+
+.flowNodeTarget {
+  border-color: rgba(234, 198, 166, 0.35);
+}
+
+.flowNodeKind {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #938aa2;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.flowNodeKind i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #9ce0b6;
+}
+
+.flowNodeTarget .flowNodeKind i {
+  background: #eac6a6;
+}
+
+.flowNode strong {
+  color: #f5f0f9;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.flowConnector {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.flowDataLabel {
+  max-width: 100%;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #1c1928;
+  color: #d9d1e4;
+  font-size: 11.5px;
+  text-align: center;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.flowArrowHorizontal {
+  width: 100%;
+  max-width: 180px;
+  height: 20px;
+  display: block;
+}
+
+.flowArrowVertical {
+  display: none;
+  width: 24px;
+  height: 32px;
+}
+
+.flowBoundaryBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 9px;
+  border: 1px solid rgba(234, 198, 166, 0.35);
+  border-radius: 999px;
+  background: rgba(234, 198, 166, 0.09);
+  color: #eac6a6;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.flowBoundaryBadge svg {
+  flex: none;
+}
+
+/* Multi-IDE Handoff Studio & CLI Apply Panel */
+.handoffTargetLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.handoffSnippetActions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cliPanel {
+  padding: 16px 20px 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.cliIntro {
+  margin: 0;
+  color: #c2b9ce;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.cliIntro code,
+.cliStepHeader p code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: #0d0c12;
+  color: #eac6a6;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11.5px;
+}
+
+.cliSteps {
+  display: grid;
+  gap: 10px;
+}
+
+.cliStepCard {
+  padding: 13px 14px;
+  border: 1px solid #292537;
+  border-radius: 13px;
+  background: #181622;
+  display: grid;
+  gap: 10px;
+}
+
+.cliStepHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.cliStepNum {
+  flex: none;
+  padding: 3px 7px;
+  border: 1px solid #3a3448;
+  border-radius: 7px;
+  background: #211e2d;
+  color: #eac6a6;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.cliStepHeader h4 {
+  margin: 0;
+  color: #f6f1f9;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.cliStepHeader p {
+  margin: 3px 0 0;
+  color: #b1a7be;
+  font-size: 12.2px;
+  line-height: 1.45;
+}
+
+.cliStepActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cliCommandBox {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 9px 11px;
+  border: 1px solid #2b2738;
+  border-radius: 11px;
+  background: #0c0b10;
+}
+
+.cliCommandBox code {
+  flex: 1 1 240px;
+  color: #9ce0b6;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.cliPreviewToggle {
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* History Slide-over Drawer */
+.drawerOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(6, 5, 10, 0.72);
+  backdrop-filter: blur(6px);
+  display: flex;
+  justify-content: flex-start;
+}
+
+.historyDrawer {
+  width: min(360px, 90vw);
+  height: 100%;
+  padding: 18px 16px;
+  border-right: 1px solid #2f2a3d;
+  background: #121119;
+  color: #f3eef7;
+  box-shadow: 18px 0 50px rgba(0, 0, 0, 0.72);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: fadeUp 160ms ease-out;
+}
+
+.drawerHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.drawerHeader h2 {
+  margin: 0;
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: 18px;
+  font-weight: 500;
+  color: #f7f3fa;
+}
+
+.drawerHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.drawerCount {
+  padding: 2px 8px;
+  border: 1px solid #302b3f;
+  border-radius: 999px;
+  background: #1a1824;
+  color: #aba2b6;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.drawerClose {
+  width: 30px;
+  height: 30px;
+  border: 1px solid #332d42;
+  border-radius: 50%;
+  background: #1b1925;
+  color: #e6dfec;
+  font-size: 18px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.drawerClose:hover {
+  border-color: #5a5070;
+  background: #262234;
+}
+
+.drawerActions {
+  display: flex;
+}
+
+.drawerActions .primaryAction {
+  width: 100%;
+}
+
+.drawerEmpty {
+  padding: 24px 14px;
+  border: 1px dashed #2e293d;
+  border-radius: 14px;
+  text-align: center;
+  color: #b7aec2;
+}
+
+.drawerEmpty p {
+  margin: 0 0 6px;
+  font-size: 13.5px;
+  color: #dfd8e6;
+}
+
+.drawerEmpty small {
+  font-size: 12px;
+  color: #938aa2;
+  line-height: 1.45;
+}
+
+.drawerList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  scrollbar-width: thin;
+  scrollbar-color: #322e3d transparent;
+}
+
+.drawerItem {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  border: 1px solid #262333;
+  border-radius: 12px;
+  background: #181621;
+  overflow: hidden;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease;
+}
+
+.drawerItem:hover {
+  border-color: #463e59;
+  background: #1e1b29;
+}
+
+.drawerItemActive {
+  border-color: rgba(234, 198, 166, 0.55);
+  background: rgba(234, 198, 166, 0.08);
+}
+
+.drawerSelectBtn {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 11px;
+  text-align: left;
+  display: grid;
+  gap: 4px;
+}
+
+.drawerItemTitle {
+  color: #f4eff8;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.drawerItemMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: #978ea6;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+}
+
+.drawerRepoTag {
+  padding: 1px 6px;
+  border: 1px solid #2b4d3a;
+  border-radius: 999px;
+  background: rgba(19, 40, 29, 0.72);
+  color: #9ce0b6;
+}
+
+.drawerDeleteBtn {
+  flex: none;
+  width: 36px;
+  border-left: 1px solid #262333;
+  color: #9389a1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    color 150ms ease,
+    background 150ms ease;
+}
+
+.drawerDeleteBtn:hover {
+  background: rgba(155, 58, 70, 0.22);
+  color: #f8b2a9;
+}
+
+/* --------------------------------------------------------------------------
    Keyframes & Responsive
    -------------------------------------------------------------------------- */
 
@@ -1524,6 +2512,19 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .flowEdgeCard {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: stretch;
+  }
+
+  .flowArrowHorizontal {
+    display: none;
+  }
+
+  .flowArrowVertical {
+    display: block;
+  }
+
   .sessionPill {
     display: none;
   }
@@ -1540,6 +2541,11 @@
   .taskHeader {
     flex-wrap: wrap;
   }
+
+  .handoffSnippetBar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 @media (max-width: 520px) {
@@ -1549,7 +2555,8 @@
 
   .threadList,
   .composerDock,
-  .sessionHeader {
+  .sessionHeader,
+  .idleTopBar {
     width: calc(100% - 22px);
   }
 
@@ -1567,11 +2574,16 @@
   .examplesWrap,
   .examples button,
   .newChatButton,
+  .historyButton,
   .primaryAction,
   .ghostAction,
   .optionChip,
   .settingsButton,
-  .toolRow {
+  .toolRow,
+  .progressPill,
+  .swapDecisionBtn,
+  .modelSelect,
+  .drawerItem {
     transition: none !important;
   }
 
@@ -1580,7 +2592,9 @@
   .avatarActive svg,
   .shimmerText,
   .settingsMenu,
-  .toolsMenu {
+  .toolsMenu,
+  .repoMenu,
+  .historyDrawer {
     animation: none !important;
   }
 

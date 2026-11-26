@@ -3,13 +3,19 @@
 import { useState } from "react";
 
 import {
+  buildClaudeMdSection,
+  buildCodexAgentsSection,
+  buildCursorRuleMdc,
   buildMasterHandoffPrompt,
+  buildPlanBundleJson,
   buildTaskSlicePrompt,
   resolveCandidateLabel,
 } from "../../lib/beta-turn";
 import type { GeneratedPlan } from "../../lib/planner";
 import type { RoutableCandidate } from "../../lib/routing-types";
 import styles from "./beta.module.css";
+
+type HandoffTab = "master" | "slices" | "claude" | "cursor" | "codex" | "cli";
 
 function slugify(title: string): string {
   const slug = title
@@ -18,6 +24,18 @@ function slugify(title: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
   return slug || "anvilmark-plan";
+}
+
+function downloadTextFile(filename: string, content: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 export function LocalHandoffStudio({
@@ -29,14 +47,24 @@ export function LocalHandoffStudio({
   candidates: readonly RoutableCandidate[];
   strict: boolean;
 }) {
-  const [tab, setTab] = useState<"master" | "slices">("master");
-  const [masterExpanded, setMasterExpanded] = useState(false);
+  const [tab, setTab] = useState<HandoffTab>("master");
+  const [expandedTabs, setExpandedTabs] = useState<Record<string, boolean>>({});
   const [expandedSliceId, setExpandedSliceId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  const slug = slugify(plan.title);
   const masterPrompt = buildMasterHandoffPrompt(plan, candidates, strict);
+  const claudeMdSection = buildClaudeMdSection(plan, candidates, strict);
+  const cursorRuleMdc = buildCursorRuleMdc(plan, candidates, strict);
+  const codexAgentsSection = buildCodexAgentsSection(plan, candidates, strict);
+  const bundleFilename = `${slug}.anvilmark-plan.json`;
+  const applyCommand = `anvilmark apply-plan --file ~/Downloads/${bundleFilename} --target all`;
 
-  async function copyPrompt(id: string, text: string) {
+  function toggleExpanded(key: string) {
+    setExpandedTabs((current) => ({ ...current, [key]: !current[key] }));
+  }
+
+  async function copyText(id: string, text: string) {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedId(id);
@@ -48,18 +76,55 @@ export function LocalHandoffStudio({
     }
   }
 
-  function downloadMarkdown() {
-    const blob = new Blob([masterPrompt], {
-      type: "text/markdown;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${slugify(plan.title)}.PLAN.md`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+  function renderCodeTab(opts: {
+    tabKey: string;
+    targetLabel: string;
+    copyId: string;
+    copyLabel: string;
+    downloadLabel: string;
+    filename: string;
+    mimeType: string;
+    content: string;
+  }) {
+    const isExpanded = Boolean(expandedTabs[opts.tabKey]);
+    return (
+      <div className={styles.handoffPanel} role="tabpanel">
+        <div className={styles.handoffSnippetBar}>
+          <span className={styles.handoffTargetLabel}>{opts.targetLabel}</span>
+          <div className={styles.handoffSnippetActions}>
+            <button
+              type="button"
+              className={styles.textButton}
+              onClick={() => void copyText(opts.copyId, opts.content)}
+            >
+              {copiedId === opts.copyId ? "Copied ✓" : opts.copyLabel}
+            </button>
+            <button
+              type="button"
+              className={styles.textButton}
+              onClick={() =>
+                downloadTextFile(opts.filename, opts.content, opts.mimeType)
+              }
+            >
+              {opts.downloadLabel}
+            </button>
+            <button
+              type="button"
+              className={styles.textButton}
+              aria-expanded={isExpanded}
+              onClick={() => toggleExpanded(opts.tabKey)}
+            >
+              {isExpanded ? "Collapse preview" : "Expand full preview"}
+            </button>
+          </div>
+        </div>
+        <pre
+          className={`${styles.handoffCode} ${isExpanded ? styles.handoffCodeExpanded : ""}`}
+        >
+          <code>{opts.content}</code>
+        </pre>
+      </div>
+    );
   }
 
   return (
@@ -74,15 +139,16 @@ export function LocalHandoffStudio({
           </span>
           <h3>Shift to local development</h3>
           <p>
-            Architecture choices, task slices, and per-task model routing are
-            locked into a copy-ready brief for Claude Code, Codex, or Cursor.
+            Architecture choices, task slices, and per-task model routing sync
+            instantly into ready-to-apply briefs for Claude Code, Cursor, Codex,
+            and the AnvilMark CLI.
           </p>
         </div>
         <div className={styles.handoffPrimaryActions}>
           <button
             type="button"
             className={styles.primaryAction}
-            onClick={() => void copyPrompt("master", masterPrompt)}
+            onClick={() => void copyText("master", masterPrompt)}
           >
             {copiedId === "master"
               ? "Copied master prompt ✓"
@@ -91,14 +157,24 @@ export function LocalHandoffStudio({
           <button
             type="button"
             className={styles.ghostAction}
-            onClick={downloadMarkdown}
+            onClick={() =>
+              downloadTextFile(
+                "PLAN.md",
+                masterPrompt,
+                "text/markdown;charset=utf-8",
+              )
+            }
           >
             Download PLAN.md
           </button>
         </div>
       </div>
 
-      <div className={styles.handoffTabs} role="tablist">
+      <div
+        className={styles.handoffTabs}
+        role="tablist"
+        aria-label="Local IDE handoff formats"
+      >
         <button
           type="button"
           role="tab"
@@ -106,7 +182,7 @@ export function LocalHandoffStudio({
           className={`${styles.handoffTab} ${tab === "master" ? styles.handoffTabActive : ""}`}
           onClick={() => setTab("master")}
         >
-          Master agent prompt
+          Master prompt
         </button>
         <button
           type="button"
@@ -115,36 +191,60 @@ export function LocalHandoffStudio({
           className={`${styles.handoffTab} ${tab === "slices" ? styles.handoffTabActive : ""}`}
           onClick={() => setTab("slices")}
         >
-          Per-task slice prompts ({plan.tasks.length})
+          Per-task slices ({plan.tasks.length})
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "claude"}
+          className={`${styles.handoffTab} ${tab === "claude" ? styles.handoffTabActive : ""}`}
+          onClick={() => setTab("claude")}
+        >
+          Claude Code
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "cursor"}
+          className={`${styles.handoffTab} ${tab === "cursor" ? styles.handoffTabActive : ""}`}
+          onClick={() => setTab("cursor")}
+        >
+          Cursor
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "codex"}
+          className={`${styles.handoffTab} ${tab === "codex" ? styles.handoffTabActive : ""}`}
+          onClick={() => setTab("codex")}
+        >
+          Codex
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "cli"}
+          className={`${styles.handoffTab} ${tab === "cli" ? styles.handoffTabActive : ""}`}
+          onClick={() => setTab("cli")}
+        >
+          CLI Apply
         </button>
       </div>
 
-      {tab === "master" ? (
-        <div className={styles.handoffPanel}>
-          <div className={styles.handoffSnippetBar}>
-            <span>
-              Full repository handoff · {plan.tasks.length}{" "}
-              {plan.tasks.length === 1 ? "slice" : "slices"} ·{" "}
-              {plan.architecture.length}{" "}
-              {plan.architecture.length === 1 ? "decision" : "decisions"}
-            </span>
-            <button
-              type="button"
-              className={styles.textButton}
-              aria-expanded={masterExpanded}
-              onClick={() => setMasterExpanded((open) => !open)}
-            >
-              {masterExpanded ? "Collapse preview" : "Expand full prompt"}
-            </button>
-          </div>
-          <pre
-            className={`${styles.handoffCode} ${masterExpanded ? styles.handoffCodeExpanded : ""}`}
-          >
-            <code>{masterPrompt}</code>
-          </pre>
-        </div>
-      ) : (
-        <div className={styles.sliceList}>
+      {tab === "master" &&
+        renderCodeTab({
+          tabKey: "master",
+          targetLabel: `PLAN.md · ${plan.tasks.length} ${plan.tasks.length === 1 ? "slice" : "slices"} · ${plan.architecture.length} ${plan.architecture.length === 1 ? "decision" : "decisions"}`,
+          copyId: "master-inline",
+          copyLabel: "Copy PLAN.md",
+          downloadLabel: "Download PLAN.md",
+          filename: "PLAN.md",
+          mimeType: "text/markdown;charset=utf-8",
+          content: masterPrompt,
+        })}
+
+      {tab === "slices" && (
+        <div className={styles.sliceList} role="tabpanel">
           {plan.tasks.map((task, index) => {
             const slicePrompt = buildTaskSlicePrompt(
               plan,
@@ -186,7 +286,7 @@ export function LocalHandoffStudio({
                     <button
                       type="button"
                       className={styles.primaryAction}
-                      onClick={() => void copyPrompt(copyKey, slicePrompt)}
+                      onClick={() => void copyText(copyKey, slicePrompt)}
                     >
                       {copiedId === copyKey
                         ? "Copied ✓"
@@ -202,6 +302,128 @@ export function LocalHandoffStudio({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {tab === "claude" &&
+        renderCodeTab({
+          tabKey: "claude",
+          targetLabel: "CLAUDE.md · Claude Code instructions",
+          copyId: "claude",
+          copyLabel: "Copy CLAUDE.md",
+          downloadLabel: "Download CLAUDE.md",
+          filename: "CLAUDE.md",
+          mimeType: "text/markdown;charset=utf-8",
+          content: claudeMdSection,
+        })}
+
+      {tab === "cursor" &&
+        renderCodeTab({
+          tabKey: "cursor",
+          targetLabel: ".cursor/rules/anvilmark-plan.mdc · Cursor rule",
+          copyId: "cursor",
+          copyLabel: "Copy .mdc rule",
+          downloadLabel: "Download anvilmark-plan.mdc",
+          filename: "anvilmark-plan.mdc",
+          mimeType: "text/markdown;charset=utf-8",
+          content: cursorRuleMdc,
+        })}
+
+      {tab === "codex" &&
+        renderCodeTab({
+          tabKey: "codex",
+          targetLabel: "AGENTS.md · Codex / agent instructions",
+          copyId: "codex",
+          copyLabel: "Copy AGENTS.md",
+          downloadLabel: "Download AGENTS.md",
+          filename: "AGENTS.md",
+          mimeType: "text/markdown;charset=utf-8",
+          content: codexAgentsSection,
+        })}
+
+      {tab === "cli" && (
+        <div className={styles.cliPanel} role="tabpanel">
+          <p className={styles.cliIntro}>
+            Apply this entire plan bundle directly into your local repository.{" "}
+            <code>anvilmark apply-plan</code> updates <code>PLAN.md</code>,{" "}
+            <code>CLAUDE.md</code>,{" "}
+            <code>.cursor/rules/anvilmark-plan.mdc</code>, and{" "}
+            <code>AGENTS.md</code> inside marked blocks—preserving your existing
+            instructions.
+          </p>
+
+          <div className={styles.cliSteps}>
+            <div className={styles.cliStepCard}>
+              <div className={styles.cliStepHeader}>
+                <span className={styles.cliStepNum}>01</span>
+                <div>
+                  <h4>Download signed plan bundle</h4>
+                  <p>
+                    Includes your latest model picks, swapped decisions, and all
+                    IDE targets.
+                  </p>
+                </div>
+              </div>
+              <div className={styles.cliStepActions}>
+                <button
+                  type="button"
+                  className={styles.primaryAction}
+                  onClick={() =>
+                    downloadTextFile(
+                      bundleFilename,
+                      buildPlanBundleJson(plan, candidates, strict),
+                      "application/json;charset=utf-8",
+                    )
+                  }
+                >
+                  Download {bundleFilename}
+                </button>
+              </div>
+            </div>
+
+            <div className={styles.cliStepCard}>
+              <div className={styles.cliStepHeader}>
+                <span className={styles.cliStepNum}>02</span>
+                <div>
+                  <h4>Run in your repository root</h4>
+                  <p>
+                    Applies all targets idempotently (or pass{" "}
+                    <code>--target claude|cursor|codex</code>).
+                  </p>
+                </div>
+              </div>
+              <div className={styles.cliCommandBox}>
+                <code>{applyCommand}</code>
+                <button
+                  type="button"
+                  className={styles.ghostAction}
+                  onClick={() => void copyText("cli-apply", applyCommand)}
+                >
+                  {copiedId === "cli-apply" ? "Copied ✓" : "Copy command"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className={styles.cliPreviewToggle}>
+            <button
+              type="button"
+              className={styles.textButton}
+              aria-expanded={Boolean(expandedTabs.cliJson)}
+              onClick={() => toggleExpanded("cliJson")}
+            >
+              {expandedTabs.cliJson
+                ? "Hide bundle JSON preview"
+                : "Inspect bundle JSON"}
+            </button>
+          </div>
+          {expandedTabs.cliJson && (
+            <pre
+              className={`${styles.handoffCode} ${styles.handoffCodeExpanded}`}
+            >
+              <code>{buildPlanBundleJson(plan, candidates, strict)}</code>
+            </pre>
+          )}
         </div>
       )}
     </section>

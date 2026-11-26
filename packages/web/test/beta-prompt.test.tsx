@@ -97,7 +97,36 @@ function setNativeValue(
   element.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+function createMemoryStorage(): Storage {
+  const map = new Map<string, string>();
+  return {
+    get length() {
+      return map.size;
+    },
+    clear() {
+      map.clear();
+    },
+    getItem(key: string) {
+      return map.get(key) ?? null;
+    },
+    key(index: number) {
+      return [...map.keys()][index] ?? null;
+    },
+    removeItem(key: string) {
+      map.delete(key);
+    },
+    setItem(key: string, value: string) {
+      map.set(key, String(value));
+    },
+  };
+}
+
 beforeEach(() => {
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    writable: true,
+    value: createMemoryStorage(),
+  });
   Object.defineProperty(window, "matchMedia", {
     writable: true,
     value: vi.fn().mockReturnValue({
@@ -273,8 +302,8 @@ describe("BetaPrompt 3-mode conversational UI", () => {
 
     expect(host.textContent).toContain("Safe CSV imports");
     expect(host.textContent).toContain("Shift to local development");
-    expect(host.textContent).toContain("Master agent prompt");
-    expect(host.textContent).toContain("Per-task slice prompts (1)");
+    expect(host.textContent).toContain("Master prompt");
+    expect(host.textContent).toContain("Per-task slices (1)");
 
     await act(async () => root.unmount());
   });

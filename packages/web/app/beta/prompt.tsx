@@ -1,39 +1,70 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ChangeEvent } from "react";
 
 import {
   PromptInput,
   type PromptOption,
 } from "../../components/ui/ai-chat-input";
 import { betaEfforts, betaIdeaMax } from "../../lib/beta-draft";
-import type {
-  BetaTurnResponse,
-  ClarificationQuestionItem,
+import {
+  consumeBetaTurnSse,
+  createThreadId,
+  deleteSavedThread,
+  deriveThreadTitle,
+  isValidBetaTurnResponse,
+  loadRoutingPrefsForUser,
+  loadSavedThreads,
+  saveRoutingPrefsForUser,
+  upsertSavedThread,
+  type LiveStreamState,
+  type SavedBetaThread,
+  type StoredAttachment,
+  type ThreadEntry,
+} from "../../lib/beta-history";
+import {
+  BetaAttachmentSchema,
+  RepoContextSnapshotSchema,
+  type BetaAttachment,
+  type BetaTurnResponse,
+  type RepoContextSnapshot,
 } from "../../lib/beta-turn";
-import type { GeneratedPlan, PlanningInput } from "../../lib/planner";
+import type { PlanningInput } from "../../lib/planner";
 import {
   defaultRoutingPreferences,
   formatRoutingSummary,
-  routingPrefsStorageKey,
   subscriptionCatalog,
-  subscriptionIds,
-  type RoutableCandidate,
+  type CatalogFreshness,
   type RoutingPreferences,
   type SubscriptionId,
 } from "../../lib/routing-types";
 import type { SelfHostedModel } from "../../lib/self-hosted-models";
+import { useAuth } from "../components/auth-provider";
+import { HistoryDrawer } from "./history-drawer";
 import {
   AssistantAvatar,
   ClarificationWidget,
   ErrorCard,
   PlanArtifactView,
+  StreamingSynthesisRow,
   ThinkingRow,
 } from "./plan-output";
 import styles from "./beta.module.css";
 
 type Provider = PlanningInput["provider"];
 type Effort = (typeof betaEfforts)[number]["id"];
+
+const REPO_EXPORT_COMMAND =
+  "anvilmark export-context --out repo-context.json" as const;
+const MAX_ATTACHMENTS = 4;
+const MAX_UNSCALED_IMAGE_BYTES = 1_400_000;
+const MAX_DATA_URL_CHARS = 2_000_000;
+const ACCEPTED_IMAGE_MIMES = new Set<BetaAttachment["mimeType"]>([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+]);
 
 const examples = [
   {
@@ -50,42 +81,13 @@ const examples = [
   },
 ];
 
-type ThreadEntry =
-  | {
-      id: number;
-      role: "user";
-      content: string;
-    }
-  | {
-      id: number;
-      role: "assistant";
-      mode: "chat";
-      reply: string;
-    }
-  | {
-      id: number;
-      role: "assistant";
-      mode: "clarify";
-      reply: string;
-      questions: ClarificationQuestionItem[];
-    }
-  | {
-      id: number;
-      role: "assistant";
-      mode: "plan";
-      reply: string;
-      plan: GeneratedPlan;
-      candidates: RoutableCandidate[];
-      catalogDate: string;
-      strict: boolean;
-    };
-
 export interface BetaPromptProps {
   configured: boolean;
-  configuredModel?: string;
-  selfHostedModels?: SelfHostedModel[];
-  serverGemini?: boolean;
-  serverOpenAI?: boolean;
+  configuredModel?: string | undefined;
+  selfHostedModels?: SelfHostedModel[] | undefined;
+  serverGemini?: boolean | undefined;
+  serverOpenAI?: boolean | undefined;
+  catalogFreshness?: CatalogFreshness | undefined;
 }
 
 const configuredPrefix = "configured:";
@@ -113,27 +115,172 @@ function parseSelection(selection: string): {
   return { provider: "google", explicitModelId: null };
 }
 
-function parseStoredRoutingPrefs(
-  raw: string | null,
-): RoutingPreferences | null {
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as {
-      mode?: unknown;
-      subscriptions?: unknown;
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+      } else {
+        reject(new Error("Could not read image data."));
+      }
     };
-    if (parsed.mode !== "open" && parsed.mode !== "subscriptions") return null;
-    const validSet = new Set<string>(subscriptionIds);
-    const subs = Array.isArray(parsed.subscriptions)
-      ? parsed.subscriptions.filter(
-          (item): item is SubscriptionId =>
-            typeof item === "string" && validSet.has(item),
-        )
-      : [];
-    return { mode: parsed.mode, subscriptions: subs };
-  } catch {
-    return null;
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("File read failed."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function readFileAsText(file: File): Promise<string> {
+  if (typeof file.text === "function") {
+    return file.text();
   }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+      } else {
+        reject(new Error("Could not read text file."));
+      }
+    };
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("File read failed."));
+    reader.readAsText(file);
+  });
+}
+
+function downscaleDataUrlOnCanvas(
+  dataUrl: string,
+): Promise<{ dataUrl: string; mimeType: BetaAttachment["mimeType"] } | null> {
+  if (typeof document === "undefined" || typeof Image === "undefined") {
+    return Promise.resolve(null);
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (
+      result: { dataUrl: string; mimeType: BetaAttachment["mimeType"] } | null,
+    ) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      resolve(result);
+    };
+
+    const timer = window.setTimeout(() => finish(null), 1500);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const naturalWidth = img.naturalWidth || img.width;
+        const naturalHeight = img.naturalHeight || img.height;
+        if (!naturalWidth || !naturalHeight) {
+          finish(null);
+          return;
+        }
+        const maxSides = [1600, 1280, 960];
+        const qualities = [0.84, 0.72, 0.58];
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          finish(null);
+          return;
+        }
+        for (const maxSide of maxSides) {
+          const ratio = Math.min(
+            1,
+            maxSide / Math.max(naturalWidth, naturalHeight),
+          );
+          canvas.width = Math.max(1, Math.round(naturalWidth * ratio));
+          canvas.height = Math.max(1, Math.round(naturalHeight * ratio));
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          for (const quality of qualities) {
+            const candidate = canvas.toDataURL("image/jpeg", quality);
+            if (
+              candidate.startsWith("data:image/jpeg;base64,") &&
+              candidate.length <= MAX_DATA_URL_CHARS
+            ) {
+              finish({ dataUrl: candidate, mimeType: "image/jpeg" });
+              return;
+            }
+          }
+        }
+        finish(null);
+      } catch {
+        finish(null);
+      }
+    };
+    img.onerror = () => finish(null);
+    img.src = dataUrl;
+  });
+}
+
+async function prepareBetaAttachments(
+  files: readonly File[],
+): Promise<BetaAttachment[]> {
+  const prepared: BetaAttachment[] = [];
+  for (const file of files.slice(0, MAX_ATTACHMENTS)) {
+    const mimeType = file.type as BetaAttachment["mimeType"];
+    if (!ACCEPTED_IMAGE_MIMES.has(mimeType)) continue;
+    try {
+      let dataUrl = await readFileAsDataUrl(file);
+      let finalMime: BetaAttachment["mimeType"] = mimeType;
+      if (
+        file.size > MAX_UNSCALED_IMAGE_BYTES ||
+        dataUrl.length > MAX_DATA_URL_CHARS
+      ) {
+        const scaled = await downscaleDataUrlOnCanvas(dataUrl);
+        if (scaled) {
+          dataUrl = scaled.dataUrl;
+          finalMime = scaled.mimeType;
+        }
+      }
+      const parsed = BetaAttachmentSchema.safeParse({
+        name: file.name.trim().slice(0, 120) || "image.png",
+        mimeType: finalMime,
+        dataUrl,
+      });
+      if (parsed.success) {
+        prepared.push(parsed.data);
+      }
+    } catch {
+      // Skip unreadable file cleanly.
+    }
+  }
+  return prepared;
+}
+
+function toAssistantEntry(
+  id: number,
+  turn: BetaTurnResponse,
+): Extract<ThreadEntry, { role: "assistant" }> {
+  if (turn.mode === "chat") {
+    return {
+      id,
+      role: "assistant",
+      mode: "chat",
+      reply: turn.reply,
+    };
+  }
+  if (turn.mode === "clarify") {
+    return {
+      id,
+      role: "assistant",
+      mode: "clarify",
+      reply: turn.reply,
+      questions: turn.questions,
+    };
+  }
+  return {
+    id,
+    role: "assistant",
+    mode: "plan",
+    reply: turn.reply,
+    plan: turn.plan,
+    candidates: turn.candidates,
+    catalogDate: turn.catalogDate,
+    strict: turn.strict,
+  };
 }
 
 export function BetaPrompt({
@@ -142,7 +289,11 @@ export function BetaPrompt({
   selfHostedModels = [],
   serverGemini = false,
   serverOpenAI = false,
+  catalogFreshness,
 }: BetaPromptProps) {
+  const { user } = useAuth();
+  const authUserId = user?.id ?? null;
+
   const [ossModels, setOssModels] =
     useState<SelfHostedModel[]>(selfHostedModels);
 
@@ -218,10 +369,21 @@ export function BetaPrompt({
   );
   const [toolsOpen, setToolsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [repoOpen, setRepoOpen] = useState(false);
+  const [repoContext, setRepoContext] = useState<RepoContextSnapshot | null>(
+    null,
+  );
+  const [repoError, setRepoError] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const [savedThreads, setSavedThreads] = useState<SavedBetaThread[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const [entries, setEntries] = useState<ThreadEntry[]>([]);
   const [busy, setBusy] = useState(false);
   const [coldLoading, setColdLoading] = useState(false);
+  const [streamState, setStreamState] = useState<LiveStreamState | null>(null);
   const [turnError, setTurnError] = useState<{
     message: string;
     needsKey: boolean;
@@ -232,13 +394,18 @@ export function BetaPrompt({
   const toolsButtonRef = useRef<HTMLButtonElement>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
+  const repoRef = useRef<HTMLDivElement>(null);
+  const repoButtonRef = useRef<HTMLButtonElement>(null);
+  const repoFileInputRef = useRef<HTMLInputElement>(null);
   const threadScrollRef = useRef<HTMLDivElement>(null);
   const threadBottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const entryIdRef = useRef(0);
+  const lastTurnAttachmentsRef = useRef<BetaAttachment[]>([]);
 
   const toolsMenuId = useId();
   const settingsPanelId = useId();
+  const repoPanelId = useId();
   const modelInputId = useId();
   const keyInputId = useId();
 
@@ -269,26 +436,36 @@ export function BetaPrompt({
     );
 
   useEffect(() => {
-    try {
-      const saved = parseStoredRoutingPrefs(
-        window.localStorage.getItem(routingPrefsStorageKey),
-      );
-      if (saved) setRoutingPrefs(saved);
-    } catch {
-      // Storage unavailable in restricted browser mode.
-    }
+    setSavedThreads(loadSavedThreads());
     return () => {
       abortRef.current?.abort();
     };
   }, []);
 
+  useEffect(() => {
+    setRoutingPrefs(loadRoutingPrefsForUser(authUserId));
+  }, [authUserId]);
+
+  function persistThread(
+    threadId: string,
+    nextEntries: readonly ThreadEntry[],
+    nextRepoContext: RepoContextSnapshot | null,
+  ) {
+    if (nextEntries.length === 0) return;
+    setSavedThreads((current) =>
+      upsertSavedThread(current, {
+        id: threadId,
+        title: deriveThreadTitle(nextEntries),
+        updatedAt: new Date().toISOString(),
+        entries: [...nextEntries],
+        repoContext: nextRepoContext,
+      }),
+    );
+  }
+
   function updateRoutingPrefs(next: RoutingPreferences) {
     setRoutingPrefs(next);
-    try {
-      window.localStorage.setItem(routingPrefsStorageKey, JSON.stringify(next));
-    } catch {
-      // Ignore storage quota / privacy block.
-    }
+    saveRoutingPrefsForUser(next, authUserId);
   }
 
   function toggleSubscription(subId: SubscriptionId) {
@@ -302,8 +479,20 @@ export function BetaPrompt({
     });
   }
 
+  async function copySnippet(key: string, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      window.setTimeout(() => {
+        setCopiedKey((current) => (current === key ? null : current));
+      }, 2200);
+    } catch {
+      // Clipboard blocked in restricted browser contexts.
+    }
+  }
+
   useEffect(() => {
-    if (!settingsOpen && !toolsOpen) return;
+    if (!settingsOpen && !toolsOpen && !repoOpen) return;
     const closeOutside = (event: PointerEvent) => {
       if (!(event.target instanceof Node)) return;
       if (settingsOpen && !settingsRef.current?.contains(event.target)) {
@@ -312,10 +501,13 @@ export function BetaPrompt({
       if (toolsOpen && !toolsRef.current?.contains(event.target)) {
         setToolsOpen(false);
       }
+      if (repoOpen && !repoRef.current?.contains(event.target)) {
+        setRepoOpen(false);
+      }
     };
     document.addEventListener("pointerdown", closeOutside);
     return () => document.removeEventListener("pointerdown", closeOutside);
-  }, [settingsOpen, toolsOpen]);
+  }, [settingsOpen, toolsOpen, repoOpen]);
 
   useEffect(() => {
     if (!active) return;
@@ -326,7 +518,14 @@ export function BetaPrompt({
       behavior: reduced ? "auto" : "smooth",
       block: "end",
     });
-  }, [active, entries.length, busy, turnError]);
+  }, [
+    active,
+    entries.length,
+    busy,
+    turnError,
+    streamState?.architectReply,
+    streamState?.progressSection,
+  ]);
 
   async function refreshSelfHostedModels() {
     if (!configured) return;
@@ -364,7 +563,159 @@ export function BetaPrompt({
     });
   }
 
+  async function handleRepoFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setRepoError(null);
+    try {
+      const text = await readFileAsText(file);
+      const raw: unknown = JSON.parse(text);
+      const parsed = RepoContextSnapshotSchema.safeParse(raw);
+      if (!parsed.success) {
+        setRepoError(
+          "Invalid repo context JSON. Generate it with `anvilmark export-context --out repo-context.json`.",
+        );
+        return;
+      }
+      setRepoContext(parsed.data);
+      setRepoOpen(false);
+      if (activeThreadId && entries.length > 0) {
+        persistThread(activeThreadId, entries, parsed.data);
+      }
+    } catch {
+      setRepoError(
+        "Could not parse JSON file. Select the file produced by `anvilmark export-context`.",
+      );
+    }
+  }
+
+  function clearRepoContext() {
+    setRepoContext(null);
+    setRepoError(null);
+    if (activeThreadId && entries.length > 0) {
+      persistThread(activeThreadId, entries, null);
+    }
+  }
+
+  function handleUpdateTaskModel(
+    entryId: number,
+    taskIndex: number,
+    nextModelId: string,
+  ) {
+    setEntries((current) => {
+      let changed = false;
+      const updated = current.map((item) => {
+        if (
+          item.id !== entryId ||
+          item.role !== "assistant" ||
+          item.mode !== "plan"
+        ) {
+          return item;
+        }
+        const targetTask = item.plan.tasks[taskIndex];
+        if (!targetTask || targetTask.model === nextModelId) {
+          return item;
+        }
+        changed = true;
+        const prunedAlternatives = targetTask.alternatives.filter(
+          (alt) => alt.model !== nextModelId,
+        );
+        const prevCandidate = item.candidates.find(
+          (c) => c.model === targetTask.model,
+        );
+        const nextAlternatives =
+          prevCandidate &&
+          !prunedAlternatives.some((alt) => alt.model === targetTask.model)
+            ? [
+                {
+                  model: targetTask.model,
+                  tradeoff: `Original planner recommendation (${prevCandidate.tier} tier).`,
+                },
+                ...prunedAlternatives,
+              ].slice(0, 2)
+            : prunedAlternatives;
+
+        const nextTasks = item.plan.tasks.map((task, idx) =>
+          idx === taskIndex
+            ? {
+                ...task,
+                model: nextModelId,
+                alternatives: nextAlternatives,
+              }
+            : task,
+        );
+        return {
+          ...item,
+          plan: {
+            ...item.plan,
+            tasks: nextTasks,
+          },
+        };
+      });
+
+      if (changed) {
+        const threadId = activeThreadId ?? createThreadId();
+        if (!activeThreadId) setActiveThreadId(threadId);
+        persistThread(threadId, updated, repoContext);
+      }
+      return updated;
+    });
+  }
+
+  function handleSwapArchitectureDecision(
+    entryId: number,
+    decisionIndex: number,
+  ) {
+    setEntries((current) => {
+      let changed = false;
+      const updated = current.map((item) => {
+        if (
+          item.id !== entryId ||
+          item.role !== "assistant" ||
+          item.mode !== "plan"
+        ) {
+          return item;
+        }
+        const choice = item.plan.architecture[decisionIndex];
+        if (!choice) return item;
+        changed = true;
+        const nextArchitecture = item.plan.architecture.map((entry, idx) =>
+          idx === decisionIndex
+            ? {
+                ...entry,
+                decision: entry.alternative,
+                alternative: entry.decision,
+              }
+            : entry,
+        );
+        const existingEdited = new Set(item.editedArchitectureIndices ?? []);
+        if (existingEdited.has(decisionIndex)) {
+          existingEdited.delete(decisionIndex);
+        } else {
+          existingEdited.add(decisionIndex);
+        }
+        return {
+          ...item,
+          plan: {
+            ...item.plan,
+            architecture: nextArchitecture,
+          },
+          editedArchitectureIndices: [...existingEdited].sort((a, b) => a - b),
+        };
+      });
+
+      if (changed) {
+        const threadId = activeThreadId ?? createThreadId();
+        if (!activeThreadId) setActiveThreadId(threadId);
+        persistThread(threadId, updated, repoContext);
+      }
+      return updated;
+    });
+  }
+
   async function runTurn(params: {
+    threadId: string;
     nextEntries: ThreadEntry[];
     provider: Provider;
     modelId: string;
@@ -374,32 +725,142 @@ export function BetaPrompt({
     forcePlan: boolean;
     prefs: RoutingPreferences;
     isCold: boolean;
+    attachments: BetaAttachment[];
+    repoContextSnapshot: RepoContextSnapshot | null;
   }) {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
+    lastTurnAttachmentsRef.current = params.attachments;
+    setActiveThreadId(params.threadId);
     setEntries(params.nextEntries);
+    persistThread(
+      params.threadId,
+      params.nextEntries,
+      params.repoContextSnapshot,
+    );
     setBusy(true);
     setColdLoading(params.isCold);
+    setStreamState(null);
     setTurnError(null);
 
     try {
+      const requestBody: Record<string, unknown> = {
+        messages: serializeMessages(params.nextEntries),
+        effort: params.effort,
+        strict: params.strict,
+        forcePlan: params.forcePlan,
+        provider: params.provider,
+        model: params.modelId,
+        key: params.key.trim(),
+        routingPrefs: params.prefs,
+      };
+      if (params.attachments.length > 0) {
+        requestBody.attachments = params.attachments;
+      }
+      if (params.repoContextSnapshot) {
+        requestBody.repoContext = params.repoContextSnapshot;
+      }
+
       const response = await fetch("/api/beta/turn", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream, application/json",
+        },
         signal: controller.signal,
-        body: JSON.stringify({
-          messages: serializeMessages(params.nextEntries),
-          effort: params.effort,
-          strict: params.strict,
-          forcePlan: params.forcePlan,
-          provider: params.provider,
-          model: params.modelId,
-          key: params.key.trim(),
-          routingPrefs: params.prefs,
-        }),
+        body: JSON.stringify(requestBody),
       });
+
+      const contentType = (
+        response.headers.get("content-type") ?? ""
+      ).toLowerCase();
+
+      if (
+        response.ok &&
+        contentType.includes("text/event-stream") &&
+        response.body
+      ) {
+        let finalTurn: BetaTurnResponse | null = null;
+        let streamFailure: { message: string; status: number } | null = null;
+
+        await consumeBetaTurnSse(response.body, (event) => {
+          if (event.type === "status") {
+            setStreamState((current) => ({
+              statusPhase: event.data.phase,
+              statusMessage: event.data.message,
+              statusModel: event.data.model,
+              architectReply: current?.architectReply ?? null,
+              progressSection: current?.progressSection ?? null,
+              progressChars: current?.progressChars ?? 0,
+            }));
+          } else if (event.type === "architect_summary") {
+            setStreamState((current) => ({
+              statusPhase: current?.statusPhase ?? "synthesis",
+              statusMessage: current?.statusMessage ?? null,
+              statusModel: current?.statusModel ?? null,
+              architectReply: event.data.reply,
+              progressSection: current?.progressSection ?? "overview",
+              progressChars: current?.progressChars ?? 0,
+            }));
+          } else if (event.type === "progress") {
+            setStreamState((current) => ({
+              statusPhase: current?.statusPhase ?? "synthesis",
+              statusMessage: current?.statusMessage ?? null,
+              statusModel: current?.statusModel ?? null,
+              architectReply: current?.architectReply ?? null,
+              progressSection: event.data.section,
+              progressChars: event.data.chars,
+            }));
+          } else if (event.type === "done") {
+            finalTurn = event.data;
+          } else if (event.type === "error") {
+            streamFailure = {
+              message: event.data.error,
+              status: event.data.status,
+            };
+          }
+        });
+
+        setStreamState(null);
+
+        if (streamFailure) {
+          const err: { message: string; status: number } = streamFailure;
+          setTurnError({
+            message: err.message,
+            needsKey: isKeyError(err.status, err.message),
+            forcePlan: params.forcePlan,
+          });
+          return;
+        }
+
+        if (!finalTurn) {
+          setTurnError({
+            message:
+              "The planner stream ended before finishing. Try sending your request again.",
+            needsKey: false,
+            forcePlan: params.forcePlan,
+          });
+          return;
+        }
+
+        const assistantId = ++entryIdRef.current;
+        const newEntry = toAssistantEntry(assistantId, finalTurn);
+        const completedEntries = [...params.nextEntries, newEntry];
+        setEntries(completedEntries);
+        persistThread(
+          params.threadId,
+          completedEntries,
+          params.repoContextSnapshot,
+        );
+
+        if (params.provider === "configured") {
+          void refreshSelfHostedModels();
+        }
+        return;
+      }
+
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         const message =
@@ -414,13 +875,7 @@ export function BetaPrompt({
         return;
       }
 
-      const turn = data as BetaTurnResponse | undefined;
-      if (
-        !turn ||
-        (turn.mode !== "chat" &&
-          turn.mode !== "clarify" &&
-          (turn.mode !== "plan" || !turn.plan))
-      ) {
+      if (!isValidBetaTurnResponse(data)) {
         setTurnError({
           message: "Received an invalid response from the planner.",
           needsKey: false,
@@ -430,33 +885,14 @@ export function BetaPrompt({
       }
 
       const assistantId = ++entryIdRef.current;
-      const newEntry: ThreadEntry =
-        turn.mode === "chat"
-          ? {
-              id: assistantId,
-              role: "assistant",
-              mode: "chat",
-              reply: turn.reply,
-            }
-          : turn.mode === "clarify"
-            ? {
-                id: assistantId,
-                role: "assistant",
-                mode: "clarify",
-                reply: turn.reply,
-                questions: turn.questions,
-              }
-            : {
-                id: assistantId,
-                role: "assistant",
-                mode: "plan",
-                reply: turn.reply,
-                plan: turn.plan,
-                candidates: turn.candidates,
-                catalogDate: turn.catalogDate,
-                strict: turn.strict,
-              };
-      setEntries((current) => [...current, newEntry]);
+      const newEntry = toAssistantEntry(assistantId, data);
+      const completedEntries = [...params.nextEntries, newEntry];
+      setEntries(completedEntries);
+      persistThread(
+        params.threadId,
+        completedEntries,
+        params.repoContextSnapshot,
+      );
 
       if (params.provider === "configured") {
         void refreshSelfHostedModels();
@@ -483,6 +919,7 @@ export function BetaPrompt({
         abortRef.current = null;
         setBusy(false);
         setColdLoading(false);
+        setStreamState(null);
       }
     }
   }
@@ -493,6 +930,7 @@ export function BetaPrompt({
       selectedModel?: string;
       effort?: Effort;
       forcePlan?: boolean;
+      files?: File[];
     } = {},
   ) {
     const modelChoice = options.selectedModel ?? selection;
@@ -512,25 +950,49 @@ export function BetaPrompt({
     setLastEffort(chosenEffort);
     setSettingsOpen(false);
     setToolsOpen(false);
+    setRepoOpen(false);
     setPrompt("");
 
-    const userEntry: ThreadEntry = {
-      id: ++entryIdRef.current,
-      role: "user",
-      content: text,
+    const threadId = activeThreadId ?? createThreadId();
+    const rawFiles = options.files ?? [];
+
+    const dispatch = (preparedAttachments: BetaAttachment[]) => {
+      const storedAttachments: StoredAttachment[] | undefined =
+        preparedAttachments.length > 0
+          ? preparedAttachments.map((att) => ({
+              name: att.name,
+              mimeType: att.mimeType,
+              dataUrl: att.dataUrl,
+            }))
+          : undefined;
+      const userEntry: ThreadEntry = {
+        id: ++entryIdRef.current,
+        role: "user",
+        content: text,
+        ...(storedAttachments ? { attachments: storedAttachments } : {}),
+      };
+
+      void runTurn({
+        threadId,
+        nextEntries: [...entries, userEntry],
+        provider: parsed.provider,
+        modelId: resolvedModelId,
+        effort: chosenEffort,
+        key: apiKeys[parsed.provider],
+        strict,
+        forcePlan: Boolean(options.forcePlan),
+        prefs: routingPrefs,
+        isCold: Boolean(matchedOss && matchedOss.status !== "loaded"),
+        attachments: preparedAttachments,
+        repoContextSnapshot: repoContext,
+      });
     };
 
-    void runTurn({
-      nextEntries: [...entries, userEntry],
-      provider: parsed.provider,
-      modelId: resolvedModelId,
-      effort: chosenEffort,
-      key: apiKeys[parsed.provider],
-      strict,
-      forcePlan: Boolean(options.forcePlan),
-      prefs: routingPrefs,
-      isCold: Boolean(matchedOss && matchedOss.status !== "loaded"),
-    });
+    if (rawFiles.length > 0) {
+      void prepareBetaAttachments(rawFiles).then(dispatch);
+    } else {
+      dispatch([]);
+    }
   }
 
   function handleComposerSubmit(
@@ -541,6 +1003,7 @@ export function BetaPrompt({
       selectedModel: meta.model,
       effort: meta.effort as Effort,
       forcePlan: false,
+      files: meta.attachments,
     });
   }
 
@@ -550,7 +1013,9 @@ export function BetaPrompt({
       provider === "configured"
         ? ossModels.find((item) => item.id === activeModelId)
         : undefined;
+    const threadId = activeThreadId ?? createThreadId();
     void runTurn({
+      threadId,
       nextEntries: entries,
       provider,
       modelId: activeModelId,
@@ -560,17 +1025,53 @@ export function BetaPrompt({
       forcePlan: turnError?.forcePlan ?? false,
       prefs: routingPrefs,
       isCold: Boolean(matchedOss && matchedOss.status !== "loaded"),
+      attachments: lastTurnAttachmentsRef.current,
+      repoContextSnapshot: repoContext,
     });
   }
 
   function handleReset() {
     abortRef.current?.abort();
     abortRef.current = null;
+    lastTurnAttachmentsRef.current = [];
     setBusy(false);
     setColdLoading(false);
+    setStreamState(null);
+    setActiveThreadId(null);
     setEntries([]);
+    setRepoContext(null);
+    setRepoError(null);
     setTurnError(null);
     setPrompt("");
+  }
+
+  function handleSelectSavedThread(thread: SavedBetaThread) {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    lastTurnAttachmentsRef.current = [];
+    setBusy(false);
+    setColdLoading(false);
+    setStreamState(null);
+    setTurnError(null);
+    setPrompt("");
+
+    const maxId = thread.entries.reduce(
+      (max, entry) => Math.max(max, entry.id),
+      entryIdRef.current,
+    );
+    entryIdRef.current = maxId;
+
+    setActiveThreadId(thread.id);
+    setEntries(thread.entries);
+    setRepoContext(thread.repoContext ?? null);
+    setRepoError(null);
+  }
+
+  function handleDeleteSavedThread(threadId: string) {
+    setSavedThreads((current) => deleteSavedThread(current, threadId));
+    if (activeThreadId === threadId) {
+      handleReset();
+    }
   }
 
   const toolbarControls = (
@@ -599,6 +1100,7 @@ export function BetaPrompt({
           onClick={() => {
             setToolsOpen((open) => !open);
             setSettingsOpen(false);
+            setRepoOpen(false);
           }}
         >
           <svg
@@ -628,7 +1130,14 @@ export function BetaPrompt({
           hidden={!toolsOpen}
         >
           <div className={styles.toolsMenuHeader}>
-            <strong>Task model routing</strong>
+            <div className={styles.toolsHeaderRow}>
+              <strong>Task model routing</strong>
+              {user && (
+                <span className={styles.profileSyncBadge}>
+                  Synced · {user.name}
+                </span>
+              )}
+            </div>
             <p>
               Pick the subscriptions or IDEs you use so plans recommend models
               you already have—or keep Open best-fit.
@@ -645,14 +1154,16 @@ export function BetaPrompt({
             <div>
               <span>Open best-fit (unrestricted)</span>
               <small>
-                Routes across latest Arena & catalog leaders for best quality /
-                cost
+                Routes across latest Arena &amp; catalog leaders for best
+                quality / cost
               </small>
             </div>
             <i aria-hidden="true">{routingPrefs.mode === "open" ? "✓" : ""}</i>
           </button>
 
-          <div className={styles.toolsSubheading}>My subscriptions & tools</div>
+          <div className={styles.toolsSubheading}>
+            My subscriptions &amp; tools
+          </div>
           {subscriptionCatalog.map((item) => {
             const checked =
               routingPrefs.mode === "subscriptions" &&
@@ -673,6 +1184,43 @@ export function BetaPrompt({
               </button>
             );
           })}
+
+          {catalogFreshness && (
+            <div className={styles.catalogFreshnessBox}>
+              <div className={styles.catalogFreshnessTop}>
+                <span>
+                  Catalog snapshot{" "}
+                  <strong>{catalogFreshness.fetchedAt.slice(0, 10)}</strong> ·{" "}
+                  {catalogFreshness.sources.length}{" "}
+                  {catalogFreshness.sources.length === 1 ? "source" : "sources"}
+                </span>
+                {catalogFreshness.isStale ? (
+                  <span className={styles.staleBadge}>
+                    Stale · {catalogFreshness.ageDays}d
+                  </span>
+                ) : (
+                  <span className={styles.freshBadge}>Fresh</span>
+                )}
+              </div>
+              {catalogFreshness.isStale && (
+                <div className={styles.catalogRefreshRow}>
+                  <code>{catalogFreshness.refreshCommand}</code>
+                  <button
+                    type="button"
+                    className={styles.miniCopyBtn}
+                    onClick={() =>
+                      void copySnippet(
+                        "catalog-refresh",
+                        catalogFreshness.refreshCommand,
+                      )
+                    }
+                  >
+                    {copiedKey === "catalog-refresh" ? "Copied ✓" : "Copy"}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -700,6 +1248,7 @@ export function BetaPrompt({
           onClick={() => {
             setSettingsOpen((open) => !open);
             setToolsOpen(false);
+            setRepoOpen(false);
           }}
         >
           <svg
@@ -783,6 +1332,140 @@ export function BetaPrompt({
           </p>
         </div>
       </div>
+
+      <div
+        className={styles.settingsPicker}
+        ref={repoRef}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget))
+            setRepoOpen(false);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && repoOpen) {
+            setRepoOpen(false);
+            repoButtonRef.current?.focus();
+          }
+        }}
+      >
+        <button
+          type="button"
+          ref={repoButtonRef}
+          className={`${styles.settingsButton} ${repoContext ? styles.repoButtonActive : ""}`}
+          aria-expanded={repoOpen}
+          aria-controls={repoPanelId}
+          aria-label={
+            repoContext
+              ? `Repository context attached: ${repoContext.repoName}`
+              : "Attach local repository context"
+          }
+          onClick={() => {
+            setRepoOpen((open) => !open);
+            setToolsOpen(false);
+            setSettingsOpen(false);
+            setRepoError(null);
+          }}
+        >
+          <svg
+            aria-hidden="true"
+            width="15"
+            height="15"
+            viewBox="0 0 18 18"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M2.75 5.25A1.75 1.75 0 0 1 4.5 3.5h3l1.6 1.75h4.4a1.75 1.75 0 0 1 1.75 1.75v6A1.75 1.75 0 0 1 13.5 14.75h-9A1.75 1.75 0 0 1 2.75 13V5.25Z" />
+          </svg>
+          <span>Repo</span>
+          {repoContext && <i className={styles.repoDot} aria-hidden="true" />}
+        </button>
+
+        <div
+          id={repoPanelId}
+          className={styles.repoMenu}
+          role="group"
+          aria-label="Local repository context intake"
+          hidden={!repoOpen}
+        >
+          <div className={styles.toolsMenuHeader}>
+            <strong>Local repository context</strong>
+            <p>
+              Import verified structural metadata (scripts, check commands,
+              frameworks, tracked paths)—never source code or .env files.
+            </p>
+          </div>
+
+          <div className={styles.repoStep}>
+            <span className={styles.repoStepLabel}>
+              1. Generate in your repo
+            </span>
+            <div className={styles.catalogRefreshRow}>
+              <code>{REPO_EXPORT_COMMAND}</code>
+              <button
+                type="button"
+                className={styles.miniCopyBtn}
+                onClick={() =>
+                  void copySnippet("repo-export", REPO_EXPORT_COMMAND)
+                }
+              >
+                {copiedKey === "repo-export" ? "Copied ✓" : "Copy"}
+              </button>
+            </div>
+          </div>
+
+          <div className={styles.repoStep}>
+            <span className={styles.repoStepLabel}>
+              2. Import exported JSON
+            </span>
+            <button
+              type="button"
+              className={styles.ghostAction}
+              onClick={() => repoFileInputRef.current?.click()}
+            >
+              {repoContext
+                ? "Replace repo-context.json"
+                : "Import repo-context.json"}
+            </button>
+            <input
+              ref={repoFileInputRef}
+              type="file"
+              accept=".json,application/json"
+              aria-label="Import anvilmark repo context JSON"
+              hidden
+              onChange={handleRepoFileChange}
+            />
+          </div>
+
+          {repoError && (
+            <p className={styles.repoError} role="alert">
+              {repoError}
+            </p>
+          )}
+
+          {repoContext && (
+            <div className={styles.repoSummaryBox}>
+              <div>
+                <strong>{repoContext.repoName}</strong>
+                <small>
+                  {repoContext.totalTrackedFiles} files
+                  {repoContext.frameworks.length > 0
+                    ? ` · ${repoContext.frameworks.slice(0, 3).join(", ")}`
+                    : ""}
+                </small>
+              </div>
+              <button
+                type="button"
+                className={styles.textButton}
+                onClick={clearRepoContext}
+              >
+                Remove
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </>
   );
 
@@ -792,6 +1475,38 @@ export function BetaPrompt({
       className={styles.stage}
       data-active={active ? "true" : "false"}
     >
+      {!active && (
+        <div className={styles.idleTopBar}>
+          <button
+            type="button"
+            className={styles.historyButton}
+            aria-expanded={historyOpen}
+            onClick={() => setHistoryOpen(true)}
+          >
+            <svg
+              aria-hidden="true"
+              width="14"
+              height="14"
+              viewBox="0 0 18 18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M3.25 9a5.75 5.75 0 1 0 1.4-3.75M3.25 3.75v2.75H6" />
+              <path d="M9 6.25V9l2 1.25" />
+            </svg>
+            <span>History</span>
+            {savedThreads.length > 0 && (
+              <span className={styles.historyCountPill}>
+                {savedThreads.length}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
+
       <div className={styles.topSpacer} aria-hidden="true" />
 
       <div className={styles.heroWrap} aria-hidden={active}>
@@ -826,13 +1541,42 @@ export function BetaPrompt({
                   Routing: {formatRoutingSummary(routingPrefs)}
                 </span>
               </div>
-              <button
-                type="button"
-                className={styles.newChatButton}
-                onClick={handleReset}
-              >
-                New chat
-              </button>
+              <div className={styles.sessionActions}>
+                <button
+                  type="button"
+                  className={styles.historyButton}
+                  aria-expanded={historyOpen}
+                  onClick={() => setHistoryOpen(true)}
+                >
+                  <svg
+                    aria-hidden="true"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 18 18"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M3.25 9a5.75 5.75 0 1 0 1.4-3.75M3.25 3.75v2.75H6" />
+                    <path d="M9 6.25V9l2 1.25" />
+                  </svg>
+                  <span>History</span>
+                  {savedThreads.length > 0 && (
+                    <span className={styles.historyCountPill}>
+                      {savedThreads.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className={styles.newChatButton}
+                  onClick={handleReset}
+                >
+                  New chat
+                </button>
+              </div>
             </header>
 
             <div className={styles.threadScroll} ref={threadScrollRef}>
@@ -841,7 +1585,39 @@ export function BetaPrompt({
                   if (entry.role === "user") {
                     return (
                       <div className={styles.userRow} key={entry.id}>
-                        <div className={styles.userBubble}>{entry.content}</div>
+                        <div className={styles.userBubble}>
+                          {entry.attachments &&
+                            entry.attachments.length > 0 && (
+                              <div
+                                className={styles.userAttachmentGrid}
+                                aria-label="Attached images"
+                              >
+                                {entry.attachments.map((att, attIdx) =>
+                                  att.dataUrl ? (
+                                    <figure
+                                      key={`${att.name}-${attIdx}`}
+                                      className={styles.userAttachmentItem}
+                                    >
+                                      <img
+                                        src={att.dataUrl}
+                                        alt={att.name}
+                                        className={styles.userAttachmentThumb}
+                                      />
+                                      <figcaption>{att.name}</figcaption>
+                                    </figure>
+                                  ) : (
+                                    <span
+                                      key={`${att.name}-${attIdx}`}
+                                      className={styles.userAttachmentPill}
+                                    >
+                                      Image: {att.name}
+                                    </span>
+                                  ),
+                                )}
+                              </div>
+                            )}
+                          <div>{entry.content}</div>
+                        </div>
                       </div>
                     );
                   }
@@ -878,10 +1654,26 @@ export function BetaPrompt({
                             candidates={entry.candidates}
                             catalogDate={entry.catalogDate}
                             strict={entry.strict}
+                            editedArchitectureIndices={
+                              entry.editedArchitectureIndices ?? []
+                            }
                             onSelectQuestion={(question) => {
                               setPrompt(`Regarding "${question}": `);
                               setFocusTrigger((count) => count + 1);
                             }}
+                            onUpdateTaskModel={(taskIndex, nextModel) =>
+                              handleUpdateTaskModel(
+                                entry.id,
+                                taskIndex,
+                                nextModel,
+                              )
+                            }
+                            onSwapArchitectureDecision={(decisionIndex) =>
+                              handleSwapArchitectureDecision(
+                                entry.id,
+                                decisionIndex,
+                              )
+                            }
                           />
                         )}
                       </div>
@@ -889,12 +1681,22 @@ export function BetaPrompt({
                   );
                 })}
 
-                {busy && (
+                {busy && streamState?.architectReply ? (
+                  <StreamingSynthesisRow
+                    architectReply={streamState.architectReply}
+                    statusMessage={streamState.statusMessage}
+                    statusModel={streamState.statusModel}
+                    progressSection={streamState.progressSection}
+                    progressChars={streamState.progressChars}
+                  />
+                ) : busy ? (
                   <ThinkingRow
                     providerLabel={providerLabel}
                     coldLoading={coldLoading}
+                    statusMessage={streamState?.statusMessage ?? null}
+                    statusModel={streamState?.statusModel ?? null}
                   />
-                )}
+                ) : null}
 
                 {!busy && turnError && (
                   <div className={styles.assistantRow}>
@@ -926,6 +1728,38 @@ export function BetaPrompt({
       </section>
 
       <div className={styles.composerDock}>
+        {repoContext && (
+          <div className={styles.repoChipBar}>
+            <div className={styles.repoChip} role="status">
+              <svg
+                aria-hidden="true"
+                width="13"
+                height="13"
+                viewBox="0 0 18 18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M2.75 5.25A1.75 1.75 0 0 1 4.5 3.5h3l1.6 1.75h4.4a1.75 1.75 0 0 1 1.75 1.75v6A1.75 1.75 0 0 1 13.5 14.75h-9A1.75 1.75 0 0 1 2.75 13V5.25Z" />
+              </svg>
+              <span>
+                Repo: {repoContext.repoName} · {repoContext.totalTrackedFiles}{" "}
+                files
+              </span>
+              <button
+                type="button"
+                className={styles.repoChipClear}
+                aria-label="Clear repository context"
+                onClick={clearRepoContext}
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
+
         <PromptInput
           value={prompt}
           onChange={setPrompt}
@@ -973,6 +1807,16 @@ export function BetaPrompt({
       </div>
 
       <div className={styles.bottomSpacer} aria-hidden="true" />
+
+      <HistoryDrawer
+        open={historyOpen}
+        threads={savedThreads}
+        activeThreadId={activeThreadId}
+        onSelectThread={handleSelectSavedThread}
+        onNewChat={handleReset}
+        onDeleteThread={handleDeleteSavedThread}
+        onClose={() => setHistoryOpen(false)}
+      />
     </main>
   );
 }
