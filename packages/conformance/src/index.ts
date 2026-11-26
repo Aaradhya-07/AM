@@ -7,3 +7,4 @@ export * from "./engine.js";
 export * from "./serialize.js";
 export * from "./query.js";
 export * from "./bundle.js";
+export * from "./slice-verification.js";

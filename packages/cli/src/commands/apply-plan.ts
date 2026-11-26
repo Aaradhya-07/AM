@@ -1,16 +1,20 @@
 import { randomUUID } from "node:crypto";
+import { constants } from "node:fs";
 import {
   lstat,
+  open,
   mkdir,
   readFile,
   realpath,
   rename,
   rm,
+  rmdir,
   writeFile,
 } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 
 import { z } from "zod";
+import { sliceWaves } from "./slice-dag.js";
 
 import type { ExitCode } from "../io.js";
 import { EXIT } from "../io.js";
@@ -60,6 +64,40 @@ const list = z.array(text).max(50);
 const id = z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/);
 const section = z.string().max(200_000);
 
+export const ReviewerFamilySchema = z.enum([
+  "anthropic",
+  "openai",
+  "google",
+  "local_oss",
+]);
+
+const glob = text.refine(
+  (pattern) =>
+    !pattern.includes("\0") &&
+    !pattern.includes("\\") &&
+    !pattern.startsWith("/") &&
+    !/^[A-Za-z]:/.test(pattern) &&
+    !pattern.split("/").some((segment) => segment === ".."),
+  "expected a POSIX repository-relative glob",
+);
+
+export const SliceContractSchema = z.strictObject({
+  allowedGlobs: z.array(glob).max(50),
+  forbiddenGlobs: z.array(glob).max(50),
+  verificationCommands: z
+    .array(
+      text.refine(
+        (command) => !command.includes("\0"),
+        "Invalid check command",
+      ),
+    )
+    .max(50),
+  allowDependencyChanges: z.boolean(),
+  expectedBoundaries: list,
+  reviewerFamily: ReviewerFamilySchema.optional(),
+});
+export type SliceContractSpec = z.infer<typeof SliceContractSchema>;
+
 /** Mirrors the Studio planner output (packages/web/lib/planner.ts). */
 export const HandoffPlan = z.strictObject({
   title: text,
@@ -108,6 +146,7 @@ export const HandoffPlan = z.strictObject({
         inputTokens: z.number().int().positive().max(10_000_000),
         outputTokens: z.number().int().positive().max(1_000_000),
         estimateBasis: text,
+        contract: SliceContractSchema.optional(),
       }),
     )
     .min(1)
@@ -145,31 +184,22 @@ export const PlanHandoffBundle = z
       )
       .max(32),
     strict: z.boolean(),
+    quotaMode: z.enum(["plenty", "conserve", "exhausted"]).optional(),
     masterPrompt: z.string().trim().min(1).max(500_000),
     claudeMdSection: section.optional(),
     cursorRuleMdc: section.optional(),
     codexAgentsSection: section.optional(),
   })
   .superRefine((bundle, context) => {
-    const seen = new Set<string>();
-    for (const [index, task] of bundle.plan.tasks.entries()) {
-      if (seen.has(task.id)) {
-        context.addIssue({
-          code: "custom",
-          path: ["plan", "tasks", index, "id"],
-          message: `duplicate task id "${task.id}"`,
-        });
-      }
-      for (const dependency of task.dependsOn) {
-        if (!seen.has(dependency)) {
-          context.addIssue({
-            code: "custom",
-            path: ["plan", "tasks", index, "dependsOn"],
-            message: `task "${task.id}" depends on "${dependency}", which is not an earlier task`,
-          });
-        }
-      }
-      seen.add(task.id);
+    try {
+      sliceWaves(bundle.plan.tasks);
+    } catch (error) {
+      context.addIssue({
+        code: "custom",
+        path: ["plan", "tasks"],
+        message:
+          error instanceof Error ? error.message : "Invalid slice dependencies",
+      });
     }
   });
 export type PlanHandoffBundle = z.infer<typeof PlanHandoffBundle>;
@@ -312,46 +342,83 @@ export async function applyPlan(
   if (!rootInfo?.isDirectory())
     throw new ApplyPlanError(`project directory not found: ${projectDir}`);
   const root = await realpath(projectDir);
-  const written: AppliedFile[] = [];
-
-  written.push(
-    await writeWhole(
+  const active = [".anvilmark", "development", "active-plan.json"];
+  const createdDirectories: string[] = [];
+  const lockPath = join(root, ".anvilmark", "development", ".apply-plan.lock");
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  let applied = false;
+  try {
+    await prepareTarget(
       root,
-      [".anvilmark", "development", "active-plan.json"],
-      `${JSON.stringify(bundle, null, 2)}\n`,
-    ),
-  );
-  written.push(
-    await writeBlock(root, ["PLAN.md"], bundle.masterPrompt.trim(), "# Plan"),
-  );
-  for (const target of targets) {
-    if (target === "claude") {
-      written.push(
-        await writeBlock(
-          root,
-          ["CLAUDE.md"],
-          bundle.claudeMdSection?.trim() || renderInstructionSection(bundle),
-        ),
-      );
-    } else if (target === "codex") {
-      written.push(
-        await writeBlock(
-          root,
-          ["AGENTS.md"],
-          bundle.codexAgentsSection?.trim() || renderInstructionSection(bundle),
-        ),
-      );
-    } else {
-      written.push(
-        await writeWhole(
-          root,
-          [".cursor", "rules", "anvilmark-plan.mdc"],
-          renderCursorRule(bundle),
-        ),
-      );
+      [".anvilmark", "development", ".apply-plan.lock"],
+      createdDirectories,
+    );
+    handle = await open(lockPath, "wx", 0o600);
+    const plan = await prepareTarget(root, active);
+    const manifest: PendingWrite[] = [
+      { target: plan, content: JSON.stringify(bundle, null, 2) + "\n" },
+      await prepareBlock(
+        root,
+        ["PLAN.md"],
+        bundle.masterPrompt.trim(),
+        "# Plan",
+      ),
+    ];
+    for (const target of targets) {
+      if (target === "claude") {
+        manifest.push(
+          await prepareBlock(
+            root,
+            ["CLAUDE.md"],
+            bundle.claudeMdSection?.trim() || renderInstructionSection(bundle),
+          ),
+        );
+      } else if (target === "codex") {
+        manifest.push(
+          await prepareBlock(
+            root,
+            ["AGENTS.md"],
+            bundle.codexAgentsSection?.trim() ||
+              renderInstructionSection(bundle),
+          ),
+        );
+      } else {
+        manifest.push({
+          target: await prepareTarget(
+            root,
+            [".cursor", "rules", "anvilmark-plan.mdc"],
+            createdDirectories,
+          ),
+          content: renderCursorRule(bundle),
+        });
+      }
+    }
+    // Publish the active-plan pointer last so clients only read a fully applied plan.
+    await publishPlan(root, [...manifest.slice(1), manifest[0]!]);
+    applied = true;
+    return manifest.map(({ target, content }) => ({
+      path: target.display,
+      action:
+        target.current === content
+          ? "unchanged"
+          : target.current === null
+            ? "created"
+            : "updated",
+    }));
+  } finally {
+    if (handle) {
+      await handle.close();
+      await rm(lockPath, { force: true });
+    }
+    if (!applied) {
+      for (const directory of createdDirectories.reverse()) {
+        await rmdir(directory).catch((error: NodeJS.ErrnoException) => {
+          if (!["ENOENT", "ENOTEMPTY", "EEXIST"].includes(error.code ?? ""))
+            throw error;
+        });
+      }
     }
   }
-  return written;
 }
 
 // ---------------------------------------------------------------------------
@@ -508,17 +575,41 @@ export function renderCursorRule(bundle: PlanHandoffBundle): string {
  * when missing, one level at a time); an existing destination must be a
  * regular file. Returns the destination path and its current content.
  */
+type PlanTargetFile = {
+  path: string;
+  display: string;
+  current: string | null;
+  mode: number;
+};
+
+interface PendingWrite {
+  target: PlanTargetFile;
+  content: string;
+}
+
 async function prepareTarget(
   root: string,
   segments: readonly string[],
-): Promise<{ path: string; display: string; current: string | null }> {
+  createdDirectories?: string[],
+): Promise<PlanTargetFile> {
   const display = segments.join("/");
   let directory = root;
   for (const segment of segments.slice(0, -1)) {
     const next = join(directory, segment);
-    const info = await lstat(next).catch(() => null);
+    const info = await safeLstat(next);
     if (info === null) {
-      await mkdir(next);
+      if (!createdDirectories)
+        throw new ApplyPlanError(
+          "Plan target directory disappeared: " + display,
+        );
+      try {
+        await mkdir(next, { mode: 0o700 });
+        createdDirectories.push(next);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      }
+      if (!(await lstat(next)).isDirectory())
+        throw new ApplyPlanError("unsafe plan target directory");
     } else if (info.isSymbolicLink()) {
       throw new ApplyPlanError(
         `refusing to write ${display}: ${next} is a symbolic link`,
@@ -531,10 +622,16 @@ async function prepareTarget(
     directory = next;
   }
   const path = join(directory, segments[segments.length - 1] ?? "");
-  if (!path.startsWith(`${root}/`))
+  if (relative(root, path).startsWith(".."))
     throw new ApplyPlanError(`refusing to write outside ${root}: ${display}`);
-  const info = await lstat(path).catch(() => null);
-  if (info === null) return { path, display, current: null };
+  const info = await safeLstat(path);
+  if (info === null)
+    return {
+      path,
+      display,
+      current: null,
+      mode: display.endsWith("active-plan.json") ? 0o600 : 0o644,
+    };
   if (info.isSymbolicLink())
     throw new ApplyPlanError(
       `refusing to write ${display}: it is a symbolic link`,
@@ -547,33 +644,106 @@ async function prepareTarget(
     throw new ApplyPlanError(
       `refusing to rewrite ${display}: larger than ${MAX_INSTRUCTION_FILE_BYTES} bytes`,
     );
-  return { path, display, current: await readFile(path, "utf8") };
-}
-
-async function atomicWrite(path: string, content: string): Promise<void> {
-  const temporary = `${path}.${randomUUID()}.tmp`;
-  await writeFile(temporary, content, { flag: "wx", mode: 0o644 });
+  const handle = await open(
+    path,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+  );
   try {
-    await rename(temporary, path);
-  } catch (error) {
-    await rm(temporary, { force: true });
-    throw error;
+    const opened = await handle.stat();
+    if (
+      !opened.isFile() ||
+      opened.nlink !== 1 ||
+      opened.size > MAX_INSTRUCTION_FILE_BYTES
+    )
+      throw new ApplyPlanError("Unsafe plan target: " + display);
+    return {
+      path,
+      display,
+      current: await handle.readFile("utf8"),
+      mode: opened.mode & 0o777,
+    };
+  } finally {
+    await handle.close();
   }
 }
 
-async function writeWhole(
+function safeLstat(path: string) {
+  return lstat(path).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT") throw error;
+    return null;
+  });
+}
+
+async function publishPlan(
   root: string,
-  segments: readonly string[],
-  content: string,
-): Promise<AppliedFile> {
-  const target = await prepareTarget(root, segments);
-  if (target.current === content)
-    return { path: target.display, action: "unchanged" };
-  await atomicWrite(target.path, content);
-  return {
-    path: target.display,
-    action: target.current === null ? "created" : "updated",
-  };
+  manifest: readonly PendingWrite[],
+): Promise<void> {
+  const staged: Array<{
+    target: PlanTargetFile;
+    content: string;
+    temp: string;
+    backup: string | null;
+  }> = [];
+  const published: typeof staged = [];
+  const retain = new Set<string>();
+  try {
+    for (const { target, content } of manifest) {
+      if (target.current === content) continue;
+      const temp = target.path + "." + randomUUID() + ".tmp";
+      const backup = target.current === null ? null : temp + ".original";
+      staged.push({ target, content, temp, backup });
+      await writeFile(temp, content, { flag: "wx", mode: target.mode });
+      if (backup !== null && target.current !== null)
+        await writeFile(backup, target.current, {
+          flag: "wx",
+          mode: target.mode,
+        });
+    }
+    for (const entry of staged) {
+      const current = await prepareTarget(
+        root,
+        entry.target.display.split("/"),
+      );
+      if (current.current !== entry.target.current)
+        throw new ApplyPlanError(
+          "Plan target changed while applying the bundle: " + current.display,
+        );
+      await rename(entry.temp, entry.target.path);
+      published.push(entry);
+    }
+  } catch (error) {
+    const rollbackFailures = [];
+    for (const entry of published.reverse()) {
+      try {
+        const current = await prepareTarget(
+          root,
+          entry.target.display.split("/"),
+        );
+        if (current.current !== entry.content)
+          throw new Error("Plan target changed after publication");
+        if (entry.backup === null) await rm(entry.target.path);
+        else await rename(entry.backup, entry.target.path);
+      } catch {
+        if (entry.backup) retain.add(entry.backup);
+        rollbackFailures.push(entry.target.display);
+      }
+    }
+    if (rollbackFailures.length)
+      throw new ApplyPlanError(
+        "Plan rollback needs attention for " + rollbackFailures.join(", "),
+      );
+    throw error;
+  } finally {
+    await Promise.all(
+      staged
+        .flatMap(({ temp, backup }) => [
+          temp,
+          ...(backup === null ? [] : [backup]),
+        ])
+        .filter((path) => !retain.has(path))
+        .map((path) => rm(path, { force: true })),
+    );
+  }
 }
 
 /** Remove any plan markers from supplied content so blocks never nest. */
@@ -620,12 +790,12 @@ export function upsertPlanBlock(
   return `${existing.slice(0, start)}${block}${existing.slice(end + PLAN_BLOCK_END.length)}`;
 }
 
-async function writeBlock(
+async function prepareBlock(
   root: string,
   segments: readonly string[],
   body: string,
   heading?: string,
-): Promise<AppliedFile> {
+): Promise<PendingWrite> {
   const target = await prepareTarget(root, segments);
   let next: string;
   try {
@@ -635,11 +805,5 @@ async function writeBlock(
       throw new ApplyPlanError(`${target.display}: ${error.message}`);
     throw error;
   }
-  if (target.current === next)
-    return { path: target.display, action: "unchanged" };
-  await atomicWrite(target.path, next);
-  return {
-    path: target.display,
-    action: target.current === null ? "created" : "updated",
-  };
+  return { target, content: next };
 }

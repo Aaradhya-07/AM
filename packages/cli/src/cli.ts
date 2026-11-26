@@ -1,3 +1,8 @@
+import { orchestrateCommand } from "./commands/orchestrate.js";
+import { bridgeCommand } from "./commands/bridge.js";
+import { driftCommand } from "./commands/drift.js";
+import { outcomesCommand } from "./commands/outcomes.js";
+import { verifySliceCommand } from "./commands/verify-slice.js";
 import { hardwareCommand } from "./commands/hardware.js";
 import {
   ARCHITECTURE_USAGE,
@@ -74,6 +79,11 @@ Start
   start           inspect an existing repository and create or resume a local draft
   development     connect architecture, coding-model choice, agent run and checks
   export-context  export structural repository metadata (no source, no secrets) for Studio planning
+  bridge          serve a paired loopback connection for Studio
+  drift           compare planned architecture with static repository observations
+  orchestrate     schedule slices and prepare isolated Git worktrees
+  outcomes        summarize local development and slice outcomes
+  verify-slice    verify changed files and checks against a slice contract
   apply-plan      apply a Studio plan handoff bundle to CLAUDE.md, AGENTS.md and Cursor rules
   init            create .anvilmark/ from an idea, a repository reference, or a contract file
   status          what is recorded, what is unknown, what is not yet provided
@@ -251,6 +261,16 @@ export async function run(
         return await exportCommand(context, rest);
       case "export-context":
         return await exportContextCommand(context);
+      case "bridge":
+        return await bridgeCommand(context);
+      case "drift":
+        return await driftCommand(context);
+      case "orchestrate":
+        return await orchestrateCommand(context);
+      case "outcomes":
+        return await outcomesCommand(context);
+      case "verify-slice":
+        return await verifySliceCommand(context);
       case "apply-plan":
         return await applyPlanCommand(context);
       case "login":

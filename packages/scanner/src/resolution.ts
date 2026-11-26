@@ -87,6 +87,7 @@ export function resolveImports(
   setup: CompilerSetup,
   reader: RepositoryReader,
   recognizers: RecognizerSet,
+  onLocalImport?: (from: string, to: string) => void,
 ): ImportFact[] {
   const facts: ImportFact[] = [];
   const cache = ts.createModuleResolutionCache(
@@ -176,6 +177,8 @@ export function resolveImports(
         });
         return;
       }
+      if (onLocalImport && setup.analysable.has(resolved.resolvedFileName))
+        onLocalImport(path, reader.relative(resolved.resolvedFileName));
       const packageName =
         resolved.packageId?.name ?? packageOfFile(resolved.resolvedFileName);
       const provider =
