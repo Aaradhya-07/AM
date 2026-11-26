@@ -26,6 +26,11 @@ import {
 } from "./commands/development.js";
 import { CLI_VERSION } from "./version.js";
 import { exportCommand } from "./commands/export.js";
+import {
+  EXPORT_CONTEXT_USAGE,
+  exportContextCommand,
+} from "./commands/export-context.js";
+import { APPLY_PLAN_USAGE, applyPlanCommand } from "./commands/apply-plan.js";
 import { INVENTORY_USAGE, inventoryCommand } from "./commands/inventory.js";
 import { LOGIN_USAGE, loginCommand } from "./commands/login.js";
 import { PUSH_USAGE, pushCommand } from "./commands/push.js";
@@ -68,6 +73,8 @@ Research and inventory (no project needed)
 Start
   start           inspect an existing repository and create or resume a local draft
   development     connect architecture, coding-model choice, agent run and checks
+  export-context  export structural repository metadata (no source, no secrets) for Studio planning
+  apply-plan      apply a Studio plan handoff bundle to CLAUDE.md, AGENTS.md and Cursor rules
   init            create .anvilmark/ from an idea, a repository reference, or a contract file
   status          what is recorded, what is unknown, what is not yet provided
   validate        validate the project contract (or any file with --file)
@@ -242,6 +249,10 @@ export async function run(
         return await conformanceCommand(context, rest);
       case "export":
         return await exportCommand(context, rest);
+      case "export-context":
+        return await exportContextCommand(context);
+      case "apply-plan":
+        return await applyPlanCommand(context);
       case "login":
         return await loginCommand(context, sub);
       case "push":
@@ -256,9 +267,11 @@ export async function run(
 }
 
 export {
+  APPLY_PLAN_USAGE,
   APPROVE_USAGE,
   ARCHITECTURE_USAGE,
   CONFORMANCE_USAGE,
+  EXPORT_CONTEXT_USAGE,
   GENERATE_USAGE,
   INVENTORY_USAGE,
   LOGIN_USAGE,
