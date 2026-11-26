@@ -3,6 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
+import { useAuth } from "./auth-provider";
 
 import {
   LiquidNavbar,
@@ -31,6 +33,9 @@ const links = [
 
 export function SiteHeader({ tone = "light" }: { tone?: "light" | "dark" }) {
   const pathname = usePathname();
+  const { user, signOut } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState(false);
   const active = links.findIndex(
     ({ href }) =>
       pathname === href || (href === "/beta" && pathname === "/plan"),
@@ -56,6 +61,39 @@ export function SiteHeader({ tone = "light" }: { tone?: "light" | "dark" }) {
           </span>
         </Link>
         <LiquidNavbar tone={tone} items={links} active={active} />
+        <div className={styles.account}>
+          {user ? (
+            <button
+              type="button"
+              disabled={signingOut}
+              onClick={async () => {
+                setSigningOut(true);
+                setSignOutError(false);
+                try {
+                  await signOut();
+                } catch {
+                  setSignOutError(true);
+                } finally {
+                  setSigningOut(false);
+                }
+              }}
+            >
+              {signingOut ? "Signing out…" : "Sign out"}
+            </button>
+          ) : (
+            <Link
+              href="/login"
+              aria-current={pathname === "/login" ? "page" : undefined}
+            >
+              Sign in
+            </Link>
+          )}
+          {signOutError && (
+            <span className={styles.accountError} role="alert">
+              Could not sign out. Try again.
+            </span>
+          )}
+        </div>
       </div>
     </header>
   );

@@ -10,6 +10,7 @@ async function handleSignOut(request: Request) {
   const { origin } = new URL(request.url);
   return NextResponse.redirect(`${origin}/`, {
     status: 302,
+    headers: { "Cache-Control": "private, no-store" },
   });
 }
 

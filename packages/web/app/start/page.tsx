@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { SiteHeader } from "../components/site-header";
+import { SessionSurface } from "../components/session-surface";
 import { SiteFooter } from "../components/site-footer";
 import { CopyCommand } from "../components/alpha-interactions";
 import { GITHUB_URL } from "../components/circuitry";
@@ -18,11 +18,10 @@ anvilmark() { node "$ANVILMARK_CHECKOUT/packages/cli/bin/anvilmark.mjs" "$@"; }`
 
 export default function StartPage() {
   return (
-    <div className="alpha alpha-page">
+    <SessionSurface>
       <a href="#main" className="alpha-skip">
         Skip to content
       </a>
-      <SiteHeader />
       <main tabIndex={-1} id="main" className="alpha-shell alpha-guide">
         <div className="alpha-page-heading">
           <p className="alpha-label">GETTING STARTED / LOCAL FIRST</p>
@@ -140,6 +139,6 @@ export default function StartPage() {
         </div>
       </main>
       <SiteFooter />
-    </div>
+    </SessionSurface>
   );
 }

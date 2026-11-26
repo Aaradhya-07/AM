@@ -15,7 +15,7 @@ export function createClient(): SupabaseClient | null {
   }
 
   if (!browserClient) {
-    browserClient = createBrowserClient(config.url, config.anonKey);
+    browserClient = createBrowserClient(config.url, config.publicKey);
   }
 
   return browserClient;

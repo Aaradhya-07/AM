@@ -46,7 +46,7 @@ begin
     updated_at = now();
   return new;
 end;
-$$ language plpgsql security definer;
+$$ language plpgsql security definer set search_path = '';
 
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
@@ -151,3 +151,8 @@ create policy "Users can insert runs for their own projects"
       and public.projects.user_id = auth.uid()
     )
   );
+
+-- Expose the operations above to signed-in users through the Data API.
+grant select, insert, update on public.profiles to authenticated;
+grant select, insert, update, delete on public.projects to authenticated;
+grant select, insert on public.contracts, public.conformance_runs to authenticated;

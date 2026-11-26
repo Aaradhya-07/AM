@@ -1,51 +1,176 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { AuthModal } from "../components/auth-modal";
-import { SiteHeader } from "../components/site-header";
+import { useState, type FormEvent } from "react";
+import { createClient } from "../../lib/supabase/client";
+import { useAuth } from "../components/auth-provider";
+import { GoogleGlyph } from "../components/google-glyph";
+import styles from "./login.module.css";
 
 export function LoginClient({ initialError }: { initialError: string | null }) {
-  const [open, setOpen] = useState(true);
+  const { user, loading, isConfigured, signInWithProvider } = useAuth();
+  const [creating, setCreating] = useState(false);
+  const [pending, setPending] = useState<"google" | "email" | null>(null);
+  const [error, setError] = useState(initialError);
+  const [notice, setNotice] = useState("");
+
+  async function googleSignIn() {
+    setPending("google");
+    setError(null);
+    setNotice("");
+    try {
+      await signInWithProvider("google", "/workspace");
+    } catch {
+      setError("Google sign-in could not start. Try again or use email.");
+      setPending(null);
+    }
+  }
+
+  async function emailSignIn(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const supabase = createClient();
+    if (!supabase || pending) return;
+    const form = new FormData(event.currentTarget);
+    const email = String(form.get("email") ?? "").trim();
+    const password = String(form.get("password") ?? "");
+    const confirmation = new URL("/auth/callback", window.location.origin);
+    confirmation.searchParams.set("next", "/workspace");
+    setPending("email");
+    setError(null);
+    setNotice("");
+
+    try {
+      const { data, error } = creating
+        ? await supabase.auth.signUp({
+            email,
+            password,
+            options: { emailRedirectTo: confirmation.href },
+          })
+        : await supabase.auth.signInWithPassword({ email, password });
+
+      if (error) {
+        setError(
+          error.code === "email_not_confirmed"
+            ? "Confirm your email address before signing in."
+            : error.status === 429
+              ? "Too many attempts. Wait a moment and try again."
+              : creating
+                ? "Could not create the account. Check your email and password, then try again."
+                : "Sign-in failed. Check your email and password, then try again.",
+        );
+      } else if (data.session) {
+        window.location.replace("/workspace");
+      } else if (creating) {
+        setNotice("Check your inbox for a link to confirm your email address.");
+      }
+    } catch {
+      setError("Could not reach the sign-in service. Try again.");
+    } finally {
+      setPending(null);
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-ink text-canvas">
-      <SiteHeader />
-      <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center px-5 pt-[var(--am-header-h)] text-center">
-        <h1 className="font-brand text-3xl font-bold">
-          Sign in to your workspace
+    <main id="main" className={styles.main}>
+      <section className={styles.card} aria-labelledby="login-title">
+        <h1 id="login-title">
+          {user
+            ? "You’re signed in"
+            : creating
+              ? "Create your account"
+              : "Sign in to AnvilMark"}
         </h1>
-        <p className="mt-3 text-sm text-sand/75">
-          Connect with GitHub or Google to access your saved projects and
-          conformance runs.
-        </p>
-        {initialError && (
-          <p
-            role="alert"
-            className="mt-5 rounded-edge border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300"
-          >
-            Sign-in failed: {initialError}
-          </p>
+        {user ? (
+          <>
+            <p className={styles.intro}>{user.email}</p>
+            <Link className={styles.submit} href="/workspace">
+              Open your records ↗
+            </Link>
+          </>
+        ) : (
+          <>
+            <p className={styles.intro}>
+              Use your Google account or continue with email.
+            </p>
+            <button
+              className={styles.google}
+              type="button"
+              disabled={loading || !isConfigured || pending !== null}
+              onClick={googleSignIn}
+            >
+              <GoogleGlyph />
+              {pending === "google"
+                ? "Opening Google…"
+                : "Continue with Google"}
+            </button>
+            <div className={styles.divider}>
+              <span>or use email</span>
+            </div>
+            <form className={styles.form} onSubmit={emailSignIn}>
+              <label htmlFor="login-email">Email address</label>
+              <input
+                id="login-email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                placeholder="you@example.com"
+                required
+              />
+              <label htmlFor="login-password">Password</label>
+              <input
+                key={String(creating)}
+                id="login-password"
+                name="password"
+                type="password"
+                autoComplete={creating ? "new-password" : "current-password"}
+                minLength={creating ? 8 : undefined}
+                required
+              />
+              {creating && <small>Use at least 8 characters.</small>}
+              <button
+                className={styles.submit}
+                disabled={loading || !isConfigured || pending !== null}
+                type="submit"
+              >
+                {pending === "email"
+                  ? "Please wait…"
+                  : creating
+                    ? "Create account"
+                    : "Sign in"}
+              </button>
+            </form>
+            {error && (
+              <p role="alert" className={styles.error}>
+                {error}
+              </p>
+            )}
+            {!isConfigured && (
+              <p role="status" className={styles.notice}>
+                Sign-in is unavailable until Supabase is configured.
+              </p>
+            )}
+            {notice && (
+              <p role="status" className={styles.notice}>
+                {notice}
+              </p>
+            )}
+            <p className={styles.switch}>
+              {creating ? "Already have an account?" : "New to AnvilMark?"}{" "}
+              <button
+                type="button"
+                disabled={pending !== null}
+                onClick={() => {
+                  setCreating(!creating);
+                  setError(null);
+                  setNotice("");
+                }}
+              >
+                {creating ? "Sign in" : "Create an account"}
+              </button>
+            </p>
+          </>
         )}
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="mx-auto mt-6 min-h-[44px] rounded-edge bg-gold px-6 text-sm font-semibold text-ink hover:bg-goldsoft"
-        >
-          {initialError ? "Try sign-in again" : "Choose a sign-in method"}
-        </button>
-        <Link
-          href="/"
-          className="mt-5 text-sm text-sand/70 underline hover:text-canvas"
-        >
-          Return to home
-        </Link>
-      </main>
-      <AuthModal
-        open={open}
-        onClose={() => setOpen(false)}
-        initialError={initialError}
-      />
-    </div>
+      </section>
+    </main>
   );
 }

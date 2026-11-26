@@ -2,12 +2,12 @@
 
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useState,
   type ReactNode,
 } from "react";
+import type { User } from "@supabase/supabase-js";
 import { createClient, isSupabaseConfigured } from "../../lib/supabase/client";
 
 export interface PlatformUser {
@@ -15,133 +15,121 @@ export interface PlatformUser {
   email: string;
   name: string;
   avatarUrl?: string;
-  provider: "github" | "google";
+  provider: "github" | "google" | "email";
 }
 
 interface AuthContextValue {
   user: PlatformUser | null;
   loading: boolean;
   isConfigured: boolean;
-  signInWithProvider: (provider: "github" | "google") => Promise<void>;
+  signInWithProvider: (
+    provider: "github" | "google",
+    next?: string,
+  ) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+function platformUser(user: User): PlatformUser {
+  const provider = user.app_metadata.provider;
+  return {
+    id: user.id,
+    email: user.email ?? "",
+    name:
+      user.user_metadata.full_name ||
+      user.user_metadata.name ||
+      user.user_metadata.user_name ||
+      user.email?.split("@")[0] ||
+      "Engineer",
+    avatarUrl: user.user_metadata.avatar_url || user.user_metadata.picture,
+    provider:
+      provider === "google" || provider === "github" ? provider : "email",
+  };
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<PlatformUser | null>(null);
   const [loading, setLoading] = useState(true);
   const configured = isSupabaseConfigured();
 
-  const syncUserFromSupabase = useCallback(async () => {
+  useEffect(() => {
+    try {
+      localStorage.removeItem("anvilmark_demo_user");
+    } catch {
+      // Auth can still load when the browser blocks local storage.
+    }
     const supabase = createClient();
     if (!supabase) {
-      setUser(null);
       setLoading(false);
       return;
     }
 
-    try {
-      const {
-        data: { user: sbUser },
-      } = await supabase.auth.getUser();
-
-      if (sbUser) {
-        const userName =
-          sbUser.user_metadata?.full_name ||
-          sbUser.user_metadata?.name ||
-          sbUser.user_metadata?.user_name ||
-          sbUser.email?.split("@")[0] ||
-          "Engineer";
-        const userAvatar =
-          sbUser.user_metadata?.avatar_url || sbUser.user_metadata?.picture;
-
-        setUser({
-          id: sbUser.id,
-          email: sbUser.email ?? "unknown@user.com",
-          name: userName,
-          avatarUrl: userAvatar,
-          provider:
-            (sbUser.app_metadata?.provider as "github" | "google") || "github",
-        });
-
-        // Ensure user profile exists in database
-        supabase
-          .from("profiles")
-          .upsert(
-            {
-              id: sbUser.id,
-              email: sbUser.email,
-              name: userName,
-              avatar_url: userAvatar,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "id" },
-          )
-          .then(() => {});
-      } else {
-        setUser(null);
-      }
-    } catch (err) {
-      console.error("Failed to sync Supabase user:", err);
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.removeItem("anvilmark_demo_user");
-    syncUserFromSupabase();
-
-    const supabase = createClient();
-    if (!supabase) return;
-
+    let active = true;
+    let authChanged = false;
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "INITIAL_SESSION") return;
-      if (session?.user) {
-        const sbUser = session.user;
-        const userName =
-          sbUser.user_metadata?.full_name ||
-          sbUser.user_metadata?.name ||
-          sbUser.user_metadata?.user_name ||
-          sbUser.email?.split("@")[0] ||
-          "Engineer";
-        const userAvatar =
-          sbUser.user_metadata?.avatar_url || sbUser.user_metadata?.picture;
-
-        setUser({
-          id: sbUser.id,
-          email: sbUser.email ?? "unknown@user.com",
-          name: userName,
-          avatarUrl: userAvatar,
-          provider:
-            (sbUser.app_metadata?.provider as "github" | "google") || "github",
-        });
-      } else {
-        setUser(null);
-      }
+      authChanged = true;
+      setUser(session?.user ? platformUser(session.user) : null);
       setLoading(false);
     });
 
+    async function loadUser() {
+      if (!supabase) return;
+      try {
+        const {
+          data: { user: account },
+        } = await supabase.auth.getUser();
+        if (!active || authChanged) return;
+        const profile = account ? platformUser(account) : null;
+        setUser(profile);
+        if (profile && account) {
+          void supabase
+            .from("profiles")
+            .upsert(
+              {
+                id: profile.id,
+                email: account.email,
+                name: profile.name,
+                avatar_url: profile.avatarUrl,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "id" },
+            )
+            .then(() => {});
+        }
+      } catch {
+        if (active && !authChanged) setUser(null);
+      } finally {
+        if (active && !authChanged) setLoading(false);
+      }
+    }
+
+    void loadUser();
     return () => {
+      active = false;
       subscription.unsubscribe();
     };
-  }, [syncUserFromSupabase]);
+  }, []);
 
-  const signInWithProvider = async (provider: "github" | "google") => {
+  const signInWithProvider = async (
+    provider: "github" | "google",
+    next?: string,
+  ) => {
     const supabase = createClient();
     if (!supabase) {
       throw new Error("Sign-in is unavailable. Supabase is not configured.");
     }
 
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const callback = new URL("/auth/callback", window.location.origin);
+    if (next) callback.searchParams.set("next", next);
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: `${origin}/auth/callback`,
+        redirectTo: callback.href,
+        skipBrowserRedirect: true,
       },
     });
 

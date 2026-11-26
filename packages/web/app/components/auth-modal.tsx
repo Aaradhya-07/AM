@@ -168,7 +168,7 @@ export function AuthModal({
               </code>{" "}
               and{" "}
               <code className="rounded bg-graphite px-1 py-0.5 font-mono text-[10px] text-canvas">
-                NEXT_PUBLIC_SUPABASE_ANON_KEY
+                NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
               </code>
               . You can still use the local workspace without signing in.
             </p>

@@ -49,21 +49,62 @@
   outline-color: #f6f0f4;
 }
 
-@media (max-width: 1100px) {
+.account {
+  position: relative;
+  justify-self: end;
+  white-space: nowrap;
+}
+
+.account a,
+.account button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding-inline: 10px;
+  color: inherit;
+  font-size: 13px;
+}
+
+.account a:hover,
+.account button:hover {
+  text-decoration: underline;
+}
+
+.accountError {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  padding: 8px;
+  border-radius: 6px;
+  background: #2a1723;
+  color: #ffe7f2;
+  font-size: 12px;
+}
+
+@media (min-width: 851px) and (max-width: 1100px) {
   .inner {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: minmax(max-content, 1fr) auto minmax(74px, 1fr);
   }
 }
 
-@media (max-width: 440px) {
+@media (max-width: 590px) {
   .inner {
-    grid-template-columns: minmax(0, 1fr);
-    justify-items: center;
-    gap: 10px;
-    padding-block: 12px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding-block: 9px 13px;
+    gap: 7px;
   }
 
-  .brand {
+  .inner .brand {
+    justify-self: start;
+  }
+  .inner nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
     justify-self: center;
+  }
+  .account {
+    grid-column: 2;
+    grid-row: 1;
   }
 }

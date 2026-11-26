@@ -1,0 +1,81 @@
+.alpha.session-surface {
+  position: relative;
+  isolation: isolate;
+  --paper: #f6f5fc;
+  --sheet: #fff;
+  --ink: #231e30;
+  --muted: #61596e;
+  --forest: #504084;
+  --deep: #382760;
+  --rule: #d9d3e5;
+  --surface-action: #504084;
+  --surface-action-text: #fff;
+  background:
+    radial-gradient(ellipse at 70% 40%, #e9e3fc, transparent 65%), var(--paper);
+}
+
+.session-surface[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #110f19;
+  --sheet: #1d1928;
+  --ink: #f2edf9;
+  --muted: #c3b9d0;
+  --forest: #c2b1ff;
+  --deep: #171321;
+  --rule: #463c56;
+  --surface-action: #c2b1ff;
+  --surface-action-text: #1c1430;
+  background:
+    radial-gradient(ellipse at 70% 40%, #201732, transparent 65%), var(--paper);
+}
+
+.glyph-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.session-surface > header {
+  background-color: transparent;
+}
+
+.session-surface .alpha-button {
+  background: var(--surface-action);
+  color: var(--surface-action-text);
+}
+
+.session-surface .alpha-code {
+  color: #f2edf9;
+}
+
+.session-surface .alpha-code :focus-visible {
+  outline-color: #f2edf9;
+}
+
+.session-surface > .alpha-footer {
+  --paper: inherit;
+  --sheet: inherit;
+  --ink: inherit;
+  --muted: inherit;
+  --forest: inherit;
+  --rule: inherit;
+  background: var(--sheet);
+}
+
+.session-surface .alpha-file-input::file-selector-button {
+  background: var(--surface-action);
+  color: var(--surface-action-text);
+}
+
+.session-surface .alpha-import {
+  background: var(--sheet);
+  border-color: var(--rule);
+}
+
+.session-surface .alpha-import.is-dragging {
+  background: color-mix(in srgb, var(--sheet) 88%, var(--forest));
+  border-color: var(--forest);
+}

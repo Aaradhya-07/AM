@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SessionSurface } from "../components/session-surface";
 import { LoginClient } from "./login-client";
 
 export const metadata: Metadata = {
@@ -13,5 +14,9 @@ export default async function LoginPage({
   const params = await searchParams;
   const error =
     typeof params.error === "string" ? params.error.slice(0, 300) : null;
-  return <LoginClient initialError={error} />;
+  return (
+    <SessionSurface>
+      <LoginClient initialError={error} />
+    </SessionSurface>
+  );
 }

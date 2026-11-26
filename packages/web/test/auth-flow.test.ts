@@ -8,40 +8,49 @@ const auth = vi.hoisted(() => ({
 vi.mock("../lib/supabase/server", () => ({ createClient: auth.createClient }));
 
 afterEach(() => {
-  delete process.env.NEXT_PUBLIC_SUPABASE_URL;
-  delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  vi.unstubAllEnvs();
   vi.clearAllMocks();
 });
 
 describe("Supabase configuration", () => {
   it("rejects missing, placeholder, and malformed settings", async () => {
     const { getSupabaseConfig } = await import("../lib/supabase/config");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", undefined);
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", undefined);
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", undefined);
     expect(getSupabaseConfig()).toBeNull();
 
-    process.env.NEXT_PUBLIC_SUPABASE_URL =
-      "https://your-project-ref.supabase.co";
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "some-key";
+    vi.stubEnv(
+      "NEXT_PUBLIC_SUPABASE_URL",
+      "https://your-project-ref.supabase.co",
+    );
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "some-key");
     expect(getSupabaseConfig()).toBeNull();
 
-    process.env.NEXT_PUBLIC_SUPABASE_URL = "not-a-url";
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "not-a-url");
     expect(getSupabaseConfig()).toBeNull();
 
-    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "your-anon-key";
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "your-anon-key");
     expect(getSupabaseConfig()).toBeNull();
   });
 
-  it("accepts a valid HTTPS endpoint and a local Supabase endpoint", async () => {
+  it("accepts valid Supabase endpoints and prefers the publishable key", async () => {
     const { getSupabaseConfig } = await import("../lib/supabase/config");
-    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "test-publishable-key";
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "test-publishable-key");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "test-anon-key");
     expect(getSupabaseConfig()).toEqual({
       url: "https://example.supabase.co",
-      anonKey: "test-publishable-key",
+      publicKey: "test-publishable-key",
     });
 
-    process.env.NEXT_PUBLIC_SUPABASE_URL = "http://localhost:54321";
-    expect(getSupabaseConfig()?.url).toBe("http://localhost:54321");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://localhost:54321");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", undefined);
+    expect(getSupabaseConfig()).toEqual({
+      url: "http://localhost:54321",
+      publicKey: "test-anon-key",
+    });
   });
 });
 
@@ -71,6 +80,7 @@ describe("OAuth callback", () => {
     );
     expect(auth.exchangeCodeForSession).toHaveBeenCalledExactlyOnceWith("abc");
     expect(response.headers.get("location")).toBe("https://example.com/studio");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
 
     const unsafe = await GET(
       new Request(

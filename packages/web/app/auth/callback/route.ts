@@ -1,25 +1,32 @@
 import { NextResponse } from "next/server";
 import { createClient } from "../../../lib/supabase/server";
 
-function safeNextPath(value: string | null): string {
+function safeNextPath(value: string | null, origin: string): string {
   if (
-    !value ||
-    !value.startsWith("/") ||
+    !value?.startsWith("/") ||
     value.startsWith("//") ||
     value.includes("\\")
   ) {
     return "/dashboard";
   }
-  if (value.startsWith("/auth/") || value.startsWith("/login")) {
-    return "/dashboard";
+  try {
+    const destination = new URL(value, origin);
+    if (
+      destination.origin === origin &&
+      !/^\/(?:auth|login)(?:\/|$)/i.test(destination.pathname)
+    ) {
+      return destination.href;
+    }
+  } catch {
+    // Use the default destination when the path is invalid.
   }
-  return value;
+  return "/dashboard";
 }
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = safeNextPath(searchParams.get("next"));
+  const next = safeNextPath(searchParams.get("next"), origin);
   const error = searchParams.get("error");
   const errorDescription = searchParams.get("error_description");
 
@@ -36,7 +43,9 @@ export async function GET(request: Request) {
       const { error: exchangeError } =
         await supabase.auth.exchangeCodeForSession(code);
       if (!exchangeError) {
-        return NextResponse.redirect(new URL(next, origin));
+        return NextResponse.redirect(new URL(next, origin), {
+          headers: { "Cache-Control": "private, no-store" },
+        });
       } else {
         console.error("Supabase exchange error:", exchangeError);
         return NextResponse.redirect(

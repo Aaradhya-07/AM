@@ -11,7 +11,7 @@ export async function createClient(): Promise<SupabaseClient | null> {
 
   const cookieStore = await cookies();
 
-  return createServerClient(config.url, config.anonKey, {
+  return createServerClient(config.url, config.publicKey, {
     cookies: {
       getAll() {
         return cookieStore.getAll();

@@ -34,11 +34,29 @@ The website `build` script first builds workspace dependencies, then runs Next.j
 
 Create a **new** Vercel project from the AM Git repository. In the import screen select `packages/web` as the Root Directory, Next.js as the framework, and Node.js 24. Enable **Include source files outside of the Root Directory in the Build Step**, because the site uses workspace packages from `packages/`. Keep the build command as the package's `pnpm run build` and the output directory at the framework default. Set `NEXT_PUBLIC_SITE_URL` to the new production URL after it is known; this is used for social metadata. Supabase variables are optional for the draft demo, and no account is required to use it.
 
-For optional dashboard authentication, set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in the deployment. Configure the Supabase Site URL and redirect allowlist to include `https://<site>/auth/callback`. Enable GitHub and/or Google in Supabase Auth and set each provider's credentials and callback URL in the provider console. The public draft and local bundle review do not require Supabase. Do not put a service role key in a public environment variable.
-
 Vercel project slugs must be lowercase, so `am` is the natural project name even if the product is displayed as **AM**. The new deployment must contain these repository changes in its connected branch. This document does not change or redeploy the old `anvilmark.vercel.app` project.
 
 Vercel references: [monorepo setup](https://vercel.com/docs/monorepos), [outside-root source setting](https://vercel.com/docs/monorepos/monorepo-faq), [project naming](https://vercel.com/docs/project-configuration/general-settings).
+
+## Account sign-in
+
+1. For a new Supabase project, run [`packages/web/supabase/schema.sql`](../packages/web/supabase/schema.sql) in the Supabase SQL Editor to create the account and project tables.
+2. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in Vercel and in `packages/web/.env.local` for local development. Copy both values from the Supabase project's Connect dialog. Existing installations can still use `NEXT_PUBLIC_SUPABASE_ANON_KEY` with a legacy `anon` key. Keep Supabase secret and service-role keys out of public environment variables.
+3. In Supabase Auth URL Configuration, set **Site URL** to `http://localhost:3000` for local development or to the deployed AnvilMark origin for production. Add the matching callback URLs to **Redirect URLs**. Replace `https://<site>` with the deployed origin when it is available and change `3000` if the local port differs.
+
+   ```text
+   https://<site>/auth/callback
+   https://<site>/auth/callback?next=%2Fworkspace
+   http://localhost:3000/auth/callback
+   http://localhost:3000/auth/callback?next=%2Fworkspace
+   ```
+
+4. Create a **Web application** OAuth client in Google Auth Platform. Add the app origin under **Authorized JavaScript origins**. Add the callback shown in the Supabase Google provider settings as an **Authorized redirect URI**. It normally has the form `https://<supabase-project-ref>.supabase.co/auth/v1/callback`. Enter the Google client ID and client secret in the Supabase Google provider settings and enable the provider.
+5. Enable the Supabase Email provider for password sign-in. If email confirmation is enabled, configure SMTP for signup outside the Supabase project team. Open `/login` to check that sign-in returns to `/workspace`.
+
+The public draft and local bundle review work without a Supabase account.
+
+Supabase references: [Google OAuth setup](https://supabase.com/docs/guides/auth/social-sign-in/auth-google), [redirect configuration](https://supabase.com/docs/guides/auth/redirect-urls), [SMTP setup](https://supabase.com/docs/guides/auth/auth-smtp).
 
 ## Current boundary
 

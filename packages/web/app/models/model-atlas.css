@@ -1,5 +1,5 @@
 .model-atlas {
-  color-scheme: light;
+  color-scheme: inherit;
   font-family: Arial, Helvetica, sans-serif;
 }
 
@@ -41,8 +41,8 @@
 /* Alpha research: retain the directory logic and source semantics, bring its
    presentation into the shared ledger identity. */
 .model-atlas {
-  background: #f3f0e7;
-  color: #20221f;
+  background: transparent;
+  color: var(--ink, #20221f);
   font-family: var(--font-display), sans-serif;
 }
 .model-atlas h1 {
@@ -57,30 +57,31 @@
 .model-atlas [class~="bg-slate-50"],
 .model-atlas [class~="bg-[#f5f6f7]"],
 .model-atlas [class~="bg-slate-100"] {
-  background-color: #eeeee3;
+  background-color: color-mix(in srgb, var(--paper) 72%, var(--rule));
 }
 .model-atlas [class~="bg-white"] {
-  background-color: #fbfaf6;
+  background-color: var(--sheet, #fbfaf6);
 }
 .model-atlas [class~="bg-slate-950"],
 .model-atlas [class~="bg-blue-600"] {
-  background-color: #214c3a;
+  background-color: var(--surface-action, #214c3a);
+  color: var(--surface-action-text, #fff);
 }
 .model-atlas [class~="text-blue-700"],
 .model-atlas [class~="text-blue-600"] {
-  color: #214c3a;
+  color: var(--forest, #214c3a);
 }
 .model-atlas [class~="border-slate-200"],
 .model-atlas [class~="border-slate-300"] {
-  border-color: #cdd0c2;
+  border-color: var(--rule, #cdd0c2);
 }
 .model-atlas [class~="text-slate-900"],
 .model-atlas [class~="text-slate-950"] {
-  color: #20221f;
+  color: var(--ink, #20221f);
 }
 .model-atlas [class~="text-slate-500"],
 .model-atlas [class~="text-slate-600"] {
-  color: #5b6158;
+  color: var(--muted, #5b6158);
 }
 .model-atlas button,
 .model-atlas input,
@@ -111,20 +112,30 @@
 }
 .model-atlas [class~="text-blue-800"],
 .model-atlas [class~="text-blue-950"] {
-  color: #214c3a;
+  color: var(--forest, #214c3a);
 }
 .model-atlas [class~="border-blue-600"] {
-  border-color: #214c3a;
+  border-color: var(--forest, #214c3a);
 }
 .model-atlas [class~="bg-blue-50"] {
-  background-color: #e6ebdf;
+  background-color: color-mix(in srgb, var(--sheet) 88%, var(--forest));
 }
 .model-atlas [class~="hover:bg-blue-50/60"]:hover {
-  background-color: #e6ebdf;
+  background-color: color-mix(in srgb, var(--sheet) 88%, var(--forest));
 }
 .model-atlas [class~="rounded-lg"] {
   border-radius: 2px;
 }
 .model-atlas h1 {
   line-height: 1.08;
+}
+
+.session-surface[data-theme="dark"]
+  .model-atlas
+  :is(
+    [class~="text-slate-400"],
+    [class~="text-slate-700"],
+    [class~="text-slate-800"]
+  ) {
+  color: var(--muted);
 }
