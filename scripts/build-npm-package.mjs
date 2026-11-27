@@ -107,7 +107,7 @@ writeFileSync(
       name: "anvilmark",
       version: cli.version,
       description:
-        "Local-first decision and conformance contracts for AI systems: inventory what AI a repository uses, and check it against approved decisions.",
+        "Local-first architecture contracts, per-slice coding-model routing, deterministic conformance gates, and MCP Control Cockpit for Claude Code, Codex, Cursor, VS Code, and Antigravity.",
       license: "Apache-2.0",
       type: "module",
       // npm's own normalizer strips a leading "./" from bin paths and warns
@@ -123,9 +123,14 @@ writeFileSync(
       keywords: [
         "ai",
         "llm",
-        "inventory",
+        "mcp",
+        "model-routing",
+        "claude-code",
+        "codex",
+        "cursor",
+        "antigravity",
         "conformance",
-        "governance",
+        "architecture",
         "static-analysis",
       ],
       repository: {

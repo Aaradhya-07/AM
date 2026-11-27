@@ -1,5 +1,6 @@
 node_modules/
 **/dist/
+dist-npm/
 **/*.tsbuildinfo
 model-catalog.sqlite*
 **/.anvilmark/development/*.sqlite*

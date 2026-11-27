@@ -559,8 +559,16 @@ export function createProjectServer(options: ProjectServerOptions): McpServer {
     );
   }
   registerHardwareTools(server, options);
+  let activeStudioRoot = options.root;
+  const studioRootBridge = {
+    getActiveRoot: () => activeStudioRoot,
+    setActiveRoot: (nextDir: string) => {
+      activeStudioRoot = nextDir;
+    },
+  };
   if (options.sliceExecution || options.sliceReadOnly)
-    registerSliceTools(server, options);
-  if (options.localStudio) registerLocalStudioTools(server, options);
+    registerSliceTools(server, { ...options, ...studioRootBridge });
+  if (options.localStudio)
+    registerLocalStudioTools(server, { ...options, ...studioRootBridge });
   return server;
 }

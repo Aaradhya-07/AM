@@ -9,11 +9,13 @@ import type { CommandContext } from "./common.js";
 import {
   UsageError,
   flag,
+  numberOption,
   parse,
   projectDirectory,
   stringOption,
   writeJson,
 } from "./common.js";
+import { runAmServerSliceAgent } from "./local-agent-runner.js";
 import { readSliceOutcomes } from "./outcomes.js";
 import { sliceWaves } from "./slice-dag.js";
 import { loadSlicePlan } from "./slice-storage.js";
@@ -21,7 +23,7 @@ import { sliceDigest } from "./slice-worktree.js";
 import { verifySlice } from "./verify-slice.js";
 
 export const NEXT_USAGE = `Usage:
-  anvilmark next [--slice <id>] [--exec] [--runner auto|claude|codex|am-server] [--endpoint URL] [-C DIR] [--json]
+  anvilmark next [--slice <id>] [--exec] [--runner auto|claude|codex|am-server] [--endpoint URL] [--max-attempts N] [--run-checks] [-C DIR] [--json]
 
 Selects the next unblocked task slice from .anvilmark/development/active-plan.json
 (whose prerequisites are accepted), writes .anvilmark/development/current-slice.md,
@@ -30,10 +32,12 @@ verification gate.
 
 Options
   --slice ID         target a specific slice ID instead of the next ready slice
-  --exec             invoke the routed local agent CLI (claude, codex, or am-server)
-                     and automatically run anvilmark verify-slice afterwards
+  --exec             invoke the routed local agent (claude, codex, or contract-jailed
+                     am-server autonomous runner) and verify conformance
   --runner NAME      auto (default), claude, codex, or am-server
   --endpoint URL     OpenAI-compatible endpoint when runner is am-server
+  --max-attempts N   max self-healing iterations for am-server runner (default: 2)
+  --run-checks       run SAFE_CHECK / contract verification commands after editing
   -C, --project-dir  repository root (default: current directory)
   --json             emit structured JSON output`;
 
@@ -139,51 +143,6 @@ async function runCliAgentSubprocess(
   });
 }
 
-async function queryAmServerGuidance(
-  endpoint: string,
-  modelId: string,
-  promptText: string,
-): Promise<{ exitCode: number; summary: string }> {
-  try {
-    const resp = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: modelId,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are an implementation coding assistant. Provide concise patch steps and exact file changes for this AnvilMark slice.",
-          },
-          { role: "user", content: promptText },
-        ],
-        max_tokens: 2400,
-      }),
-      signal: AbortSignal.timeout(120_000),
-    });
-    if (!resp.ok) {
-      return {
-        exitCode: 1,
-        summary: `am-server returned HTTP ${resp.status} at ${endpoint}`,
-      };
-    }
-    const payload = (await resp.json()) as {
-      choices?: Array<{ message?: { content?: unknown } }>;
-    };
-    const content = payload.choices?.[0]?.message?.content;
-    return {
-      exitCode: 0,
-      summary: typeof content === "string" ? content.trim().slice(0, 4000) : "",
-    };
-  } catch (err) {
-    return {
-      exitCode: 1,
-      summary: `Could not reach am-server at ${endpoint}: ${err instanceof Error ? err.message : String(err)}`,
-    };
-  }
-}
-
 export async function selectNextSlice(
   directory: string,
   explicitSliceId?: string,
@@ -272,6 +231,8 @@ export async function nextCommand(context: CommandContext): Promise<ExitCode> {
       exec: { type: "boolean" },
       runner: { type: "string" },
       endpoint: { type: "string" },
+      "max-attempts": { type: "string" },
+      "run-checks": { type: "boolean" },
     },
     NEXT_USAGE,
   );
@@ -405,22 +366,71 @@ export async function nextCommand(context: CommandContext): Promise<ExitCode> {
     stringOption(parsed, "endpoint") ??
     process.env.ANVILMARK_PLANNER_ENDPOINT?.trim() ??
     "http://am-server:8080/v1/chat/completions";
+  const maxAttempts = numberOption(parsed, "max-attempts", NEXT_USAGE) ?? 2;
+  const runChecks = flag(parsed, "run-checks");
 
-  const execResult =
-    resolvedRunner === "am-server"
-      ? await queryAmServerGuidance(endpoint, task.model, brief)
-      : await runCliAgentSubprocess(
-          resolvedRunner,
-          selection.root,
-          brief,
-          task.model,
-        );
+  if (resolvedRunner === "am-server") {
+    const amRun = await runAmServerSliceAgent({
+      root: selection.root,
+      bundle,
+      sliceId: task.id,
+      sliceBrief: brief,
+      endpoint,
+      model: task.model,
+      runChecks,
+      maxAttempts,
+      clock: io.clock,
+    });
+
+    if (flag(parsed, "json")) {
+      writeJson(io, {
+        status: amRun.passed ? "passed" : "failed",
+        sliceId: task.id,
+        runner: "am-server",
+        attempts: amRun.attempts,
+        writtenFiles: amRun.writtenFiles,
+        rejectedPaths: amRun.rejectedPaths,
+        inputTokens: amRun.inputTokens,
+        outputTokens: amRun.outputTokens,
+        runnerSummary: amRun.summary,
+        verification: amRun.verification,
+      });
+    } else {
+      io.stdout(
+        [
+          `Executed slice "${task.id}" via contract-jailed am-server (${amRun.attempts} attempt(s))`,
+          amRun.summary ? `  Summary: ${amRun.summary}` : "",
+          amRun.writtenFiles.length > 0
+            ? `  Written: ${amRun.writtenFiles.join(", ")}`
+            : "",
+          amRun.rejectedPaths.length > 0
+            ? `  Blocked by contract jail: ${amRun.rejectedPaths.join(", ")}`
+            : "",
+          `  Verification: ${amRun.verification.passed ? "PASSED ✓" : `FAILED (${amRun.verification.violations.length} violation(s))`}`,
+          ...amRun.verification.violations.map(
+            (v) =>
+              `    - [${v.kind}] ${v.path ? `${v.path}: ` : ""}${v.detail}`,
+          ),
+        ]
+          .filter(Boolean)
+          .join("\n") + "\n",
+      );
+    }
+    return amRun.passed ? EXIT.ok : EXIT.failed;
+  }
+
+  const execResult = await runCliAgentSubprocess(
+    resolvedRunner,
+    selection.root,
+    brief,
+    task.model,
+  );
 
   const report = await verifySlice({
     root: selection.root,
     bundle,
     sliceId: task.id,
-    runChecks: false,
+    runChecks,
     clock: io.clock,
   });
 

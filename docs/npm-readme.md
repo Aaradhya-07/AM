@@ -1,97 +1,52 @@
 # ANVILMARK
 
-Local-first decision and conformance contracts for AI systems.
+Local-first architecture planning, per-slice coding-model routing, deterministic slice conformance gates, and empirical cost/outcome provenance across **Claude Code, Codex, Cursor, VS Code, Antigravity, and local OSS GPUs**.
 
-Nothing here sends your code anywhere. Every command reads your repository
-with the TypeScript compiler and writes only where you ask it to.
+Nothing here sends your source code or secrets anywhere unless you explicitly invoke an external model.
 
-## What AI does this repository use?
+## 1-Command Agent & IDE Setup
+
+```bash
+npx anvilmark connect --with-hooks
+```
+
+Auto-wires `anvilmark-project-mcp` (`--local-studio --slice-execution --agent-assessment --hardware-sizing`), slash commands, workflow rules, skills, and active Git `pre-commit` + Claude `Stop` guardrails across:
+
+- **Claude Code** (`.mcp.json` + `/anvilmark-plan`, `/anvilmark-next`, `/anvilmark-cockpit` + `Stop` guardrail)
+- **Codex** (`.codex/config.toml`)
+- **Cursor & VS Code** (`.cursor/mcp.json`, `.vscode/mcp.json`, `.cursor/rules/anvilmark-workflow.mdc`)
+- **Google Antigravity** (`.agent/skills/anvilmark/SKILL.md` + inline **AnvilMark Cockpit** MCP App UI)
+
+## Everyday CLI Commands
+
+```bash
+npx anvilmark                         # Mission Control: connected tools, slice DAG, drift & win-rates
+npx anvilmark next                    # Claim or auto-execute the next unblocked task slice
+npx anvilmark verify-slice --slice id # Enforce allowedGlobs, forbiddenGlobs, deps & boundary checks
+npx anvilmark drift                   # Compare planned data flows against static repo observations
+npx anvilmark outcomes --write        # Aggregate empirical model win-rates & rework ratios
+npx anvilmark ci-report               # Emit Markdown conformance & provenance summary for PRs/CI
+npx anvilmark bridge --port 4317      # Optional zero-copy loopback sync with AnvilMark Web Studio
+```
+
+## Zero-Config AI Inventory & Conformance
 
 ```bash
 npx anvilmark inventory ./my-app
+npx anvilmark start
+npx anvilmark scan
+npx anvilmark conformance
 ```
 
-No project, contract or configuration needed. It reports where requests go
-(provider, host, operation kind), the models named, every recognized call
-site, the AI SDKs it has no recognizer for — whose calls it therefore cannot
-inventory — your AI dependencies, the environment variable **names** read
-where those SDKs are used, and what stayed uncertain.
-
-`--markdown` produces a report for a pull request; `--json` gives the whole
-inventory. The command writes nothing.
-
-It states what was recognized. It is not proof that nothing else reaches an AI
-provider, and it is not a conformance result.
-
-## Checking code against a decision
-
-The inventory is the zero-configuration half. The rest of the workflow records
-a decision — the models and providers a workload is approved to use, and the
-data that may never leave — and then checks an implementation against it:
+## Hardware Sizing & Model Research
 
 ```bash
-anvilmark start          # inventory this repository, then create a local draft
-anvilmark scan draft-config > .anvilmark/scanner.yaml   # draft the declarations
-anvilmark scan           # observations, data flows, unknowns; no verdicts
-anvilmark conformance    # deterministic pass / fail / unknown with evidence
+npx anvilmark hardware probe --json
+npx anvilmark quality benchmarks --search SWE-bench
+npx anvilmark quality leaderboard SWE-bench/SWE-bench_Verified --limit 10
 ```
 
-In a terminal, `start` asks for one application description. For unattended
-use, pass `--idea "What this app does"`; without it, plain `start` stays read-only.
-It does not infer requirements or approve a decision from repository code.
-Run `anvilmark start --connect-codex` to add this repository's project MCP
-server to Codex's `.codex/config.toml`. Trust the project and restart Codex;
-draft-writing tools are configured to prompt for approval. Reconnect after
-moving the repository or package installation because the file uses local
-absolute paths.
-
-A verdict is `unknown` whenever the evidence cannot settle it. That is the
-point: a scanner that cannot see a call must not report it as compliant.
-
-## Hardware sizing
-
-```bash
-anvilmark hardware probe --json      # bounded local inventory, read-only
-anvilmark hardware recommend --file scenario.json
-```
-
-Exact integer-byte memory arithmetic over pinned model metadata, with every
-unbudgeted component left explicitly unknown rather than assumed.
-
-## Model research
-
-```bash
-anvilmark quality benchmarks --search SWE-bench
-anvilmark quality leaderboard SWE-bench/SWE-bench_Verified --limit 10
-anvilmark quality model openai/gpt-oss-20b
-```
-
-These commands fetch public Hugging Face benchmark results with source links,
-verification flags, and retrieval dates. `quality catalog` can fetch the
-Artificial Analysis Free language-model catalog with an
-`ARTIFICIAL_ANALYSIS_API_KEY`; its data is for internal use with attribution.
-Use `quality cache --help` for an optional local SQLite history on Node 24.
-Public scores help research candidates; a project's hard quality gate still
-needs a matching measured evaluation.
-
-## MCP
-
-The package ships `anvilmark-project-mcp` (project context and conformance)
-and `anvilmark-mcp` (historical scaffold). The project server's default tools
-are read-only. `--agent-assessment` enables cited draft tools; sizing and
-local-probe tools are separate opt-in startup flags.
-
-## Scope and limits
-
-- TypeScript and JavaScript only.
-- Recognizers cover the OpenAI, Anthropic, Together and Ollama SDKs, the
-  Vercel AI SDK with its provider factories, and `fetch` to known provider
-  hosts. Other AI SDKs are reported as unsupported, never silently ignored.
-- Measured against eight public repositories with hand-read labels; the
-  corpus, the method and the recorded runs are in the repository under
-  `benchmarks/real-repos/`.
-
-Source, issues and the full documentation:
+Source, issues, and full documentation:
 <https://github.com/N6118/ANVILMARK>
 
 Apache-2.0.

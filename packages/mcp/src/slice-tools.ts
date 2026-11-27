@@ -18,8 +18,19 @@ interface SliceToolOptions {
   clock: () => string;
   sliceExecution?: boolean;
   sliceApprovedCommands?: readonly string[];
+  localStudio?: boolean;
+  getActiveRoot?: () => string;
+  setActiveRoot?: (nextDir: string) => void;
   diagnostics?: (message: string) => void;
 }
+
+const ProjectDirField = z
+  .string()
+  .trim()
+  .min(1)
+  .max(1000)
+  .optional()
+  .describe("Absolute path to the target Git workspace directory");
 
 const SliceArgs = z.strictObject({ slice_id: SliceId });
 const VerifyArgs = SliceArgs.extend({ run_checks: z.boolean().optional() });
@@ -49,13 +60,21 @@ export function registerSliceTools(
   const approvedCommands = new Set(options.sliceApprovedCommands);
   const latest = new Map<string, SliceVerificationReport>();
   let currentPlan = "";
-  const root = async () => {
-    if (!(await lstat(options.root)).isDirectory())
+  const root = async (overrideDir?: string) => {
+    const candidate =
+      (options.localStudio && overrideDir?.trim()) ||
+      options.getActiveRoot?.() ||
+      options.root;
+    if (!(await lstat(candidate)).isDirectory())
       throw new Error("Project directory is unavailable");
-    return realpath(options.root);
+    const resolved = await realpath(candidate);
+    if (options.localStudio && overrideDir?.trim()) {
+      options.setActiveRoot?.(resolved);
+    }
+    return resolved;
   };
-  const planState = async () => {
-    const directory = await root();
+  const planState = async (overrideDir?: string) => {
+    const directory = await root(overrideDir);
     const bundle = await loadSlicePlan(directory);
     if (!bundle) throw new Error("No active slice plan");
     const identity = JSON.stringify(bundle);
@@ -84,8 +103,9 @@ export function registerSliceTools(
       }
     };
 
-  async function verify(id: string, checks: boolean) {
-    const { directory, bundle, identity, planSha256 } = await planState();
+  async function verify(id: string, checks: boolean, overrideDir?: string) {
+    const { directory, bundle, identity, planSha256 } =
+      await planState(overrideDir);
     const report = await verifySlice({
       root: directory,
       bundle,
@@ -100,77 +120,102 @@ export function registerSliceTools(
     return { directory, report, planSha256 };
   }
 
+  const ListArgsSchema = options.localStudio
+    ? z.strictObject({ project_dir: ProjectDirField })
+    : z.strictObject({});
+  const GetContractArgsSchema = options.localStudio
+    ? SliceArgs.extend({ project_dir: ProjectDirField })
+    : SliceArgs;
+  const VerifyArgsSchema = options.localStudio
+    ? VerifyArgs.extend({ project_dir: ProjectDirField })
+    : VerifyArgs;
+  const OutcomeArgsSchema = options.localStudio
+    ? SliceOutcomeInputSchema.extend({ project_dir: ProjectDirField })
+    : SliceOutcomeInputSchema;
+
   server.registerTool(
     "list_plan_slices",
     {
       description:
         "List active slices, routing, and latest local verification and outcome status.",
-      inputSchema: z.strictObject({}),
+      inputSchema: ListArgsSchema,
       annotations: readOnly,
     },
-    handle("list_plan_slices", async () => {
-      const { directory, bundle, planSha256 } = await planState();
-      const outcomes = new Map(
-        (await readSliceOutcomes(directory))
-          .filter(
-            (record) =>
-              record.plan_sha256 === undefined ||
-              record.plan_sha256 === planSha256,
-          )
-          .map((record) => [record.slice_id, record]),
-      );
-      return {
-        tasks: bundle.plan.tasks.map((task) => {
-          const route = bundle.candidates.find(
-            ({ model }) => model === task.model,
-          );
-          const outcome = outcomes.get(task.id);
-          const report = latest.get(task.id);
-          return {
-            id: task.id,
-            title: task.title,
-            dependsOn: task.dependsOn,
-            model: task.model,
-            provider: route?.provider ?? null,
-            contract: task.contract
-              ? {
-                  allowedGlobs: task.contract.allowedGlobs,
-                  forbiddenGlobs: task.contract.forbiddenGlobs,
-                  allowDependencyChanges: task.contract.allowDependencyChanges,
-                  expectedBoundaries: task.contract.expectedBoundaries,
-                  reviewerFamily: task.contract.reviewerFamily ?? null,
-                  verificationCommandCount:
-                    task.contract.verificationCommands.length,
-                }
-              : null,
-            latestVerification: report
-              ? { passed: report.passed, verifiedAt: report.verifiedAt }
-              : outcome
+    handle(
+      "list_plan_slices",
+      async (args: { project_dir?: string | undefined }) => {
+        const { directory, bundle, planSha256 } = await planState(
+          args.project_dir,
+        );
+        const outcomes = new Map(
+          (await readSliceOutcomes(directory))
+            .filter(
+              (record) =>
+                record.plan_sha256 === undefined ||
+                record.plan_sha256 === planSha256,
+            )
+            .map((record) => [record.slice_id, record]),
+        );
+        return {
+          tasks: bundle.plan.tasks.map((task) => {
+            const route = bundle.candidates.find(
+              ({ model }) => model === task.model,
+            );
+            const outcome = outcomes.get(task.id);
+            const report = latest.get(task.id);
+            return {
+              id: task.id,
+              title: task.title,
+              dependsOn: task.dependsOn,
+              model: task.model,
+              provider: route?.provider ?? null,
+              contract: task.contract
                 ? {
-                    passed: outcome.verification_passed,
-                    verifiedAt: outcome.verified_at ?? outcome.recorded_at,
+                    allowedGlobs: task.contract.allowedGlobs,
+                    forbiddenGlobs: task.contract.forbiddenGlobs,
+                    allowDependencyChanges:
+                      task.contract.allowDependencyChanges,
+                    expectedBoundaries: task.contract.expectedBoundaries,
+                    reviewerFamily: task.contract.reviewerFamily ?? null,
+                    verificationCommandCount:
+                      task.contract.verificationCommands.length,
                   }
                 : null,
-            latestOutcome: outcome
-              ? { status: outcome.status, recordedAt: outcome.recorded_at }
-              : null,
-          };
-        }),
-      };
-    }),
+              latestVerification: report
+                ? { passed: report.passed, verifiedAt: report.verifiedAt }
+                : outcome
+                  ? {
+                      passed: outcome.verification_passed,
+                      verifiedAt: outcome.verified_at ?? outcome.recorded_at,
+                    }
+                  : null,
+              latestOutcome: outcome
+                ? { status: outcome.status, recordedAt: outcome.recorded_at }
+                : null,
+            };
+          }),
+        };
+      },
+    ),
   );
 
   server.registerTool(
     "get_slice_contract",
     {
       description: "Read instructions and the contract for one active slice.",
-      inputSchema: SliceArgs,
+      inputSchema: GetContractArgsSchema,
       annotations: readOnly,
     },
     handle(
       "get_slice_contract",
-      async ({ slice_id }: z.infer<typeof SliceArgs>) => {
-        const { bundle } = await planState();
+      async ({
+        slice_id,
+        project_dir,
+      }: {
+        slice_id: string;
+        project_dir?: string | undefined;
+      }) => {
+        const { bundle } = await planState(project_dir);
         const task = bundle.plan.tasks.find(({ id }) => id === slice_id);
         if (!task) throw new Error("Unknown slice id");
         return { ...task, contract: task.contract ?? null };
@@ -183,7 +228,7 @@ export function registerSliceTools(
     {
       description:
         "Verify a slice against Git changes. Set run_checks false for read-only verification.",
-      inputSchema: VerifyArgs,
+      inputSchema: VerifyArgsSchema,
       annotations: {
         ...readOnly,
         readOnlyHint: !options.sliceExecution,
@@ -192,7 +237,15 @@ export function registerSliceTools(
     },
     handle(
       "verify_slice",
-      async ({ slice_id, run_checks }: z.infer<typeof VerifyArgs>) => {
+      async ({
+        slice_id,
+        run_checks,
+        project_dir,
+      }: {
+        slice_id: string;
+        run_checks?: boolean | undefined;
+        project_dir?: string | undefined;
+      }) => {
         if (run_checks && !options.sliceExecution)
           throw new Error("Check execution requires opt-in");
         return {
@@ -200,6 +253,7 @@ export function registerSliceTools(
             await verify(
               slice_id,
               run_checks ?? Boolean(options.sliceExecution),
+              project_dir,
             )
           ).report,
         };
@@ -213,7 +267,7 @@ export function registerSliceTools(
       {
         description:
           "Verify the current slice and append structured model usage and outcome evidence to the local ledger.",
-        inputSchema: SliceOutcomeInputSchema,
+        inputSchema: OutcomeArgsSchema,
         annotations: {
           ...readOnly,
           readOnlyHint: false,
@@ -222,18 +276,24 @@ export function registerSliceTools(
       },
       handle(
         "record_slice_outcome",
-        async (input: z.infer<typeof SliceOutcomeInputSchema>) => {
+        async (
+          input: z.infer<typeof SliceOutcomeInputSchema> & {
+            project_dir?: string | undefined;
+          },
+        ) => {
           if (input.retries >= input.attempts)
             throw new Error("Invalid attempt counts");
+          const { project_dir, ...cleanInput } = input;
           const { directory, report, planSha256 } = await verify(
-            input.slice_id,
+            cleanInput.slice_id,
             true,
+            project_dir,
           );
-          if (input.status === "accepted" && !report.passed)
+          if (cleanInput.status === "accepted" && !report.passed)
             return { recorded: false, verification: report };
           if (
-            input.verification_passed !== undefined &&
-            input.verification_passed !== report.passed
+            cleanInput.verification_passed !== undefined &&
+            cleanInput.verification_passed !== report.passed
           )
             throw new Error(
               "Submitted verification state does not match the current result",
@@ -242,7 +302,7 @@ export function registerSliceTools(
             recorded: true,
             outcome: await appendSliceOutcome(
               directory,
-              input,
+              cleanInput,
               report.passed,
               options.clock(),
               { planSha256, verifiedAt: report.verifiedAt },

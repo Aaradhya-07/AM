@@ -36,6 +36,7 @@ import {
   exportContextCommand,
 } from "./commands/export-context.js";
 import { APPLY_PLAN_USAGE, applyPlanCommand } from "./commands/apply-plan.js";
+import { ciReportCommand } from "./commands/ci-report.js";
 import { cockpitCommand } from "./commands/cockpit.js";
 import { connectCommand } from "./commands/connect.js";
 import { hooksCommand } from "./commands/hooks.js";
@@ -92,6 +93,7 @@ Start
   orchestrate     schedule slices and prepare isolated Git worktrees
   outcomes        summarize local development and slice outcomes
   verify-slice    verify changed files and checks against a slice contract
+  ci-report       emit Markdown conformance, drift and provenance summary for CI/PRs
   apply-plan      apply a Studio plan handoff bundle to CLAUDE.md, AGENTS.md and Cursor rules
   init            create .anvilmark/ from an idea, a repository reference, or a contract file
   status          what is recorded, what is unknown, what is not yet provided
@@ -293,6 +295,8 @@ export async function run(
         return await verifySliceCommand(context);
       case "apply-plan":
         return await applyPlanCommand(context);
+      case "ci-report":
+        return await ciReportCommand(context);
       case "cockpit":
         return await cockpitCommand(context);
       case "connect":

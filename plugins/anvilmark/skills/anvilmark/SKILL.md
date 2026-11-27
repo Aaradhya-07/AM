@@ -7,6 +7,8 @@ description: Local-first architecture planning, empirical per-slice model routin
 
 AnvilMark connects repository facts, architecture decisions, per-slice coding-model routing, deterministic conformance gates, and empirical cost/win-rate provenance—**100% locally inside your coding agent with zero extra API keys**.
 
+> **Important Workspace Rule:** When calling `anvilmark_project` MCP tools (`prepare_planning_context`, `lock_execution_plan`, `open_anvilmark_cockpit`, `list_plan_slices`, `get_slice_contract`, `verify_slice`, `record_slice_outcome`), **always pass `project_dir: "<Active Workspace Absolute Path>"`** so the global plugin targets the user's active repository rather than the plugin directory.
+
 ## 1. Browserless Feature & Project Planning
 
 When the user asks to plan a feature, design an architecture, or split work across models:

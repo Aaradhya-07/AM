@@ -1,0 +1,53 @@
+name: AnvilMark CI & Conformance Gate
+
+on:
+  push:
+    branches:
+      - main
+      - "feat/**"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Build, Protocol Parity, Suites & Standalone Pack
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build core, scanner, conformance, CLI & MCP packages
+        run: pnpm build:core
+
+      - name: Verify MCP project server protocol & read-only parity
+        run: pnpm --filter @anvilmark/mcp run verify:project-tools
+
+      - name: Run MCP stdio & Cockpit App tests
+        run: pnpm --filter @anvilmark/mcp test
+
+      - name: Run CLI slice, bridge, drift, polyglot & local-workflow suites
+        run: pnpm --filter @anvilmark/cli exec vitest run test/apply-plan.test.ts test/verify-slice.test.ts test/outcomes.test.ts test/drift.test.ts test/bridge.test.ts test/orchestrate.test.ts test/local-workflow.test.ts test/polyglot-and-ci.test.ts
+
+      - name: Typecheck & test Web Studio
+        run: pnpm --filter @anvilmark/web exec tsc --noEmit && pnpm --filter @anvilmark/web test
+
+      - name: Verify standalone npx tarball size & structure
+        run: node scripts/build-npm-package.mjs --pack && rm -rf dist-npm
+
+      - name: Publish AnvilMark Conformance & Provenance Summary
+        if: always()
+        run: node packages/cli/bin/anvilmark.mjs ci-report --strict-gate >> "$GITHUB_STEP_SUMMARY"

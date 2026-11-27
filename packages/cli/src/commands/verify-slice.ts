@@ -31,6 +31,7 @@ import {
 } from "./architecture-observations.js";
 import {
   ACTIVE_PLAN,
+  SLICE_OUTCOMES,
   fromRoot,
   inspectPath,
   loadSlicePlan,
@@ -347,7 +348,9 @@ async function conformance(
       }
     }
   }
-  if ([...changed.safe].some((path) => /\.[cm]?[jt]sx?$/.test(path))) {
+  if (
+    [...changed.safe].some((path) => /\.(?:[cm]?[jt]sx?|py|go|rs)$/.test(path))
+  ) {
     for (const edge of observeArchitecture(root)) {
       if (!changed.safe.has(edge.from) || edge.kind === "sdk") continue;
       const planned = bundle.plan.flows.filter((flow) =>
@@ -395,7 +398,12 @@ export async function verifySlice(
   if (!task) throw new Error("Unknown slice id");
 
   const metadata = await readRegisteredWorktree(root);
-  const ignored = new Set<string>();
+  const ignored = new Set<string>([
+    SLICE_OUTCOMES,
+    ".anvilmark/development/current-slice.md",
+    ".anvilmark/development/outcomes-summary.json",
+    ".anvilmark/development/bridge.json",
+  ]);
   if (metadata) {
     const branch = (
       await runSliceGit(root, ["symbolic-ref", "--short", "HEAD"])
@@ -425,6 +433,11 @@ export async function verifySlice(
     const prompt = await readRepoFile(root, SLICE_PROMPT);
     if (prompt !== null && metadata.promptSha256 === sliceDigest(prompt))
       ignored.add(SLICE_PROMPT);
+  } else {
+    ignored.add(ACTIVE_PLAN);
+    ignored.add(".anvilmark/development/plan.json");
+    ignored.add(".anvilmark/development/PLAN.md");
+    ignored.add(".anvilmark/development/master-prompt.md");
   }
   const baseline = metadata?.baseCommit;
   const violations: SliceVerificationReport["violations"] = [];

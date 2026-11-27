@@ -1,13 +1,34 @@
 # ANVILMARK quickstart
 
-## Plan in the browser
+## Fastest path: 1-command local setup (`Claude Code`, `Codex`, `Cursor`, `VS Code`, `Antigravity`)
 
-From an installed checkout, run `pnpm dev:web` and open
-`http://localhost:3000/plan`. Enter a request, add relevant context, and
-choose a planning provider and your available execution models. Review the
-draft and answer open questions in the context field before regenerating.
-Copy the full handoff into your repo's coding agent, or use the local-first
-prompt to plan directly there without calling the web planner.
+Connect ANVILMARK's local MCP server, browserless planning workflow, slash commands, skills, and active Git `pre-commit` + Claude `Stop` guardrails in any Git repository:
+
+```sh
+npx anvilmark connect --with-hooks -C /path/to/your/repo
+```
+
+No hosted account or separate API key is required—your active coding agent supplies the reasoning while ANVILMARK supplies deterministic repository metadata, Empirical Bayes per-slice model routing, enforced `SliceContractSpec` globs, and drift verification:
+
+- **Terminal Mission Control:** run `npx anvilmark` inside your repo to view connected IDEs, active slice waves, drift status, and observed model win-rates.
+- **Claude Code:** run `/anvilmark-plan <feature>`, `/anvilmark-next`, or `/anvilmark-cockpit`.
+- **Codex / Cursor / Antigravity:** ask your agent to call `prepare_planning_context` → `lock_execution_plan`, or open the interactive **AnvilMark Cockpit** MCP App (`open_anvilmark_cockpit`).
+- **Autonomous local slice execution (`am-server` / OSS GPUs):** run `npx anvilmark next --exec --runner am-server` to run a contract-jailed edit + verification loop at \$0 marginal API cost.
+
+---
+
+## Plan visually in `/beta` Studio (+ optional Zero-Copy Local Bridge)
+
+From an installed checkout, run `pnpm dev:web` and open `http://localhost:3000/beta`:
+
+- Conversational 3-mode flow (**Chat** → **Interactive Clarification Cards** → **Architecture, Trust-Boundary Graph & Per-Slice Model Routing**).
+- Pair directly with any local repository without manually exporting/importing files:
+  ```sh
+  npx anvilmark bridge -C /path/to/your/repo --port 4317
+  ```
+  Click **Repo** in `/beta`, paste the printed pairing token, and get 1-click live context + outcomes sync, 1-click **Apply to repo ⚡**, live **Verify slice**, and bidirectional **Architecture Drift Radar**.
+
+_(Legacy single-shot draft planner remains available at `http://localhost:3000/plan`.)_
 
 Gemini and OpenAI accept a key in the planner. For a private instance, set
 `ANVILMARK_GEMINI_API_KEY` in `packages/web/.env.local` to use a server-side

@@ -32,6 +32,8 @@ export interface LocalStudioToolOptions {
   readonly root: string;
   readonly clock: () => string;
   readonly diagnostics?: (message: string) => void;
+  readonly getActiveRoot?: () => string;
+  readonly setActiveRoot?: (nextDir: string) => void;
 }
 
 const SubscriptionEnum = z.enum([
@@ -101,7 +103,7 @@ const DEFAULT_CANDIDATES: readonly CatalogCandidate[] = [
     priorMean: 0.84,
   },
   {
-    model: "qwen3-coder-30b",
+    model: "qwen3-coder-30b-a3b",
     label: "Qwen 3 Coder 30B (Local OSS)",
     provider: "am-server",
     tier: "balanced",
@@ -485,11 +487,17 @@ export function registerLocalStudioTools(
   server: McpServer,
   options: LocalStudioToolOptions,
 ): void {
-  const ensureRoot = async () => {
-    if (!(await lstat(options.root)).isDirectory()) {
+  const ensureRoot = async (overrideProjectDir?: string) => {
+    const candidate =
+      overrideProjectDir?.trim() || options.getActiveRoot?.() || options.root;
+    if (!(await lstat(candidate)).isDirectory()) {
       throw new Error("Project directory is unavailable");
     }
-    return realpath(options.root);
+    const resolved = await realpath(candidate);
+    if (overrideProjectDir?.trim()) {
+      options.setActiveRoot?.(resolved);
+    }
+    return resolved;
   };
 
   server.registerResource(
@@ -522,6 +530,13 @@ export function registerLocalStudioTools(
       description:
         "Read-only. Scans structural repository metadata (languages, frameworks, scripts, check commands, ADRs, tracked file paths—never secrets or file contents), loads empirical model win-rates on this repo, and returns ranked candidate coding models so you can clarify unknowns and propose an AnvilMark execution plan locally without a browser.",
       inputSchema: z.strictObject({
+        project_dir: z
+          .string()
+          .trim()
+          .min(1)
+          .max(1000)
+          .optional()
+          .describe("Absolute path to the target Git workspace directory"),
         goal: z.string().trim().max(4000).optional(),
         subscriptions: z.array(SubscriptionEnum).max(5).optional(),
         quota_mode: QuotaModeEnum.optional(),
@@ -535,7 +550,7 @@ export function registerLocalStudioTools(
     },
     async (args) => {
       try {
-        const directory = await ensureRoot();
+        const directory = await ensureRoot(args.project_dir);
         const now = options.clock();
         const [repoContext, outcomes, existingPlan] = await Promise.all([
           exportRepoContext(directory, {
@@ -589,6 +604,13 @@ export function registerLocalStudioTools(
       description:
         "Validates a structured implementation plan, deterministically compiles per-slice scope globs, check commands, and cross-vendor reviewer assignments (`SliceContractSpec`), writes `.anvilmark/development/active-plan.json` plus marked instruction blocks (`PLAN.md`, `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/anvilmark-plan.mdc`), and opens the interactive AnvilMark Cockpit.",
       inputSchema: z.strictObject({
+        project_dir: z
+          .string()
+          .trim()
+          .min(1)
+          .max(1000)
+          .optional()
+          .describe("Absolute path to the target Git workspace directory"),
         plan: HandoffPlan,
         strict: z.boolean().optional(),
         quota_mode: QuotaModeEnum.optional(),
@@ -607,7 +629,7 @@ export function registerLocalStudioTools(
     },
     async (args) => {
       try {
-        const directory = await ensureRoot();
+        const directory = await ensureRoot(args.project_dir);
         const now = options.clock();
         const strict = args.strict ?? false;
         const quotaMode = args.quota_mode ?? "plenty";
@@ -743,6 +765,13 @@ export function registerLocalStudioTools(
       description:
         "Read-only. Opens the interactive AnvilMark Control Cockpit showing active slice contracts, conformance status, trust-boundary drift radar, and repository model win-rates.",
       inputSchema: z.strictObject({
+        project_dir: z
+          .string()
+          .trim()
+          .min(1)
+          .max(1000)
+          .optional()
+          .describe("Absolute path to the target Git workspace directory"),
         slice_id: z.string().trim().max(80).optional(),
       }),
       annotations: {
@@ -761,9 +790,9 @@ export function registerLocalStudioTools(
         },
       },
     },
-    async () => {
+    async (args) => {
       try {
-        const directory = await ensureRoot();
+        const directory = await ensureRoot(args.project_dir);
         const now = options.clock();
         const state = await buildCockpitState(directory, now);
         const summary = state.activePlan

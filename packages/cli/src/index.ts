@@ -74,3 +74,8 @@ export {
   renderExecutableSliceBrief,
 } from "./commands/next.js";
 export { collectCockpitSnapshot } from "./commands/cockpit.js";
+export { generateCiReport } from "./commands/ci-report.js";
+export {
+  runAmServerSliceAgent,
+  validatePathAgainstContract,
+} from "./commands/local-agent-runner.js";
