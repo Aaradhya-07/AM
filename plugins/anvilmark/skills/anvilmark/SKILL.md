@@ -15,14 +15,15 @@ When the user asks to plan a feature, design an architecture, or split work acro
 
 1. **Inspect deterministic repo + model evidence first:**
    Call `prepare_planning_context` (passing `goal`, and optional `subscriptions` / `quota_mode`). Never invent scripts, check commands, or tracked paths before calling this tool.
-2. **Clarify before guessing:**
-   If architectural requirements are underspecified (persistence, auth/tenancy boundaries, retry/idempotency rules, or v1 scope), call `ask_question` (or ask 2–4 concise questions) **before** locking a plan.
-3. **Synthesize and lock the executable contract:**
+2. **Clarify domain forks before guessing:**
+   If domain workflows, persistence/sync boundaries, auth/tenancy, or failure/retry rules are underspecified, call `ask_question` (2–4 tailored domain-specific questions with the recommended v1 default option first) **before** locking a plan.
+3. **Synthesize and lock a right-sized, quality-calibrated contract:**
    Construct a `HandoffPlan` where:
    - Every architecture decision documents its rationale, a credible rejected alternative, and the honest tradeoff.
    - Cross-boundary data crossings are listed in `flows`.
-   - Each vertical slice in `tasks` picks its `model` from `ranked_candidates` (reserving scarce `frontier` quota for ambiguous architecture/security slices and routing bounded schema, CRUD, UI, and test slices to proven `balanced` / `fast` / `local_oss` models).
-     Call `lock_execution_plan` to validate the DAG, compile deterministic `SliceContractSpec` globs + cross-vendor reviewers, update `.anvilmark/development/active-plan.json` + IDE rule files (`PLAN.md`, `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/anvilmark-plan.mdc`), and render the interactive **AnvilMark Cockpit** inline!
+   - **Dynamic vertical slicing (never default to 3 horizontal buckets):** Set `projectScale` (`micro` → 1–2 slices, `small_app` → 2–4, `multi_feature` → 5–8, `complex_system` → 7–12) and decompose by shippable vertical capability with parallelizable DAG `dependsOn` waves.
+   - **Two quality-mindful model choices per slice (`model` + `alternatives[0]`):** Tag each slice's `kind` and `complexity`. Use `frontier` models mindfully wherever high complexity, security, or concurrency warrants them (no artificial cap across slices, and never waste heavy specialists like `gpt-6-astra` on simple CRUD/todo apps); use strong `balanced` workhorses (`claude-sonnet-5-5`, `gpt-6.1-sol`, `qwen3-coder-30b-a3b`) on real UI/feature slices to keep work quality high; and reserve `fast` models strictly for narrow schemas, boilerplate, and unit tests.
+     Call `lock_execution_plan` to validate the DAG, calibrate 2-option model picks, compile deterministic `SliceContractSpec` globs + cross-vendor reviewers, update `.anvilmark/development/active-plan.json` + IDE rule files (`PLAN.md`, `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/anvilmark-plan.mdc`), and render the interactive **AnvilMark Cockpit** inline!
 
 ## 2. Executing & Verifying Slices
 

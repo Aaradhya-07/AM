@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   betaDraft,
   betaDraftKey,
@@ -73,6 +73,41 @@ export function Planner({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [localPrompt, setLocalPrompt] = useState("");
+  const pinnedPairsRef = useRef<
+    Map<string, Array<{ model: string; role: string; note: string }>>
+  >(new Map());
+
+  function switchTaskModel(taskIndex: number, nextModel: string) {
+    setResult((current) => {
+      if (!current) return current;
+      const target = current.plan.tasks[taskIndex];
+      if (!target || target.model === nextModel) return current;
+      const pruned = target.alternatives.filter(
+        (alt) => alt.model !== nextModel,
+      );
+      const nextAlts = pruned.some((alt) => alt.model === target.model)
+        ? pruned
+        : [
+            {
+              model: target.model,
+              tradeoff: "Original recommended option.",
+            },
+            ...pruned,
+          ].slice(0, 2);
+      const nextTasks = current.plan.tasks.map((item, idx) =>
+        idx === taskIndex
+          ? { ...item, model: nextModel, alternatives: nextAlts }
+          : item,
+      );
+      return {
+        ...current,
+        plan: {
+          ...current.plan,
+          tasks: nextTasks,
+        },
+      };
+    });
+  }
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("from") !== "beta")
@@ -460,11 +495,47 @@ export function Planner({
               were checked {ratesChecked}.
             </p>
             <ol className="planning-tasks">
-              {plan.tasks.map((task) => {
+              {plan.tasks.map((task, taskIdx) => {
                 const candidate = result.candidates.find(
                   (item) => item.model === task.model,
                 );
                 const selection = candidate && estimateCost(task, candidate);
+                const pairKey = `${plan.title}::${task.id}::${result.candidates
+                  .map((c) => c.model)
+                  .join(",")}`;
+                let pair = pinnedPairsRef.current.get(pairKey);
+                if (!pair) {
+                  const primaryOpt = {
+                    model: task.model,
+                    role: "Recommended",
+                    note: task.why,
+                  };
+                  const altCandidate =
+                    task.alternatives.find((a) =>
+                      result.candidates.some(
+                        (c) => c.model === a.model && c.model !== task.model,
+                      ),
+                    ) ??
+                    (result.candidates.find((c) => c.model !== task.model)
+                      ? {
+                          model: result.candidates.find(
+                            (c) => c.model !== task.model,
+                          )!.model,
+                          tradeoff: "Alternative execution option.",
+                        }
+                      : null);
+                  pair = altCandidate
+                    ? [
+                        primaryOpt,
+                        {
+                          model: altCandidate.model,
+                          role: "Option 2",
+                          note: altCandidate.tradeoff,
+                        },
+                      ]
+                    : [primaryOpt];
+                  pinnedPairsRef.current.set(pairKey, pair);
+                }
                 return (
                   <li key={task.id} className="planning-subcard">
                     <h3>{task.title}</h3>
@@ -486,14 +557,63 @@ export function Planner({
                       <List title="Checks to run" values={task.checks} />
                     </div>
                     <h4>Suggested model · {task.model}</h4>
-                    <p>{task.why}</p>
-                    {task.alternatives.length > 0 && (
-                      <List
-                        title="Alternatives"
-                        values={task.alternatives.map(
-                          (item) => `${item.model} · ${item.tradeoff}`,
+                    {pair.length >= 2 ? (
+                      <div
+                        className="planning-model-choices"
+                        role="group"
+                        aria-label={`Model options for ${task.title}`}
+                      >
+                        {pair.map((opt) => {
+                          const isSelected = opt.model === task.model;
+                          const optCand = result.candidates.find(
+                            (c) => c.model === opt.model,
+                          );
+                          const optCost =
+                            optCand && estimateCost(task, optCand);
+                          return (
+                            <button
+                              key={opt.model}
+                              type="button"
+                              aria-pressed={isSelected}
+                              className={`planning-choice-pill ${
+                                isSelected ? "planning-choice-pill-active" : ""
+                              }`}
+                              onClick={() => switchTaskModel(taskIdx, opt.model)}
+                            >
+                              <span className="planning-choice-top">
+                                <span>
+                                  {isSelected ? "● " : "○ "}
+                                  <strong>{opt.model}</strong> ({opt.role})
+                                </span>
+                                {optCost && (
+                                  <small>~${optCost.usd.toFixed(4)}</small>
+                                )}
+                              </span>
+                              <small>{opt.note}</small>
+                            </button>
+                          );
+                        })}
+                        {result.candidates.length > 2 && (
+                          <label className="planning-other-model">
+                            <span>Other model</span>
+                            <select
+                              aria-label={`Model for ${task.title}`}
+                              value={task.model}
+                              onChange={(event) =>
+                                switchTaskModel(taskIdx, event.target.value)
+                              }
+                            >
+                              {result.candidates.map((c) => (
+                                <option key={c.model} value={c.model}>
+                                  {c.model}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
                         )}
-                      />
+                      </div>
+                    ) : (
+                      <p>{task.why}</p>
                     )}
                     <p>
                       <strong>Estimated tokens</strong>{" "}

@@ -26,7 +26,7 @@ export const subscriptionCatalog: readonly SubscriptionOptionMeta[] = [
     id: "chatgpt",
     label: "ChatGPT Plus / Pro",
     shortLabel: "ChatGPT",
-    description: "Codex · GPT-6 Astra, GPT-6.1 Sol, GPT-6 Luna",
+    description: "Codex · GPT-6.1 Sol, GPT-6 Luna, GPT-6 Astra",
   },
   {
     id: "gemini",

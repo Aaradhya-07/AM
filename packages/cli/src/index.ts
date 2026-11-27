@@ -31,8 +31,19 @@ export {
   SliceOutcomeInputSchema,
   aggregateOutcomes,
   outcomesRepoName,
+  inferDominantPathPrefix,
+  inferOutcomeCategoryFromPaths,
+  syncGitAttributedOutcomes,
+  type OutcomeTaskCategory,
   type RepoOutcomesSummary,
 } from "./commands/outcomes.js";
+export {
+  mineHistoricalCalibrationCommits,
+  computeLineReworkRatio,
+  runRepoCalibration,
+  type MinedCalibrationCommit,
+  type CalibrationTrialResult,
+} from "./commands/calibrate-repo.js";
 export { sliceDigest } from "./commands/slice-worktree.js";
 export {
   exportRepoContext,

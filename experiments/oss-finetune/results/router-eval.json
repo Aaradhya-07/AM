@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "anvilmark.router-eval.v1",
+  "training": {
+    "backend": "cuda-nvcc",
+    "gpuName": "NVIDIA GeForce RTX 3060",
+    "computeCapability": "8.6",
+    "epochs": 1000,
+    "trainDurationMs": 3660.25,
+    "finalTrainMse": 0.00057
+  },
+  "trainMetrics": {
+    "count": 9874,
+    "mse": 0.00057,
+    "mae": 0.016033,
+    "pairwiseRankingAccuracy": 0.9945,
+    "evaluatedPairs": 27722
+  },
+  "valMetrics": {
+    "count": 1646,
+    "mse": 0.000567,
+    "mae": 0.016014,
+    "pairwiseRankingAccuracy": 0.9936,
+    "evaluatedPairs": 31805
+  }
+}

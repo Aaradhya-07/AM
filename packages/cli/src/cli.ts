@@ -1,5 +1,9 @@
 import { orchestrateCommand } from "./commands/orchestrate.js";
 import { bridgeCommand } from "./commands/bridge.js";
+import {
+  CALIBRATE_REPO_USAGE,
+  calibrateRepoCommand,
+} from "./commands/calibrate-repo.js";
 import { driftCommand } from "./commands/drift.js";
 import { outcomesCommand } from "./commands/outcomes.js";
 import { verifySliceCommand } from "./commands/verify-slice.js";
@@ -91,6 +95,7 @@ Start
   bridge          serve a paired loopback connection for Studio
   drift           compare planned architecture with static repository observations
   orchestrate     schedule slices and prepare isolated Git worktrees
+  calibrate-repo  back-test models on historical Git commits to learn repo win-rates
   outcomes        summarize local development and slice outcomes
   verify-slice    verify changed files and checks against a slice contract
   ci-report       emit Markdown conformance, drift and provenance summary for CI/PRs
@@ -289,6 +294,8 @@ export async function run(
         return await driftCommand(context);
       case "orchestrate":
         return await orchestrateCommand(context);
+      case "calibrate-repo":
+        return await calibrateRepoCommand(context);
       case "outcomes":
         return await outcomesCommand(context);
       case "verify-slice":
@@ -322,6 +329,7 @@ export {
   APPLY_PLAN_USAGE,
   APPROVE_USAGE,
   ARCHITECTURE_USAGE,
+  CALIBRATE_REPO_USAGE,
   CONFORMANCE_USAGE,
   EXPORT_CONTEXT_USAGE,
   GENERATE_USAGE,

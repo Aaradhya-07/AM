@@ -20,9 +20,10 @@ import {
   readRepoFile,
   writeRepoJson,
 } from "./slice-storage.js";
-import { SliceId } from "./verify-slice.js";
+import { runSliceGit, SliceId } from "./verify-slice.js";
 
-const OUTCOMES_USAGE = "Usage: anvilmark outcomes [-C DIR] [--write] [--json]";
+const OUTCOMES_USAGE =
+  "Usage: anvilmark outcomes [-C DIR] [--sync-git] [--write] [--json]";
 const STORAGE = ".anvilmark/development";
 const SUMMARY = STORAGE + "/outcomes-summary.json";
 const Model = z.string().regex(/^[\w./:-]{1,120}$/);
@@ -34,11 +35,94 @@ const Category = z.enum([
   "tests",
   "general",
 ]);
+export type OutcomeTaskCategory = z.infer<typeof Category>;
+
+const PathPrefix = z
+  .string()
+  .regex(/^[a-zA-Z0-9._/-]{1,120}$/)
+  .refine(
+    (p) =>
+      !p.startsWith("/") &&
+      !p.endsWith("/") &&
+      !p.includes("\\") &&
+      !p.split("/").includes(".."),
+    "Invalid repository path prefix",
+  );
+
 const Count = z.int().nonnegative();
 const Ratio = z.number().min(0).max(1);
 const DateTime = z.iso.datetime({ offset: true });
 const Status = z.enum(["accepted", "rejected", "failed"]);
 const MAX_LOG_BYTES = 32 * 1024 * 1024;
+
+export function inferDominantPathPrefix(
+  paths: readonly string[],
+): string | undefined {
+  const counts = new Map<string, number>();
+  let validCount = 0;
+  for (const raw of paths) {
+    const clean = raw.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+    if (!clean || clean.startsWith("/") || clean.includes("..")) continue;
+    const parts = clean.split("/").filter(Boolean);
+    if (parts.length < 2) continue;
+    validCount += 1;
+    const prefix =
+      (parts[0] === "packages" ||
+        parts[0] === "apps" ||
+        parts[0] === "services" ||
+        parts[0] === "libs" ||
+        parts[0] === "crates") &&
+      parts[1]
+        ? `${parts[0]}/${parts[1]}`
+        : parts[0] === "src" && parts.length >= 3 && parts[1]
+          ? `src/${parts[1]}`
+          : parts[0]!;
+    counts.set(prefix, (counts.get(prefix) ?? 0) + 1);
+  }
+  if (validCount === 0 || counts.size === 0) return undefined;
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  const top = sorted[0];
+  if (!top || top[1] / validCount < 0.6) return undefined;
+  return PathPrefix.safeParse(top[0]).success ? top[0] : undefined;
+}
+
+export function inferOutcomeCategoryFromPaths(
+  paths: readonly string[],
+  hintText = "",
+): OutcomeTaskCategory {
+  const joined = `${paths.join(" ")} ${hintText}`;
+  if (
+    paths.length > 0 &&
+    paths.every((p) =>
+      /\.(test|spec)\.[cm]?[jt]sx?$|(^|\/)(tests?|__tests__|e2e)\//i.test(p),
+    )
+  ) {
+    return "tests";
+  }
+  if (
+    /\b(auth|rbac|jwt|oauth|hmac|crypto|conformance|drift|contract|adr|security)\b/i.test(
+      joined,
+    )
+  ) {
+    return "architecture";
+  }
+  const uiCount = paths.filter((p) =>
+    /\.(tsx|jsx|css|scss|vue|svelte)$|(^|\/)(components|pages)\//i.test(p),
+  ).length;
+  if (paths.length > 0 && uiCount / paths.length >= 0.5) {
+    return "frontend";
+  }
+  if (
+    paths.some((p) =>
+      /\.(sql|prisma|py|rs|go)$|(^|\/)(api|server|cli|db|migrations|commands|mcp)\//i.test(
+        p,
+      ),
+    )
+  ) {
+    return "backend";
+  }
+  return "general";
+}
 
 export const SliceOutcomeInputSchema = z.strictObject({
   slice_id: SliceId,
@@ -47,6 +131,7 @@ export const SliceOutcomeInputSchema = z.strictObject({
   served_model: Model.optional(),
   provider: Provider.optional(),
   task_category: Category.optional(),
+  path_prefix: PathPrefix.optional(),
   attempts: z.int().positive(),
   retries: Count,
   input_tokens: Count.optional(),
@@ -135,6 +220,7 @@ const ModelSummarySchema = z.strictObject({
   model: Model,
   provider: Provider.optional(),
   taskCategory: Category.optional(),
+  pathPrefix: PathPrefix.optional(),
   attempts: Count,
   acceptedFirstPass: Count,
   acceptedAfterRetry: Count,
@@ -160,6 +246,7 @@ interface Sample {
   model: string;
   provider?: string | undefined;
   category?: z.infer<typeof Category> | undefined;
+  pathPrefix?: string | undefined;
   date: string;
   attempts: number;
   retries: number;
@@ -359,6 +446,7 @@ export async function aggregateOutcomes(
           ? undefined
           : record.provider,
       category: record.task_category,
+      pathPrefix: record.path_prefix,
       date: record.recorded_at,
       attempts: record.attempts,
       retries: record.retries,
@@ -371,11 +459,11 @@ export async function aggregateOutcomes(
   ];
   const groups = new Map<string, Sample[]>();
   for (const sample of samples) {
-    const key = JSON.stringify([
-      sample.model,
-      sample.provider,
-      sample.category,
-    ]);
+    const key = JSON.stringify(
+      sample.pathPrefix !== undefined
+        ? [sample.model, sample.provider, sample.category, sample.pathPrefix]
+        : [sample.model, sample.provider, sample.category],
+    );
     const group = groups.get(key);
     if (group) group.push(sample);
     else groups.set(key, [sample]);
@@ -387,7 +475,7 @@ export async function aggregateOutcomes(
     totalRecordedRuns: legacy.count + records.length,
     models: [...groups.keys()].sort().map((key) => {
       const rows = groups.get(key)!;
-      const { model, provider, category } = rows[0]!;
+      const { model, provider, category, pathPrefix } = rows[0]!;
       const accepted = rows.filter(({ status }) => status === "accepted");
       const terminal = rows.filter(({ status }) => status !== undefined);
       const observedUsdPerAccepted =
@@ -399,6 +487,7 @@ export async function aggregateOutcomes(
         model,
         ...(provider === undefined ? {} : { provider }),
         ...(category === undefined ? {} : { taskCategory: category }),
+        ...(pathPrefix === undefined ? {} : { pathPrefix }),
         attempts: rows.reduce((sum, row) => sum + row.attempts, 0),
         acceptedFirstPass: accepted.filter(
           ({ retries, attempts }) => retries === 0 && attempts === 1,
@@ -422,8 +511,128 @@ export async function aggregateOutcomes(
   });
 }
 
+export async function syncGitAttributedOutcomes(
+  directory: string,
+  now = new Date().toISOString(),
+): Promise<number> {
+  if (!(await lstat(directory)).isDirectory())
+    throw new Error("Expected a real repository directory");
+  const root = await realpath(directory);
+  const existing = await readSliceOutcomes(root);
+  const seenSliceIds = new Set(existing.map((r) => r.slice_id));
+
+  const rawLog = await runSliceGit(root, [
+    "log",
+    "--no-merges",
+    "--max-count=50",
+    "--format=%H%x00%P%x00%s%x00%b%x1e",
+  ]).catch(() => "");
+
+  if (!rawLog.trim()) return 0;
+
+  let added = 0;
+  for (const entry of rawLog.split("\x1e")) {
+    const trimmed = entry.trim();
+    if (!trimmed) continue;
+    const [commitSha, parentsRaw, subject, body = ""] = trimmed.split("\0");
+    if (!commitSha || !parentsRaw || !subject) continue;
+    const parentSha = parentsRaw.trim().split(/\s+/)[0];
+    if (!parentSha) continue;
+
+    const modelMatch = `${subject}\n${body}`.match(
+      /(?:AnvilMark-Model|Model-Used):\s*([\w./:-]{1,120})/i,
+    );
+    const modelId = modelMatch?.[1]?.trim();
+    if (!modelId || !Model.safeParse(modelId).success) continue;
+
+    const sliceId = `git-${commitSha.slice(0, 12)}`;
+    if (!SliceId.safeParse(sliceId).success || seenSliceIds.has(sliceId)) {
+      continue;
+    }
+
+    const touchedRaw = await runSliceGit(root, [
+      "diff",
+      "--name-only",
+      "--no-renames",
+      "-z",
+      parentSha,
+      commitSha,
+    ]).catch(() => "");
+    const touched = touchedRaw.split("\0").filter(Boolean);
+    if (touched.length === 0) continue;
+
+    // Measure post-commit human churn across those touched files up to HEAD
+    const commitStat = await runSliceGit(root, [
+      "diff",
+      "--numstat",
+      parentSha,
+      commitSha,
+      "--",
+      ...touched,
+    ]).catch(() => "");
+    const laterStat = await runSliceGit(root, [
+      "diff",
+      "--numstat",
+      commitSha,
+      "HEAD",
+      "--",
+      ...touched,
+    ]).catch(() => "");
+
+    const sumAddedAndDeleted = (statText: string) =>
+      statText
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .reduce((acc, row) => {
+          const [a, d] = row.split(/\t/);
+          const add = Number.parseInt(a ?? "0", 10);
+          const del = Number.parseInt(d ?? "0", 10);
+          return (
+            acc +
+            (Number.isFinite(add) ? add : 0) +
+            (Number.isFinite(del) ? del : 0)
+          );
+        }, 0);
+
+    const authoredLines = Math.max(1, sumAddedAndDeleted(commitStat));
+    const churnLines = sumAddedAndDeleted(laterStat);
+    const reworkRatio = Number(
+      Math.min(1, Math.max(0, churnLines / (authoredLines * 2))).toFixed(4),
+    );
+
+    const category = inferOutcomeCategoryFromPaths(touched, subject);
+    const pathPrefix = inferDominantPathPrefix(touched);
+
+    await appendSliceOutcome(
+      root,
+      {
+        slice_id: sliceId,
+        status: "accepted",
+        configured_model: modelId,
+        served_model: modelId,
+        task_category: category,
+        ...(pathPrefix ? { path_prefix: pathPrefix } : {}),
+        attempts: 1,
+        retries: 0,
+        rework_ratio: reworkRatio,
+        verification_passed: true,
+      },
+      true,
+      now,
+    );
+    seenSliceIds.add(sliceId);
+    added += 1;
+  }
+
+  return added;
+}
+
 export async function outcomesCommand({ args, io }: CommandContext) {
-  const parsed = parse(args, { write: { type: "boolean" } }, OUTCOMES_USAGE);
+  const parsed = parse(
+    args,
+    { write: { type: "boolean" }, "sync-git": { type: "boolean" } },
+    OUTCOMES_USAGE,
+  );
   if (flag(parsed, "help")) {
     io.stdout(OUTCOMES_USAGE + "\n");
     return EXIT.ok;
@@ -431,6 +640,9 @@ export async function outcomesCommand({ args, io }: CommandContext) {
   if (parsed.positionals.length)
     throw new UsageError("Unexpected positional argument", OUTCOMES_USAGE);
   const root = projectDirectory(io, parsed);
+  if (flag(parsed, "sync-git")) {
+    await syncGitAttributedOutcomes(root, io.clock());
+  }
   const summary = await aggregateOutcomes(root, io.clock());
   if (flag(parsed, "write"))
     await writeRepoJson(await realpath(root), SUMMARY, summary);

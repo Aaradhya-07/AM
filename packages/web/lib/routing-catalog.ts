@@ -101,20 +101,6 @@ const curatedSpecs: readonly CuratedModelSpec[] = [
     groups: ["claude", "cursor"],
   },
   {
-    model: "gpt-6-astra",
-    label: "GPT-6 Astra",
-    providerLabel: "OpenAI",
-    offerNames: ["gpt-6-astra", "GPT-6 Astra"],
-    arenaMatch: ["GPT-6 Astra (Max)"],
-    tier: "frontier",
-    defaultInputUsd: 10,
-    defaultOutputUsd: 50,
-    defaultSourceUrl: "https://developers.openai.com/api/docs/pricing",
-    strengths:
-      "Heavy reasoning model (#3 Agent Arena) suited for tricky concurrency, algorithms, and state invariants.",
-    groups: ["chatgpt"],
-  },
-  {
     model: "gpt-6.1-sol",
     label: "GPT-6.1 Sol",
     providerLabel: "OpenAI",
@@ -125,7 +111,7 @@ const curatedSpecs: readonly CuratedModelSpec[] = [
     defaultOutputUsd: 10,
     defaultSourceUrl: "https://developers.openai.com/api/docs/pricing",
     strengths:
-      "High-reliability Codex/OpenAI model (#5 Agent Arena) at 5x lower cost than Astra for feature slices.",
+      "Primary Codex/OpenAI workhorse (#5 Agent Arena) at 5x lower cost than Astra for multi-file feature slices.",
     groups: ["chatgpt", "cursor"],
   },
   {
@@ -139,7 +125,21 @@ const curatedSpecs: readonly CuratedModelSpec[] = [
     defaultOutputUsd: 0.5,
     defaultSourceUrl: "https://developers.openai.com/api/docs/pricing",
     strengths:
-      "Fast budget model for narrow CRUD endpoints, config wiring, fixtures, and straightforward tests.",
+      "Fast budget model for bounded CRUD endpoints, UI components, schemas, config wiring, and unit tests.",
+    groups: ["chatgpt"],
+  },
+  {
+    model: "gpt-6-astra",
+    label: "GPT-6 Astra",
+    providerLabel: "OpenAI",
+    offerNames: ["gpt-6-astra", "GPT-6 Astra"],
+    arenaMatch: ["GPT-6 Astra (Max)"],
+    tier: "frontier",
+    defaultInputUsd: 10,
+    defaultOutputUsd: 50,
+    defaultSourceUrl: "https://developers.openai.com/api/docs/pricing",
+    strengths:
+      "High-burn heavy reasoning specialist ($10/$50) strictly reserved for distributed concurrency, cryptography, and hard algorithmic invariants—never routine CRUD or UI.",
     groups: ["chatgpt"],
   },
   {

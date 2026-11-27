@@ -17,8 +17,8 @@ export const betaDraft = z.object({
 });
 
 export const betaPlanningDepth = {
-  low: "Keep the initial plan brief and focus on the first actionable step.",
+  low: "Keep the plan lean with compact vertical slices focused on the fastest clean path to a working v1.",
   medium:
-    "Cover the main architectural decisions and the implementation checks.",
-  max: "Explore meaningful architecture alternatives, tradeoffs, and edge cases that would change the implementation.",
+    "Decompose every distinct user workflow and architectural boundary into right-sized vertical slices with verification checks.",
+  max: "Deeply decompose subsystems, parallelizable slice waves, concurrency/security invariants, and architectural tradeoffs.",
 };

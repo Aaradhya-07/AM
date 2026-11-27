@@ -88,7 +88,7 @@ const DEFAULT_CANDIDATES: readonly CatalogCandidate[] = [
     billing: "subscription",
     groups: ["chatgpt", "cursor"],
     strengths:
-      "#5 Agent Arena & #2 Praise/Complaint at 5x lower burn than Astra; excels with explicit slice contracts.",
+      "#5 Agent Arena & #2 Praise/Complaint at 5x lower burn than Astra; primary OpenAI workhorse for feature slices.",
     priorMean: 0.77,
   },
   {
@@ -101,6 +101,17 @@ const DEFAULT_CANDIDATES: readonly CatalogCandidate[] = [
     strengths:
       "#2 Coding Arena & large-context synthesis across multi-package monorepos.",
     priorMean: 0.84,
+  },
+  {
+    model: "gpt-6-astra",
+    label: "GPT-6 Astra",
+    provider: "OpenAI",
+    tier: "frontier",
+    billing: "subscription",
+    groups: ["chatgpt"],
+    strengths:
+      "Heavy reasoning specialist ($10/$50 eq.) reserved strictly for tricky concurrency, cryptography, and hard algorithmic invariants—never routine CRUD or UI.",
+    priorMean: 0.85,
   },
   {
     model: "qwen3-coder-30b-a3b",
@@ -277,6 +288,112 @@ function selectRankedCandidates(
     .slice(0, 8);
 }
 
+function calibrateMcpPlanTasks(
+  plan: z.infer<typeof HandoffPlan>,
+  ranked: ReturnType<typeof selectRankedCandidates>,
+): z.infer<typeof HandoffPlan>["tasks"] {
+  const planText = `${plan.title} ${plan.goal} ${plan.scope.join(" ")}`;
+  const isSimpleApp =
+    plan.projectScale === "micro" ||
+    plan.projectScale === "small_app" ||
+    (/\b(todo|to-do|task\s*list|checklist|notes?\s+app|habit\s+tracker|calculator|counter\s+app)\b/i.test(
+      planText,
+    ) &&
+      !/\b(crdt|distributed|multi-tenant\s+rbac|consensus|kafka)\b/i.test(
+        planText,
+      ));
+
+  return plan.tasks.map((task) => {
+    const sliceText = `${task.title} ${task.outcome} ${task.acceptance.join(" ")}`;
+    const hasHighRisk =
+      task.complexity === "high" ||
+      /\b(auth|rbac|jwt|oauth|hmac|signature|encrypt|concurren|race\s+condition|deadlock|idempoten|crdt|tenant\s+isolation)\b/i.test(
+        sliceText,
+      );
+    const isHeavySpecialist = /astra|\bo1\b|\bo3-pro\b/i.test(task.model);
+
+    let nextModel = task.model;
+    let nextWhy = task.why;
+
+    // Demote heavy reasoning specialists (e.g. gpt-6-astra) on simple apps or routine slices
+    if (isHeavySpecialist && (isSimpleApp || !hasHighRisk)) {
+      const replacement =
+        ranked.find(
+          (c) =>
+            c.tier === "balanced" &&
+            inferFamily(c.model, c.provider, c.billing) ===
+              inferFamily(task.model),
+        ) ??
+        ranked.find((c) => c.tier === "balanced") ??
+        ranked.find((c) => !/astra|\bo1\b|\bo3-pro\b/i.test(c.model));
+      if (replacement) {
+        nextModel = replacement.model;
+        nextWhy = `${replacement.label} (${replacement.tier} tier) delivers reliable coding quality for this slice at a fraction of specialist frontier burn.`;
+      }
+    }
+
+    // Ensure every slice exposes a meaningful second model option (`alternatives[0]`)
+    const filteredAlts = task.alternatives.filter(
+      (alt) =>
+        alt.model !== nextModel &&
+        !(
+          /astra|\bo1\b|\bo3-pro\b/i.test(alt.model) &&
+          (isSimpleApp || !hasHighRisk)
+        ),
+    );
+
+    if (filteredAlts.length === 0 && ranked.length >= 2) {
+      const primaryCand = ranked.find((c) => c.model === nextModel);
+      const preferredTier =
+        primaryCand?.tier === "fast"
+          ? "balanced"
+          : isSimpleApp
+            ? "fast"
+            : hasHighRisk && primaryCand?.tier !== "frontier"
+              ? "frontier"
+              : "balanced";
+      const second =
+        ranked.find(
+          (c) =>
+            c.model !== nextModel &&
+            c.tier === preferredTier &&
+            !(
+              /astra|\bo1\b|\bo3-pro\b/i.test(c.model) &&
+              (isSimpleApp || !hasHighRisk)
+            ),
+        ) ??
+        ranked.find(
+          (c) =>
+            c.model !== nextModel &&
+            !(
+              /astra|\bo1\b|\bo3-pro\b/i.test(c.model) &&
+              (isSimpleApp || !hasHighRisk)
+            ),
+        );
+      if (second) {
+        filteredAlts.push({
+          model: second.model,
+          tradeoff:
+            second.billing === "local"
+              ? "Zero-API-cost local OSS alternative on am-server."
+              : second.tier === "frontier"
+                ? "Frontier step-up option if subtle cross-cutting invariants arise."
+                : second.tier === "fast"
+                  ? "Leaner fast-tier option if slice implementation stays compact."
+                  : "Strong balanced workhorse option with dependable multi-file accuracy.",
+        });
+      }
+    }
+
+    return {
+      ...task,
+      model: nextModel,
+      why: nextWhy,
+      alternatives: filteredAlts,
+    };
+  });
+}
+
 function compileDefaultContract(
   task: z.infer<typeof HandoffPlan>["tasks"][number],
   flows: z.infer<typeof HandoffPlan>["flows"],
@@ -445,6 +562,7 @@ async function buildCockpitState(rootDir: string, now: string) {
         outcome: task.outcome,
         model: task.model,
         why: task.why,
+        alternatives: task.alternatives,
         dependsOn: task.dependsOn,
         contract: task.contract ?? null,
         ready,
@@ -576,9 +694,10 @@ export function registerLocalStudioTools(
           has_existing_active_plan: Boolean(existingPlan),
           existing_plan_title: existingPlan?.plan.title ?? null,
           agent_workflow_instructions: [
-            "1. Check whether the user's goal has unresolved architectural choices (auth/tenancy, persistence, failure/retry semantics, scope boundaries). If underspecified, ask 2–4 concise clarifying questions BEFORE calling lock_execution_plan.",
-            "2. Once requirements are clear, construct a structured plan with architecture decisions (including rejected alternatives & tradeoffs), trust-boundary flows, ordered task slices (each choosing `model` ONLY from `ranked_candidates`), and security controls.",
-            "3. Call `lock_execution_plan` to validate the DAG, compile deterministic `SliceContractSpec` globs & cross-vendor reviewers, and write `.anvilmark/development/active-plan.json`, `PLAN.md`, `CLAUDE.md`, `AGENTS.md`, and `.cursor/rules/anvilmark-plan.mdc`.",
+            "1. Clarify domain forks before guessing: if product workflows, persistence/sync boundaries, auth/tenancy, or failure invariants are underspecified, ask 2–4 domain-specific clarifying questions (putting the recommended v1 default option first) BEFORE calling lock_execution_plan.",
+            "2. Right-size vertical slices (never default to a generic 3-slice Backend -> Frontend -> Tests template): set `projectScale` honestly and decompose by shippable vertical capability (1–2 slices for micro changes, 2–4 for small single-entity apps, 5–8 for multi-feature apps, and 7–12 for complex systems) with parallelizable DAG `dependsOn` waves.",
+            "3. Provide TWO quality-calibrated model options per slice (`model` as Option 1 + `alternatives[0]` as Option 2 from `ranked_candidates`): tag `kind` and `complexity`, use `frontier` mindfully wherever high complexity/security/concurrency warrants it (no artificial cap across slices, and never waste heavy specialists like `gpt-6-astra` on simple CRUD/todo apps), keep work quality high with `balanced` workhorses (`claude-sonnet-5-5`, `gpt-6.1-sol`, `qwen3-coder-30b-a3b`) on real UI/feature slices, and use `fast` models only on narrow schemas/wiring/unit tests.",
+            "4. Call `lock_execution_plan` to validate the DAG, calibrate 2-option model picks, compile deterministic `SliceContractSpec` globs & cross-vendor reviewers, and write `.anvilmark/development/active-plan.json`, `PLAN.md`, `CLAUDE.md`, `AGENTS.md`, and `.cursor/rules/anvilmark-plan.mdc`.",
           ],
         });
       } catch (error) {
@@ -647,8 +766,9 @@ export function registerLocalStudioTools(
           quotaMode,
           outcomes,
         );
+        const calibratedTasks = calibrateMcpPlanTasks(args.plan, ranked);
         const candidateMap = new Map(ranked.map((c) => [c.model, c]));
-        for (const task of args.plan.tasks) {
+        for (const task of calibratedTasks) {
           if (!candidateMap.has(task.model)) {
             candidateMap.set(task.model, {
               model: task.model,
@@ -693,7 +813,7 @@ export function registerLocalStudioTools(
 
         const contractedPlan = {
           ...args.plan,
-          tasks: args.plan.tasks.map((task) => ({
+          tasks: calibratedTasks.map((task) => ({
             ...task,
             contract: compileDefaultContract(
               task,

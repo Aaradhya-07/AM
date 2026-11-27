@@ -1,5 +1,7 @@
 import {
   appendSliceOutcome,
+  inferDominantPathPrefix,
+  inferOutcomeCategoryFromPaths,
   loadSlicePlan,
   readSliceOutcomes,
   SliceId,
@@ -298,11 +300,28 @@ export function registerSliceTools(
             throw new Error(
               "Submitted verification state does not match the current result",
             );
+          const inferredPrefix =
+            cleanInput.path_prefix ??
+            inferDominantPathPrefix(report.changedFiles);
+          const inferredCategory =
+            cleanInput.task_category ??
+            (report.changedFiles.length > 0
+              ? inferOutcomeCategoryFromPaths(report.changedFiles)
+              : undefined);
+          const enrichedInput = {
+            ...cleanInput,
+            ...(inferredCategory !== undefined
+              ? { task_category: inferredCategory }
+              : {}),
+            ...(inferredPrefix !== undefined
+              ? { path_prefix: inferredPrefix }
+              : {}),
+          };
           return {
             recorded: true,
             outcome: await appendSliceOutcome(
               directory,
-              cleanInput,
+              enrichedInput,
               report.passed,
               options.clock(),
               { planSha256, verifiedAt: report.verifiedAt },

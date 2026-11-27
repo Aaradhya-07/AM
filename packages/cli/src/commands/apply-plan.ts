@@ -98,11 +98,35 @@ export const SliceContractSchema = z.strictObject({
 });
 export type SliceContractSpec = z.infer<typeof SliceContractSchema>;
 
+export const ProjectScaleSchema = z.enum([
+  "micro",
+  "small_app",
+  "multi_feature",
+  "complex_system",
+]);
+
+export const SliceKindSchema = z.enum([
+  "schema_types",
+  "crud_ui",
+  "feature_integration",
+  "auth_security",
+  "concurrency_algorithms",
+  "tests_docs",
+]);
+
+export const SliceComplexitySchema = z.enum([
+  "trivial",
+  "low",
+  "medium",
+  "high",
+]);
+
 /** Mirrors the Studio planner output (packages/web/lib/planner.ts). */
 export const HandoffPlan = z.strictObject({
   title: text,
   goal: text,
   users: text,
+  projectScale: ProjectScaleSchema.optional(),
   scope: list.min(1),
   nonGoals: list,
   assumptions: list,
@@ -136,6 +160,8 @@ export const HandoffPlan = z.strictObject({
         title: text,
         outcome: text,
         dependsOn: z.array(id).max(20),
+        kind: SliceKindSchema.optional(),
+        complexity: SliceComplexitySchema.optional(),
         acceptance: list.min(1),
         checks: list.min(1),
         model: text,

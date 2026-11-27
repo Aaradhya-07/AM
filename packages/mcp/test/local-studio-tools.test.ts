@@ -160,6 +160,57 @@ it("serves ui://anvilmark/cockpit.html MCP App resource and executes prepare_pla
       "Webhook Signature Gate",
     );
     expect(cockpit.result.structuredContent.slices).toHaveLength(1);
+
+    // 6. Verify lock_execution_plan demotes overkill gpt-6-astra on a Todo app and populates 2 model options
+    const todoLock = await client.request("tools/call", {
+      name: "lock_execution_plan",
+      arguments: {
+        subscriptions: ["chatgpt"],
+        plan: {
+          title: "Simple Todo List App",
+          goal: "Create and complete daily todo items locally.",
+          users: "Solo user",
+          projectScale: "small_app",
+          scope: ["Todo CRUD UI"],
+          nonGoals: ["Multi-tenant sync"],
+          assumptions: [],
+          questions: [],
+          architecture: [
+            {
+              title: "Local state",
+              decision: "Store todos in SQLite.",
+              why: "Simple local setup.",
+              alternative: "Cloud DB",
+              tradeoff: "Single device.",
+            },
+          ],
+          flows: [],
+          tasks: [
+            {
+              id: "todo-ui",
+              title: "Build Todo CRUD UI",
+              outcome: "Add and complete todos.",
+              dependsOn: [],
+              kind: "crud_ui",
+              complexity: "low",
+              acceptance: ["Todos can be toggled."],
+              checks: ["npm test"],
+              model: "gpt-6-astra",
+              why: "Overkill pick.",
+              alternatives: [],
+              inputTokens: 8000,
+              outputTokens: 1500,
+              estimateBasis: "Single slice.",
+            },
+          ],
+          security: [],
+        },
+      },
+    });
+    expect(todoLock.result.isError).toBeUndefined();
+    const calibratedSlice = todoLock.result.structuredContent.slices[0];
+    expect(calibratedSlice.model).toBe("gpt-6.1-sol");
+    expect(calibratedSlice.alternatives[0].model).toBe("gpt-6-luna");
   } finally {
     await client.close();
   }

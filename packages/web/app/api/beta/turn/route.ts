@@ -17,19 +17,26 @@ import { formatOutcomesPromptSection } from "../../../../lib/outcome-priors";
 import { getSelfHostedPlannerAccess } from "../../../../lib/planner-access";
 import {
   PlanOutput,
+  projectScales,
+  sliceComplexities,
+  sliceKinds,
   validatePlan,
   type PlanningInput,
 } from "../../../../lib/planner";
 import {
   resolveRoutingPool,
   type QuotaMode,
-  type RoutableCandidate,
 } from "../../../../lib/routing-catalog";
 import {
   listSelfHostedModels,
   type SelfHostedModel,
 } from "../../../../lib/self-hosted-models";
 import { compileSliceContractForTask } from "../../../../lib/slice-contracts";
+import { calibratePlanRouting } from "../../../../lib/slice-router";
+import {
+  buildMatchedPlanExemplarPrompt,
+  buildMatchedTriageExemplarPrompt,
+} from "../../../../lib/oss-exemplars";
 
 export const runtime = "nodejs";
 
@@ -40,32 +47,50 @@ const triageSystemBase = `You are AnvilMark, a sharp, pragmatic software archite
 
 Choose "mode" using these strict rules:
 1. "chat": The latest user message is a greeting, small talk, test phrase (e.g. "hi", "hello", "hello world", "hey"), thanks, or a meta question asking what you can do / how AnvilMark works, with NO active software project being specified yet.
-   - "reply": Give a warm, natural, concise response (2-3 sentences max) explaining that AnvilMark helps turn rough ideas into concrete architecture decisions, ordered task slices, cost-optimal per-task model picks, and a ready-to-paste coding-agent prompt—then end by asking what they are planning to build today.
+   - "reply": Give a warm, natural, concise response (2-3 sentences max) explaining that AnvilMark helps turn rough ideas into concrete architecture decisions, right-sized vertical slices, two calibrated model choices per slice, and a ready-to-paste coding-agent prompt—then end by asking what they are planning to build today.
    - Set "questions": [] and "elevatedBrief": "".
 
-2. "clarify": The user wants to build, change, or design software, BUT key requirements that materially change architecture are still missing or vague (e.g. "build a todo app", "create a dashboard", "make a chat app", "add authentication", or a short prompt lacking platform/stack, persistence/multi-user scope, privacy/deployment constraints, or scale).
-   - IMPORTANT: Check prior assistant messages first. If you ALREADY asked clarifying questions and the user answered them (even briefly), DO NOT ask more questions—choose "plan" instead.
-   - "reply": Briefly acknowledge what they want to build in natural language (1-2 sentences) and explain that locking a few quick choices first will prevent wrong architecture guesses. Do NOT propose architecture decisions or task lists yet.
-   - "questions": Provide 2 to 4 tailored, concrete questions for THIS specific project. Each question must have 3-4 short clickable options, a brief "why" (how this choice changes architecture), and "allowMultiple" (true only when selecting multiple options makes sense).
+2. "clarify": The user wants to build, change, or design software, BUT high-leverage product or boundary choices that materially change the data model, workflows, or architecture are still missing (e.g. "build a todo app", "create a dashboard", "make a chat app", "add webhooks").
+   - IMPORTANT: Check prior assistant messages first. If you ALREADY asked clarifying questions and the user answered them (even briefly or by skipping to defaults), DO NOT ask more questions—choose "plan" instead.
+   - "reply": Briefly acknowledge what they want to build in 1-2 natural sentences and explain why locking these specific product/architecture choices first avoids wrong assumptions. Do NOT output task lists yet.
+   - QUESTION QUALITY RULES ("questions": 2 to 4 tailored questions):
+     - Ask DOMAIN-SPECIFIC workflow & boundary questions tailored to THIS exact idea (e.g. for a todo app: collaboration/sync scope & task workflow depth like recurring/reminders/offline; for imports/webhooks: duplicate/conflict handling & volume; for dashboards: live push vs. polling & operator actions). Never fall back to generic filler if stack or scope is already stated.
+     - Put the most pragmatic recommended v1 choice FIRST in each question's 3-4 clickable "options", keep options concrete and mutually distinct, write a sharp 1-line "why" explaining the architectural fork, and set "allowMultiple": true only when combining choices makes sense.
    - Set "elevatedBrief": "".
 
 3. "plan": Either (a) the user provided concrete requirements, stack/context, workflows, or constraints upfront, OR (b) the user answered previous clarifying questions, OR (c) an architecture plan was already discussed and the user is refining it.
-   - "reply": Write a concise, insightful 2-3 sentence architectural summary explaining how you sharpened their brief (edge cases, data invariants, or model-routing efficiencies you incorporated).
-   - "elevatedBrief": Upgrade and expand the user's requirements into a rigorous engineering specification covering target users, core workflows, edge cases, failure/retry invariants, data boundaries, and explicit non-goals.
+   - "reply": Write a concise, insightful 2-3 sentence architectural summary explaining the key decisions, slice structure, and quality-aware model routing you prepared.
+   - PROPORTIONAL BRIEF RULE ("elevatedBrief"):
+     - Start with "Project scale: micro | small_app | multi_feature | complex_system."
+     - Keep complexity STRICTLY proportional to what the user actually asked to build:
+       - For micro changes or small single-entity apps (e.g. a personal todo app, simple CLI, or single endpoint), write a crisp, grounded specification covering clean data validation, UX states, and explicit non-goals—DO NOT invent enterprise queues, distributed locks, or multi-tenant infrastructure they did not ask for.
+       - For multi-feature products or complex systems, enumerate EVERY distinct domain entity, user workflow, external integration, trust boundary, and failure/retry invariant so downstream planning decomposes all real capabilities instead of collapsing them into 3 generic buckets.
    - Set "questions": [].`;
+
+const sharedSliceAndRoutingRules = `- VERTICAL SLICE DECOMPOSITION (NEVER DEFAULT TO A LAZY 3-SLICE TEMPLATE):
+  - Set "projectScale" ("micro" | "small_app" | "multi_feature" | "complex_system") honestly first.
+  - FORBIDDEN ANTI-PATTERN: Do NOT reflexively output 3 horizontal buckets ("1. Database/Backend, 2. Frontend UI, 3. Tests"). Decompose by shippable vertical capability (each slice delivers a cohesive feature slice with its own route/logic/UI/checks; extract a shared foundation/schema slice first only when multiple downstream slices depend on it).
+  - Match slice count to ACTUAL architectural surface area and planning depth:
+    - "micro" (bugfix, single endpoint, isolated refactor, config/CLI tweak): 1-2 slices.
+    - "small_app" (focused single-entity app like a solo todo app, calculator, or single-view tool): 2-4 slices (2 on low effort; 3-4 when filters, persistence, or import/export warrant distinct vertical cuts).
+    - "multi_feature" (multi-entity app with auth, relational DB, multiple user workflows, imports/webhooks, stateful UI): 5-8 slices structured as a real DAG ("dependsOn" listing only true prerequisites so independent slices can run in parallel waves).
+    - "complex_system" (multi-role SaaS, real-time sync, payments/RBAC, multi-package monorepo, or max-effort architecture): 7-12 slices across parallelizable waves.
+- QUALITY-MINDFUL 2-OPTION MODEL ROUTING:
+  - Tag every task's "kind" ("schema_types" | "crud_ui" | "feature_integration" | "auth_security" | "concurrency_algorithms" | "tests_docs") and "complexity" ("trivial" | "low" | "medium" | "high") BEFORE choosing "model".
+  - Choose "model" (Option 1: Recommended) and 1-2 "alternatives" (Option 2: Curated runner-up) ONLY from declared candidate model IDs.
+  - Protect BOTH work quality and token spend—no arbitrary cap on frontier models, and never starve real features with weak models:
+    - Use "frontier" tier models mindfully wherever "complexity" is "high" (ambiguous architecture, security/auth/tenancy boundaries, tricky concurrency or state invariants—as many slices as genuinely need frontier reasoning). NEVER waste heavy specialists like gpt-6-astra on routine CRUD, schemas, or simple apps like a todo list.
+    - Use strong "balanced" workhorses (e.g. Claude Sonnet 5.5, GPT-6.1 Sol, Qwen 3 Coder 30B) as the backbone for real UI, CRUD, multi-file feature integrations, and stateful workflows so code quality stays high.
+    - Reserve "fast" tier models strictly for genuinely narrow, mechanical slices (isolated schemas/types, config wiring, fixtures, straightforward unit tests) where quality will not drop.
+    - Make the first entry in "alternatives" a genuinely useful second choice for the user (e.g. a quality step-up tier if scope grows, a zero-cost local OSS coder, or a leaner fast option on simple slices) with a concrete quality/cost "tradeoff".`;
 
 const planSystemWithoutRepo = `You are AnvilMark's principal software architect and coding-model router. Return ONE JSON object matching the supplied JSON Schema.
 
 Your job is to take the user's requirements and return BETTER, sharper engineering decisions than a generic summary:
 - The actual repository is not attached: never claim to have inspected local files or executed tests. Mark repo-specific assumptions explicitly.
-- Surface real-world edge cases (idempotency, validation boundaries, concurrency, failure recovery, auth/tenant isolation where relevant).
-- Split work into ordered end-to-end vertical slices (keep simple changes to 1-2 tasks; larger builds 3-6 tasks) with accurate "dependsOn" task IDs.
+- Surface real-world edge cases proportionate to the project's scale (validation boundaries, error states, and—where genuinely relevant—idempotency, concurrency, or auth/tenant isolation).
 - For each architecture decision, state the concrete requirement driving it, a credible alternative you rejected, and the honest tradeoff.
-- MODEL ROUTING & COST OPTIMIZATION: Choose each task's "model" ONLY from the declared candidate model IDs. Match model tier to task risk and complexity so the user saves money without sacrificing quality:
-  - Use "fast" / local OSS tier models for bounded schemas, migrations, types, straightforward CRUD/UI components, fixtures, and unit tests.
-  - Use "balanced" tier models for multi-file feature slices, API integrations, and stateful UI flows.
-  - Reserve expensive "frontier" tier models strictly for ambiguous architecture, security-critical auth/crypto boundaries, or tricky concurrency invariants.
-  - In "why", cite both task scope/risk and cost/tier fit. If more than one candidate model is available, include 1-2 "alternatives" from OTHER declared candidate models (never repeat the task's chosen model in its own alternatives) with clear quality/cost tradeoffs.
+${sharedSliceAndRoutingRules}
 - Estimate realistic single-attempt inputTokens and outputTokens (including assumed repository context) and state "estimateBasis".
 - In Strict mode, include concrete defensive controls and verification steps in "security"; never describe unrun checks as passed.`;
 
@@ -74,14 +99,9 @@ const planSystemWithRepo = `You are AnvilMark's principal software architect and
 Your job is to take the user's requirements and return BETTER, sharper engineering decisions than a generic summary:
 - Verified local repository metadata (package scripts, checkCommands, frameworks, ADR paths, and tracked sampleFiles) is provided in the prompt. Reference those real checkCommands and existing paths in task checks, architecture decisions, and scope rather than guessing nonexistent commands or paths.
 - IMPORTANT TRUTH RULE: Only structural repository metadata was exported—raw file contents were NOT read and no checks or tests have been executed. Never claim to have read file contents or run tests; mark implementation-detail assumptions explicitly.
-- Surface real-world edge cases (idempotency, validation boundaries, concurrency, failure recovery, auth/tenant isolation where relevant).
-- Split work into ordered end-to-end vertical slices (keep simple changes to 1-2 tasks; larger builds 3-6 tasks) with accurate "dependsOn" task IDs.
+- Surface real-world edge cases proportionate to the project's scale (validation boundaries, error states, and—where genuinely relevant—idempotency, concurrency, or auth/tenant isolation).
 - For each architecture decision, state the concrete requirement driving it, a credible alternative you rejected, and the honest tradeoff.
-- MODEL ROUTING & COST OPTIMIZATION: Choose each task's "model" ONLY from the declared candidate model IDs. Match model tier to task risk and complexity so the user saves money without sacrificing quality:
-  - Use "fast" / local OSS tier models for bounded schemas, migrations, types, straightforward CRUD/UI components, fixtures, and unit tests.
-  - Use "balanced" tier models for multi-file feature slices, API integrations, and stateful UI flows.
-  - Reserve expensive "frontier" tier models strictly for ambiguous architecture, security-critical auth/crypto boundaries, or tricky concurrency invariants.
-  - In "why", cite both task scope/risk and cost/tier fit. If more than one candidate model is available, include 1-2 "alternatives" from OTHER declared candidate models (never repeat the task's chosen model in its own alternatives) with clear quality/cost tradeoffs.
+${sharedSliceAndRoutingRules}
 - Estimate realistic single-attempt inputTokens and outputTokens (including assumed repository context) and state "estimateBasis".
 - In Strict mode, include concrete defensive controls and verification steps in "security"; never describe unrun checks as passed.`;
 
@@ -136,12 +156,41 @@ function buildPlanSchema(
 ): Record<string, unknown> {
   const schema = z.toJSONSchema(PlanOutput) as Record<string, unknown>;
   const props = schema.properties as Record<string, Record<string, unknown>>;
+  if (props) {
+    props.projectScale = {
+      type: "string",
+      enum: [...projectScales],
+    };
+  }
+  if (Array.isArray(schema.required) && !schema.required.includes("projectScale")) {
+    schema.required = [...schema.required, "projectScale"];
+  }
   if (strict && props?.security) {
     props.security.minItems = 1;
   }
   const taskItems = props?.tasks?.items as
-    { properties?: Record<string, Record<string, unknown>> } | undefined;
+    | {
+        properties?: Record<string, Record<string, unknown>>;
+        required?: string[];
+      }
+    | undefined;
   const taskProps = taskItems?.properties;
+  if (taskProps) {
+    taskProps.kind = {
+      type: "string",
+      enum: [...sliceKinds],
+    };
+    taskProps.complexity = {
+      type: "string",
+      enum: [...sliceComplexities],
+    };
+    if (Array.isArray(taskItems?.required)) {
+      const reqSet = new Set(taskItems.required);
+      reqSet.add("kind");
+      reqSet.add("complexity");
+      taskItems.required = [...reqSet];
+    }
+  }
   if (taskProps && candidateModels.length > 0) {
     taskProps.model = {
       type: "string",
@@ -712,62 +761,11 @@ async function callModelJson(params: {
   }
 }
 
-function repairPlanAlternatives(
-  raw: unknown,
-  candidates: readonly RoutableCandidate[],
-): unknown {
-  if (!raw || typeof raw !== "object") return raw;
-  const clone = structuredClone(raw) as {
-    tasks?: Array<{
-      model?: string;
-      alternatives?: Array<{ model?: string; tradeoff?: string }>;
-    }>;
-  };
-  if (!Array.isArray(clone.tasks)) return clone;
-  const validIds = candidates.map((c) => c.model);
-  if (validIds.length <= 1) return clone;
-
-  for (const task of clone.tasks) {
-    if (typeof task.model !== "string") continue;
-    const seen = new Set<string>();
-    const filtered = (Array.isArray(task.alternatives) ? task.alternatives : [])
-      .filter((alt) => {
-        if (
-          !alt ||
-          typeof alt.model !== "string" ||
-          alt.model === task.model ||
-          !validIds.includes(alt.model) ||
-          seen.has(alt.model)
-        ) {
-          return false;
-        }
-        seen.add(alt.model);
-        return true;
-      })
-      .slice(0, 2);
-
-    if (filtered.length === 0) {
-      const fallback = candidates.find((c) => c.model !== task.model);
-      if (fallback) {
-        filtered.push({
-          model: fallback.model,
-          tradeoff:
-            fallback.tier === "frontier"
-              ? "Higher-cost frontier alternative if unexpected architectural ambiguity arises."
-              : "Lower-cost alternative if the implementation scope stays straightforward.",
-        });
-      }
-    }
-    task.alternatives = filtered;
-  }
-  return clone;
-}
-
 const effortGuidance = {
-  low: "Keep the plan lean and focused on the fastest safe path to a working v1.",
+  low: "Keep the plan lean with compact vertical slices (1-2 for micro changes, 2-3 for small apps, 3-5 for larger apps) focused on the fastest clean path to a working v1.",
   medium:
-    "Cover core architectural decisions, realistic edge cases, and verification checks.",
-  max: "Deeply analyze edge cases, concurrency/failure invariants, security boundaries, and architectural tradeoffs.",
+    "Decompose every distinct user workflow, data boundary, and integration into right-sized vertical slices (avoid collapsing multi-feature apps into just 3 slices) with concrete checks.",
+  max: "Deeply analyze architectural tradeoffs, concurrency/security invariants, and parallelizable DAG waves—splitting multi-feature or complex builds into 6-12 granular vertical slices.",
 } as const;
 
 type TurnExecutionResult =
@@ -872,12 +870,23 @@ async function executeTurn(
       }));
     }
 
+    const hasPriorClarification = messages.some(
+      (m) =>
+        m.role === "assistant" &&
+        m.content.includes("Clarifying questions asked:"),
+    );
+    const triageExemplarBlock = buildMatchedTriageExemplarPrompt(
+      userMessages.map((m) => m.content).join(" "),
+      hasPriorClarification,
+    );
+    const triageSystem = `${buildTriageSystem(repoContext)}\n\n${triageExemplarBlock}`;
+
     const triageResult = await callModelJson({
       provider,
       endpoint,
       model: triageModel,
       key,
-      systemPrompt: buildTriageSystem(repoContext),
+      systemPrompt: triageSystem,
       userPrompt: JSON.stringify(triageUserPayload),
       schemaName: "anvilmark_turn_triage",
       schema: triageSchema,
@@ -1072,16 +1081,28 @@ async function executeTurn(
     }));
   }
 
+  const planExemplarBlock = buildMatchedPlanExemplarPrompt({
+    idea: plannerInput.idea,
+    effort,
+    candidates,
+  });
+  const basePlanSystem = repoContext
+    ? planSystemWithRepo
+    : planSystemWithoutRepo;
+  const fullPlanSystem = planExemplarBlock
+    ? `${basePlanSystem}\n\n${planExemplarBlock}`
+    : basePlanSystem;
+
   const planResult = await callModelJson({
     provider,
     endpoint,
     model,
     key,
-    systemPrompt: repoContext ? planSystemWithRepo : planSystemWithoutRepo,
+    systemPrompt: fullPlanSystem,
     userPrompt: JSON.stringify(planUserPayload),
     schemaName: "anvilmark_plan",
     schema: planSchema,
-    maxTokens: 8000,
+    maxTokens: effort === "max" ? 12000 : 9500,
     attachments,
     skipVision: textOnlyFallbackModels.has(model),
     stream: wantsStream && (provider === "configured" || provider === "openai"),
@@ -1098,10 +1119,15 @@ async function executeTurn(
   }
 
   try {
-    const rawParsed = repairPlanAlternatives(
-      JSON.parse(planResult.text),
+    const rawParsed = calibratePlanRouting({
+      raw: JSON.parse(planResult.text),
+      idea: plannerInput.idea,
       candidates,
-    );
+      strict,
+      quotaMode,
+      outcomes: repoOutcomes,
+      repoStack: repoContext,
+    });
     const validatedPlan = validatePlan(rawParsed, plannerInput);
     const plan = {
       ...validatedPlan,

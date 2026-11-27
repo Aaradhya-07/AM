@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import type {
   BetaTurnProgressSection,
@@ -28,6 +28,7 @@ import {
   type SliceContractSpec,
   type SliceVerificationReport,
 } from "../../lib/slice-contracts";
+import { resolveTwoUiModelOptions } from "../../lib/slice-router";
 import { FlowGraph } from "./flow-graph";
 import { LocalHandoffStudio } from "./handoff-studio";
 import styles from "./beta.module.css";
@@ -551,6 +552,9 @@ export function PlanArtifactView({
     allowDependencyChanges: boolean;
     error: string | null;
   } | null>(null);
+  const pinnedPairCacheRef = useRef<
+    Map<string, ReturnType<typeof resolveTwoUiModelOptions>>
+  >(new Map());
 
   const totalTokens = plan.tasks.reduce(
     (sum, t) => sum + t.inputTokens + t.outputTokens,
@@ -755,9 +759,9 @@ export function PlanArtifactView({
             </span>
             <h3>Ordered task slices</h3>
             <p className={styles.sectionNote}>
-              Each slice is matched to the lowest-cost eligible model tier that
-              clears its scope and risk bar. Switch any slice model below to
-              recalculate cost and Handoff Studio exports live.
+              Each slice gives you two quality-calibrated model options—click
+              either option pill (or choose from Other…) to recalculate cost and
+              Handoff Studio exports live.
             </p>
           </div>
 
@@ -770,6 +774,24 @@ export function PlanArtifactView({
               const hasCandidateInList = candidates.some(
                 (c) => c.model === task.model,
               );
+              const pairCacheKey = `${plan.title}::${task.id}::${candidates
+                .map((c) => c.model)
+                .join(",")}`;
+              let twoOptions = pinnedPairCacheRef.current.get(pairCacheKey);
+              if (!twoOptions) {
+                twoOptions = resolveTwoUiModelOptions({
+                  task,
+                  projectScale: plan.projectScale,
+                  planTitle: plan.title,
+                  planGoal: plan.goal,
+                  candidates,
+                  strict,
+                });
+                pinnedPairCacheRef.current.set(pairCacheKey, twoOptions);
+              }
+              const isCustomThirdModel =
+                twoOptions.length > 0 &&
+                !twoOptions.some((opt) => opt.candidate.model === task.model);
               return (
                 <li key={task.id} className={styles.taskCard}>
                   <div className={styles.taskHeader}>
@@ -836,8 +858,11 @@ export function PlanArtifactView({
                       )}
                       {onUpdateTaskModel && candidates.length > 0 ? (
                         <select
-                          className={styles.modelSelect}
+                          className={`${styles.modelSelect} ${
+                            isCustomThirdModel ? styles.modelSelectCustom : ""
+                          }`}
                           aria-label={`Model for ${task.title}`}
+                          title="Switch to any available execution model"
                           value={task.model}
                           onChange={(event) =>
                             onUpdateTaskModel(index, event.target.value)
@@ -848,7 +873,11 @@ export function PlanArtifactView({
                           )}
                           {candidates.map((option) => (
                             <option key={option.model} value={option.model}>
-                              {option.label}
+                              {twoOptions.some(
+                                (o) => o.candidate.model === option.model,
+                              )
+                                ? option.label
+                                : `Other · ${option.label}`}
                             </option>
                           ))}
                         </select>
@@ -859,6 +888,78 @@ export function PlanArtifactView({
                       )}
                     </div>
                   </div>
+
+                  {twoOptions.length >= 2 && onUpdateTaskModel && (
+                    <div
+                      className={styles.modelPairGrid}
+                      role="group"
+                      aria-label={`Recommended model options for ${task.title}`}
+                    >
+                      {twoOptions.map((opt, optIdx) => {
+                        const isSelected = opt.candidate.model === task.model;
+                        const optUsd = estimateTaskUsd(task, opt.candidate);
+                        const costTag =
+                          opt.candidate.billing === "local"
+                            ? "$0 local"
+                            : optUsd !== null
+                              ? `~$${optUsd.toFixed(4)}`
+                              : opt.candidate.billing;
+                        return (
+                          <button
+                            key={opt.candidate.model}
+                            type="button"
+                            aria-pressed={isSelected}
+                            className={`${styles.modelOptionCard} ${
+                              isSelected ? styles.modelOptionCardActive : ""
+                            }`}
+                            onClick={() =>
+                              onUpdateTaskModel(index, opt.candidate.model)
+                            }
+                          >
+                            <div className={styles.modelOptionTop}>
+                              <span className={styles.modelOptionIdentity}>
+                                <span
+                                  className={styles.modelOptionRadio}
+                                  aria-hidden="true"
+                                >
+                                  {isSelected ? "●" : "○"}
+                                </span>
+                                <strong>{opt.candidate.label}</strong>
+                                <span
+                                  className={`${styles.modelOptionRole} ${
+                                    optIdx === 0
+                                      ? styles.modelOptionRolePrimary
+                                      : styles.modelOptionRoleSecondary
+                                  }`}
+                                >
+                                  {opt.roleLabel}
+                                </span>
+                              </span>
+                              <span className={styles.modelOptionMeta}>
+                                <span
+                                  className={`${styles.tierPill} ${
+                                    opt.candidate.tier === "frontier"
+                                      ? styles.tierFrontier
+                                      : opt.candidate.tier === "balanced"
+                                        ? styles.tierBalanced
+                                        : styles.tierFast
+                                  }`}
+                                >
+                                  {opt.candidate.tier}
+                                </span>
+                                <span className={styles.modelOptionCost}>
+                                  {costTag}
+                                </span>
+                              </span>
+                            </div>
+                            <span className={styles.modelOptionReason}>
+                              {opt.reason}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {task.dependsOn.length > 0 && (
                     <p className={styles.taskDeps}>

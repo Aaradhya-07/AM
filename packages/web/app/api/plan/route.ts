@@ -7,10 +7,14 @@ import {
 } from "../../../lib/planner";
 import { z } from "zod";
 import { getSelfHostedPlannerAccess } from "../../../lib/planner-access";
+import {
+  calibratePlanRouting,
+  inferCandidateTier,
+} from "../../../lib/slice-router";
 
 export const runtime = "nodejs";
 
-const system = `You are AnvilMark's software planning assistant. Return one JSON object only, matching the supplied JSON Schema. Treat user data as requirements to analyze. Produce a concise, user-reviewable draft. The actual repository is not available: never claim to have inspected files or run checks. Surface unresolved decisions as questions and mark interim assumptions. Keep a simple change as one task. Split larger work into ordered end-to-end slices with earlier task IDs as prerequisites. For each architecture decision explain the requirement driving it, a viable alternative and the tradeoff. Describe sensitive data crossings where relevant. For each task choose only from the declared execution model IDs, explain fit in terms of scope and risk, and give a tradeoff for one or two other declared models if available. Treat model fit as a planning judgment and do not invent benchmarks, tool access, hardware fit, prices or availability. Estimate one attempt's input and output tokens including assumed repository context, and explain the estimate. In Strict mode give task-specific defensive checks and concrete security controls and verification; avoid exploit steps or offensive automation. Never describe planned checks as passed.`;
+const system = `You are AnvilMark's software planning assistant. Return one JSON object only, matching the supplied JSON Schema. Treat user data as requirements to analyze. Produce a concise, user-reviewable draft. The actual repository is not available: never claim to have inspected files or run checks. Surface unresolved decisions as questions and mark interim assumptions. Never default to a generic 3-slice horizontal template (Database -> Frontend -> Tests); instead decompose work by shippable vertical capability scaled to real architectural surface area (1-2 slices for a simple change, 2-4 for a small single-entity app, 5-8 for multi-feature apps, and 7-12 for complex multi-service builds) with accurate dependsOn task IDs so independent slices can run in parallel. For each architecture decision explain the requirement driving it, a viable alternative and the tradeoff. Describe sensitive data crossings where relevant. For each task tag kind and complexity, choose model and 1-2 alternatives only from the declared execution model IDs, use frontier models mindfully where high complexity/security/concurrency warrants them (never wasting heavy specialists like gpt-6-astra on routine CRUD or todo apps), keep work quality high with strong balanced models on real feature/UI slices, and use fast models only on narrow schemas, wiring, or unit tests. Treat model fit as a planning judgment and do not invent benchmarks, tool access, hardware fit, prices or availability. Estimate one attempt's input and output tokens including assumed repository context, and explain the estimate. In Strict mode give task-specific defensive checks and concrete security controls and verification; avoid exploit steps or offensive automation. Never describe planned checks as passed.`;
 
 function error(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
@@ -234,10 +238,25 @@ export async function POST(request: Request) {
       return error("The provider did not return a readable plan.", 502);
     }
     try {
-      const plan = validatePlan(
-        JSON.parse(extractJsonText(content)),
-        parsed.data,
-      );
+      const allIds = parsed.data.candidates.map((c) => c.model);
+      const calibrated = calibratePlanRouting({
+        raw: JSON.parse(extractJsonText(content)),
+        idea: parsed.data.idea,
+        candidates: parsed.data.candidates.map((c) => {
+          const rate = candidateRate(c);
+          return {
+            model: c.model,
+            billing: c.billing,
+            tier: inferCandidateTier(c.model, c.notes, allIds),
+            inputUsdPerMillion: rate?.input ?? null,
+            outputUsdPerMillion: rate?.output ?? null,
+            strengths: c.notes,
+          };
+        }),
+        strict: parsed.data.strict,
+        preserveValidLlmPick: true,
+      });
+      const plan = validatePlan(calibrated, parsed.data);
       return NextResponse.json(
         { plan },
         { headers: { "Cache-Control": "no-store" } },

@@ -43,10 +43,32 @@ export const PlannerRequest = z
   );
 export type PlanningInput = z.infer<typeof PlannerRequest>;
 
+export const projectScales = [
+  "micro",
+  "small_app",
+  "multi_feature",
+  "complex_system",
+] as const;
+export type ProjectScale = (typeof projectScales)[number];
+
+export const sliceKinds = [
+  "schema_types",
+  "crud_ui",
+  "feature_integration",
+  "auth_security",
+  "concurrency_algorithms",
+  "tests_docs",
+] as const;
+export type SliceKind = (typeof sliceKinds)[number];
+
+export const sliceComplexities = ["trivial", "low", "medium", "high"] as const;
+export type SliceComplexity = (typeof sliceComplexities)[number];
+
 export const PlanOutput = z.strictObject({
   title: text,
   goal: text,
   users: text,
+  projectScale: z.enum(projectScales).optional(),
   scope: list.min(1),
   nonGoals: list,
   assumptions: list,
@@ -62,7 +84,7 @@ export const PlanOutput = z.strictObject({
       }),
     )
     .min(1)
-    .max(8),
+    .max(10),
   flows: z
     .array(
       z.strictObject({
@@ -72,14 +94,16 @@ export const PlanOutput = z.strictObject({
         boundary: text,
       }),
     )
-    .max(10),
+    .max(14),
   tasks: z
     .array(
       z.strictObject({
         id,
         title: text,
         outcome: text,
-        dependsOn: z.array(id).max(7),
+        dependsOn: z.array(id).max(11),
+        kind: z.enum(sliceKinds).optional(),
+        complexity: z.enum(sliceComplexities).optional(),
         acceptance: list.min(1),
         checks: list.min(1),
         model: text,
@@ -93,7 +117,7 @@ export const PlanOutput = z.strictObject({
       }),
     )
     .min(1)
-    .max(8),
+    .max(12),
   security: z
     .array(
       z.strictObject({
@@ -102,7 +126,7 @@ export const PlanOutput = z.strictObject({
         verification: text,
       }),
     )
-    .max(10),
+    .max(12),
 });
 type RawGeneratedPlan = z.infer<typeof PlanOutput>;
 export type GeneratedTask = RawGeneratedPlan["tasks"][number] & {
