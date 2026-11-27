@@ -15,7 +15,7 @@ import styles from "./site-header.module.css";
 
 const links = [
   { href: "/", label: "Home", icon: NimbusIcons.home, fx: "glow" },
-  { href: "/beta", label: "Plan a change", icon: NimbusIcons.drop, fx: "drop" },
+  { href: "/beta", label: "Plan a change", icon: NimbusIcons.code, fx: "pop" },
   { href: "/models", label: "Models", icon: NimbusIcons.globe, fx: "spin" },
   {
     href: "/start",

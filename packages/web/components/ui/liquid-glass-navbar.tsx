@@ -74,6 +74,7 @@ export const NimbusIcons = {
   drop: I(
     <path d="M12 3.5s6 6.4 6 10.6a6 6 0 0 1-12 0C6 9.9 12 3.5 12 3.5Z" />,
   ),
+  code: I(<path d="m8 7-5 5 5 5m8-10 5 5-5 5m-2-12-4 14" />),
   user: I(
     <>
       <circle cx="12" cy="8.5" r="3.8" />
