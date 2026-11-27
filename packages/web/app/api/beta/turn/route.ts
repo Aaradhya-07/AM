@@ -14,6 +14,7 @@ import {
   type RepoOutcomesSummary,
 } from "../../../../lib/beta-turn";
 import { formatOutcomesPromptSection } from "../../../../lib/outcome-priors";
+import { getSelfHostedPlannerAccess } from "../../../../lib/planner-access";
 import {
   PlanOutput,
   validatePlan,
@@ -785,6 +786,7 @@ async function executeTurn(
     model: string;
     key: string;
     endpoint: string;
+    plannerToken?: string | undefined;
     routingPrefs: {
       mode: "open" | "subscriptions";
       subscriptions: Array<
@@ -820,7 +822,7 @@ async function executeTurn(
   let cachedSelfHosted: SelfHostedModel[] | null = null;
   const getSelfHostedModels = async (): Promise<SelfHostedModel[]> => {
     if (cachedSelfHosted !== null) return cachedSelfHosted;
-    cachedSelfHosted = await listSelfHostedModels();
+    cachedSelfHosted = await listSelfHostedModels(params.plannerToken);
     return cachedSelfHosted;
   };
 
@@ -1187,7 +1189,9 @@ export async function POST(request: Request) {
     repoOutcomes,
   } = parsed.data;
 
+  const access = await getSelfHostedPlannerAccess();
   const key =
+    (provider === "configured" ? access?.token : undefined) ||
     suppliedKey ||
     (provider === "google"
       ? (process.env.ANVILMARK_GEMINI_API_KEY?.trim() ?? "")
@@ -1197,14 +1201,16 @@ export async function POST(request: Request) {
 
   const endpoint =
     provider === "configured"
-      ? process.env.ANVILMARK_PLANNER_ENDPOINT?.trim()
+      ? access?.endpoint
       : provider === "google"
         ? `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`
         : "https://api.openai.com/v1/chat/completions";
 
   if (!endpoint) {
     return jsonError(
-      "A self-hosted endpoint has not been configured on this web server.",
+      process.env.ANVILMARK_PLANNER_AUTH === "vercel-oidc"
+        ? "The self-hosted planner connection is unavailable."
+        : "A self-hosted endpoint has not been configured on this web server.",
       503,
     );
   }
@@ -1225,6 +1231,7 @@ export async function POST(request: Request) {
       model,
       key,
       endpoint,
+      plannerToken: access?.token,
       routingPrefs,
       attachments,
       repoContext,
@@ -1268,6 +1275,7 @@ export async function POST(request: Request) {
             model,
             key,
             endpoint,
+            plannerToken: access?.token,
             routingPrefs,
             attachments,
             repoContext,

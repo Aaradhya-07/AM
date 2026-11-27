@@ -62,15 +62,28 @@ function normalizeStatus(value: unknown): SelfHostedModel["status"] {
   return "unknown";
 }
 
-export async function listSelfHostedModels(): Promise<SelfHostedModel[]> {
+export async function listSelfHostedModels(
+  token?: string,
+): Promise<SelfHostedModel[]> {
+  if (process.env.ANVILMARK_PLANNER_AUTH === "vercel-oidc" && !token) return [];
   const modelsUrl = deriveModelsUrl();
   if (!modelsUrl) return [];
+  if (token) {
+    const models = URL.parse(modelsUrl);
+    const planner = URL.parse(process.env.ANVILMARK_PLANNER_ENDPOINT ?? "");
+    if (models?.protocol !== "https:" || models.origin !== planner?.origin) {
+      return [];
+    }
+  }
 
   const preferred = process.env.ANVILMARK_PLANNER_MODEL?.trim() ?? "";
   try {
     const response = await fetch(modelsUrl, {
       method: "GET",
-      headers: { Accept: "application/json" },
+      headers: {
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       cache: "no-store",
       redirect: "error",
       signal: AbortSignal.timeout(2500),

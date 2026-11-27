@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 
 import { BackgroundPixelStars } from "../../components/ui/background-pixel-stars";
+import { getSelfHostedPlannerAccess } from "../../lib/planner-access";
 import { getCatalogFreshness } from "../../lib/routing-catalog";
 import { listSelfHostedModels } from "../../lib/self-hosted-models";
 
@@ -16,15 +17,15 @@ export const viewport: Viewport = {
 export const dynamic = "force-dynamic";
 
 export default async function BetaPage() {
-  const configured = Boolean(process.env.ANVILMARK_PLANNER_ENDPOINT?.trim());
-  const selfHostedModels = configured ? await listSelfHostedModels() : [];
+  const access = await getSelfHostedPlannerAccess();
+  const selfHostedModels = access ? await listSelfHostedModels(access.token) : [];
   const catalogFreshness = getCatalogFreshness();
   return (
     <div className={styles.page}>
       <BackgroundPixelStars />
       <SiteHeader tone="dark" />
       <BetaPrompt
-        configured={configured}
+        configured={Boolean(access)}
         configuredModel={
           selfHostedModels[0]?.id ??
           process.env.ANVILMARK_PLANNER_MODEL?.trim() ??

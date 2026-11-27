@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getSelfHostedPlannerAccess } from "../../lib/planner-access";
 import { listSelfHostedModels } from "../../lib/self-hosted-models";
 import { SiteHeader } from "../components/site-header";
 import { SiteFooter } from "../components/site-footer";
@@ -9,8 +10,8 @@ export const metadata: Metadata = { title: "Plan a change" };
 export const dynamic = "force-dynamic";
 
 export default async function PlanningPage() {
-  const configured = Boolean(process.env.ANVILMARK_PLANNER_ENDPOINT?.trim());
-  const selfHostedModels = configured ? await listSelfHostedModels() : [];
+  const access = await getSelfHostedPlannerAccess();
+  const selfHostedModels = access ? await listSelfHostedModels(access.token) : [];
   return (
     <div className="alpha alpha-page">
       <SiteHeader />
@@ -23,7 +24,7 @@ export default async function PlanningPage() {
           </p>
         </header>
         <Planner
-          configured={configured}
+          configured={Boolean(access)}
           configuredModel={
             selfHostedModels[0]?.id ??
             process.env.ANVILMARK_PLANNER_MODEL?.trim() ??

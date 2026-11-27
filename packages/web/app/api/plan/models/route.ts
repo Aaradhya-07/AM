@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
 
+import { getSelfHostedPlannerAccess } from "../../../../lib/planner-access";
 import { listSelfHostedModels } from "../../../../lib/self-hosted-models";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const configured = Boolean(process.env.ANVILMARK_PLANNER_ENDPOINT?.trim());
-  const models = configured ? await listSelfHostedModels() : [];
+  const access = await getSelfHostedPlannerAccess();
+  const models = access ? await listSelfHostedModels(access.token) : [];
   return NextResponse.json(
-    { configured, models },
+    { configured: Boolean(access), models },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

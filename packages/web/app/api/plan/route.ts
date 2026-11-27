@@ -6,6 +6,7 @@ import {
   candidateRate,
 } from "../../../lib/planner";
 import { z } from "zod";
+import { getSelfHostedPlannerAccess } from "../../../lib/planner-access";
 
 export const runtime = "nodejs";
 
@@ -95,7 +96,10 @@ export async function POST(request: Request) {
       400,
     );
   const { provider, model, key: suppliedKey, ...details } = parsed.data;
+  const access =
+    provider === "configured" ? await getSelfHostedPlannerAccess() : null;
   const key =
+    access?.token ||
     suppliedKey ||
     (provider === "google"
       ? (process.env.ANVILMARK_GEMINI_API_KEY?.trim() ?? "")
@@ -104,13 +108,15 @@ export async function POST(request: Request) {
         : "");
   const endpoint =
     provider === "configured"
-      ? process.env.ANVILMARK_PLANNER_ENDPOINT
+      ? access?.endpoint
       : provider === "google"
         ? `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`
         : "https://api.openai.com/v1/chat/completions";
   if (!endpoint)
     return error(
-      "A self-hosted endpoint has not been configured on this web server.",
+      process.env.ANVILMARK_PLANNER_AUTH === "vercel-oidc"
+        ? "The self-hosted planner connection is unavailable."
+        : "A self-hosted endpoint has not been configured on this web server.",
       503,
     );
   if (!key && provider !== "configured")
